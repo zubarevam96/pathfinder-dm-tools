@@ -570,9 +570,21 @@ async function refreshCharacter(id) {
 
   try {
     const fetched = await fetchPathbuilder(character.sourceId ?? character.link);
+
+    // Pathbuilder's numeric id isn't a permanent identity for one character —
+    // it can end up pointing at a different character later. Only refresh in
+    // place when the name still matches what we last saved under this id.
+    if (fetched.sourceId !== character.sourceId || fetched.name !== character.name) {
+      btn.disabled = false;
+      btn.textContent = "Refresh";
+      alert(
+        `Refresh aborted: Pathbuilder ID ${fetched.sourceId} now returns "${fetched.name}", ` +
+        `not "${character.name}". Add it as a new character instead if this is intentional.`
+      );
+      return;
+    }
+
     Object.assign(character, {
-      name: fetched.name,
-      sourceId: fetched.sourceId,
       link: fetched.link,
       data: fetched.data,
       savedAt: Date.now() / 1000,
@@ -773,6 +785,20 @@ async function submitNewCharacter(event) {
   newStatus.textContent = "Fetching...";
   try {
     const result = await fetchPathbuilder(link);
+
+    // Same Pathbuilder id AND same name: this is a re-sync of a character we
+    // already have, not a new character or a name collision — update in place.
+    const exactMatch = store.characters.find(
+      (c) => c.sourceId === result.sourceId && c.name === result.name
+    );
+    if (exactMatch) {
+      Object.assign(exactMatch, { link: result.link, data: result.data, savedAt: Date.now() / 1000 });
+      persist();
+      newDialog.close();
+      renderSidebar();
+      selectCharacter(exactMatch.id);
+      return;
+    }
 
     const conflicts = store.characters.filter((c) => c.name === result.name);
     if (conflicts.length > 0) {
