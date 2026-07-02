@@ -14,8 +14,8 @@ py -m venv .venv
 ```
 
 Open http://127.0.0.1:5000. Use the "+ New" button to add a character by
-Pathbuilder 2e link (e.g. `https://pathbuilder2e.com/json.php?id=454117`) or
-just its numeric ID (e.g. `454117`). The character page shows the saved
+Pathbuilder 2e link (e.g. `https://pathbuilder2e.com/json.php?id=123456`) or
+just its numeric ID (e.g. `123456`). The character page shows the saved
 Pathbuilder ID and has a Refresh button to re-fetch the latest build.
 Saved characters appear in the foldable sidebar list, organized by group;
 click one to view its data. If a new character's name matches one already
