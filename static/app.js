@@ -226,6 +226,82 @@ function checkTableHead() {
   `;
 }
 
+function chipList(items) {
+  if (!items || items.length === 0) {
+    return '<p class="placeholder">None</p>';
+  }
+  return `<div class="chip-list">${items.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")}</div>`;
+}
+
+const COIN_LABELS = [["pp", "Platinum"], ["gp", "Gold"], ["sp", "Silver"], ["cp", "Copper"]];
+
+function moneyRow(money) {
+  return `
+    <div class="stat-row">
+      ${COIN_LABELS.map(([key, label]) => `
+        <div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${money?.[key] ?? 0}</span></div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function weaponsTable(weapons) {
+  if (!weapons || weapons.length === 0) {
+    return '<p class="placeholder">No weapons</p>';
+  }
+  const rows = weapons.map((w) => `
+    <tr>
+      <td>${escapeHtml(w.display || w.name)}</td>
+      <td class="num">${formatMod(w.attack ?? 0)}</td>
+      <td>${escapeHtml(w.die ?? "-")}${w.damageBonus ? " " + formatMod(w.damageBonus) : ""} ${escapeHtml(w.damageType ?? "")}</td>
+      <td>${escapeHtml(w.prof ?? "")}</td>
+    </tr>
+  `).join("");
+  return `
+    <table class="check-table">
+      <tr><th>Weapon</th><th>Attack</th><th>Damage</th><th>Prof.</th></tr>
+      ${rows}
+    </table>
+  `;
+}
+
+function armorTable(armorList) {
+  if (!armorList || armorList.length === 0) {
+    return '<p class="placeholder">No armor</p>';
+  }
+  const rows = armorList.map((a) => {
+    const runeNotes = [a.pot ? `+${a.pot} potency` : "", a.res || ""].filter(Boolean).join(", ");
+    return `
+      <tr>
+        <td>${escapeHtml(a.display || a.name)}</td>
+        <td>${escapeHtml(a.prof ?? "")}</td>
+        <td>${a.worn ? "Worn" : ""}</td>
+        <td>${escapeHtml(runeNotes)}</td>
+      </tr>
+    `;
+  }).join("");
+  return `
+    <table class="check-table">
+      <tr><th>Armor</th><th>Category</th><th>Status</th><th>Runes</th></tr>
+      ${rows}
+    </table>
+  `;
+}
+
+// A weapon/shield can grant a temporary AC bonus that only applies while an
+// action (Raise a Shield / Parry) is active, so it's a toggle, not baked
+// into the base AC total Pathbuilder reports.
+function getAcBonuses(build) {
+  const shieldBonus = Number(build.acTotal?.shieldBonus) || 0;
+  const hasShield = shieldBonus > 0;
+
+  const parryWeapon = (build.weapons ?? []).find(
+    (w) => Array.isArray(w.traits) && w.traits.some((t) => /parry/i.test(t))
+  );
+
+  return { hasShield, shieldBonus, hasParry: Boolean(parryWeapon), parryBonus: 1 };
+}
+
 function renderCharacterSheet(character) {
   const build = character.data?.build;
   if (!build) {
@@ -280,6 +356,13 @@ function renderCharacterSheet(character) {
     checkRow(`${loreName} Lore`, "int", p ?? 0, checkTotal(build, p ?? 0, "int"))
   ).join("");
 
+  const baseAC = Number(build.acTotal?.acTotal) || 0;
+  const { hasShield, shieldBonus, hasParry, parryBonus } = getAcBonuses(build);
+  const acToggles = `
+    ${hasShield ? `<button class="icon-btn" id="toggle-shield" title="Raise a Shield (+${shieldBonus} AC)" data-bonus="${shieldBonus}">🛡</button>` : ""}
+    ${hasParry ? `<button class="icon-btn" id="toggle-parry" title="Parry (+${parryBonus} AC)" data-bonus="${parryBonus}">⚔</button>` : ""}
+  `;
+
   mainContent.innerHTML = `
     <div class="character-header">
       <div>
@@ -299,7 +382,11 @@ function renderCharacterSheet(character) {
     </div>
 
     <div class="stat-row">
-      <div class="stat"><span class="stat-label">AC</span><span class="stat-value">${build.acTotal?.acTotal ?? "?"}</span></div>
+      <div class="stat">
+        <span class="stat-label">AC</span>
+        <span class="stat-value" id="ac-value">${baseAC}</span>
+        ${acToggles.trim() ? `<div class="ac-toggles">${acToggles}</div>` : ""}
+      </div>
       <div class="stat"><span class="stat-label">HP</span><span class="stat-value">${hp}</span></div>
       <div class="stat"><span class="stat-label">Speed</span><span class="stat-value">${speed} ft</span></div>
       <div class="stat"><span class="stat-label">Class DC</span><span class="stat-value">${classDC}</span></div>
@@ -320,6 +407,31 @@ function renderCharacterSheet(character) {
       <table class="check-table">${checkTableHead()}${skillRows}${loreRows}</table>
     </section>
 
+    <section class="sheet-section">
+      <h3>Weapons</h3>
+      ${weaponsTable(build.weapons)}
+    </section>
+
+    <section class="sheet-section">
+      <h3>Armor</h3>
+      ${armorTable(build.armor)}
+    </section>
+
+    <section class="sheet-section">
+      <h3>Languages</h3>
+      ${chipList(build.languages)}
+    </section>
+
+    <section class="sheet-section">
+      <h3>Resistances</h3>
+      ${chipList(build.resistances)}
+    </section>
+
+    <section class="sheet-section">
+      <h3>Money</h3>
+      ${moneyRow(build.money)}
+    </section>
+
     <details class="raw-json">
       <summary>Raw JSON</summary>
       <pre id="character-json"></pre>
@@ -329,6 +441,18 @@ function renderCharacterSheet(character) {
 
   for (const btn of mainContent.querySelectorAll(".roll-btn")) {
     btn.addEventListener("click", () => rollCheck(btn, character.name));
+  }
+
+  const acValueEl = document.getElementById("ac-value");
+  const acToggleBtns = mainContent.querySelectorAll(".ac-toggles .icon-btn");
+  for (const btn of acToggleBtns) {
+    btn.addEventListener("click", () => {
+      btn.classList.toggle("active");
+      const activeBonus = Array.from(acToggleBtns)
+        .filter((b) => b.classList.contains("active"))
+        .reduce((sum, b) => sum + Number(b.dataset.bonus), 0);
+      acValueEl.textContent = baseAC + activeBonus;
+    });
   }
 
   const groupSelect = document.getElementById("group-select");

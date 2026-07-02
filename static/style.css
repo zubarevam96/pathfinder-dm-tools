@@ -375,6 +375,40 @@ button.subtle {
   font-weight: 700;
 }
 
+.ac-toggles {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+.icon-btn {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  border-radius: 5px;
+}
+
+.icon-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  filter: none;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.85rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
 /* --- Sheet sections --- */
 
 .sheet-section {
