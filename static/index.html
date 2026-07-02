@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pathfinder DM Tools</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1 class="app-title">Pathfinder DM Tools</h1>
+      <details id="character-section" open>
+        <summary>Characters</summary>
+        <div id="character-tree"></div>
+      </details>
+      <div class="sidebar-actions">
+        <button id="new-btn">+ New</button>
+        <button id="new-group-btn">+ New Group</button>
+      </div>
+      <details id="history-section" open>
+        <summary>Roll History</summary>
+        <ul id="roll-history"></ul>
+        <button id="clear-history-btn" class="subtle">Clear history</button>
+      </details>
+    </aside>
+
+    <main id="main-content">
+      <p class="placeholder">Select a character, or add a new one.</p>
+    </main>
+  </div>
+
+  <dialog id="new-dialog">
+    <form id="new-form">
+      <h2>Add character</h2>
+      <label for="character-link">Pathbuilder 2e character link</label>
+      <input
+        type="text"
+        id="character-link"
+        placeholder="https://pathbuilder2e.com/json.php?id=454117"
+      />
+      <p class="dialog-status" id="new-status"></p>
+      <div class="dialog-actions">
+        <button type="button" id="new-cancel">Cancel</button>
+        <button type="submit" id="new-submit">Fetch</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="collision-dialog">
+    <h2>Name already exists</h2>
+    <p id="collision-message"></p>
+    <label for="collision-target">Character to override</label>
+    <select id="collision-target"></select>
+    <p class="dialog-status" id="collision-status"></p>
+    <div class="dialog-actions">
+      <button type="button" id="collision-cancel">Cancel</button>
+      <button type="button" id="collision-override">Override selected</button>
+      <button type="button" id="collision-copy" class="primary">Copy (keep both)</button>
+    </div>
+  </dialog>
+
+  <dialog id="group-dialog">
+    <form id="group-form">
+      <h2>New group</h2>
+      <label for="group-name">Group name</label>
+      <input type="text" id="group-name" placeholder="e.g. Party A" />
+      <p class="dialog-status" id="group-status"></p>
+      <div class="dialog-actions">
+        <button type="button" id="group-cancel">Cancel</button>
+        <button type="submit" id="group-submit">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="delete-dialog">
+    <h2>Delete character</h2>
+    <p id="delete-message"></p>
+    <p class="dialog-status" id="delete-status"></p>
+    <div class="dialog-actions">
+      <button type="button" id="delete-cancel">Cancel</button>
+      <button type="button" id="delete-confirm" class="danger">Delete</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
