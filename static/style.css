@@ -222,13 +222,74 @@ button.subtle {
 
 /* --- Main content --- */
 
+.main {
+  flex: 1;
+  padding: 1.5rem 2rem 2rem;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+
+.tab-btn {
+  border: none;
+  border-radius: 0;
+  background: none;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.95rem;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tab-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.tab-btn.active {
+  color: var(--accent);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
 #main-content {
   flex: 1;
-  padding: 2rem;
-  max-width: 860px;
 }
 
 .placeholder {
+  color: var(--muted);
+}
+
+.options-panel {
+  max-width: 520px;
+}
+
+.option-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.option-row input {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+.option-hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
   color: var(--muted);
 }
 

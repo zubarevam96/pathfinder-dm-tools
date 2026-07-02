@@ -25,8 +25,14 @@
       </details>
     </aside>
 
-    <main id="main-content">
-      <p class="placeholder">Select a character, or add a new one.</p>
+    <main class="main">
+      <nav class="tabs">
+        <button class="tab-btn active" id="tab-character" data-tab="character">Character</button>
+        <button class="tab-btn" id="tab-options" data-tab="options">Options</button>
+      </nav>
+      <div id="main-content">
+        <p class="placeholder">Select a character, or add a new one.</p>
+      </div>
     </main>
   </div>
 
@@ -37,7 +43,7 @@
       <input
         type="text"
         id="character-link"
-        placeholder="https://pathbuilder2e.com/json.php?id=454117 or 454117"
+        placeholder="https://pathbuilder2e.com/json.php?id=123456 or 123456"
       />
       <p class="dialog-status" id="new-status"></p>
       <div class="dialog-actions">

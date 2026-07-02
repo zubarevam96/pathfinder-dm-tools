@@ -32,6 +32,9 @@ const deleteConfirmBtn = document.getElementById("delete-confirm");
 const rollHistoryList = document.getElementById("roll-history");
 const clearHistoryBtn = document.getElementById("clear-history-btn");
 
+const tabCharacterBtn = document.getElementById("tab-character");
+const tabOptionsBtn = document.getElementById("tab-options");
+
 // ---------------------------------------------------------------------------
 // Browser-local storage: each user's characters live in their own browser.
 
@@ -50,6 +53,7 @@ function loadStore() {
     characters: raw.characters ?? [],
     groups: raw.groups ?? [],
     rolls: raw.rolls ?? [],
+    settings: { critModifier: false, ...raw.settings },
   };
 }
 
@@ -67,6 +71,7 @@ let store = loadStore();
 let selectedId = null;
 let pendingFetch = null;
 let pendingDeleteId = null;
+let activeTab = "character";
 
 async function importLegacyIfNeeded() {
   if (store.characters.length || store.groups.length || localStorage.getItem(MIGRATED_KEY)) {
@@ -373,13 +378,49 @@ function selectCharacter(id) {
     li.classList.toggle("active", li.dataset.id === id);
   }
 
-  const character = store.characters.find((c) => c.id === id);
-  if (!character) {
-    mainContent.innerHTML = '<p class="placeholder">Character not found.</p>';
+  switchTab("character");
+}
+
+function renderActiveTab() {
+  if (activeTab === "options") {
+    renderOptionsPanel();
     return;
   }
 
+  const character = store.characters.find((c) => c.id === selectedId);
+  if (!character) {
+    mainContent.innerHTML = '<p class="placeholder">Select a character, or add a new one.</p>';
+    return;
+  }
   renderCharacterSheet(character);
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  tabCharacterBtn.classList.toggle("active", tab === "character");
+  tabOptionsBtn.classList.toggle("active", tab === "options");
+  renderActiveTab();
+}
+
+function renderOptionsPanel() {
+  mainContent.innerHTML = `
+    <h2>Options</h2>
+    <div class="options-panel">
+      <label class="option-row">
+        <input type="checkbox" id="opt-crit-modifier" ${store.settings.critModifier ? "checked" : ""} />
+        Add/subtract 10 on critical rolls (natural 20 or natural 1)
+      </label>
+      <p class="option-hint">
+        When enabled, a natural 20 adds 10 to the roll total and a natural 1
+        subtracts 10 — a quick shorthand for critical success/failure margins.
+      </p>
+    </div>
+  `;
+
+  document.getElementById("opt-crit-modifier").addEventListener("change", (event) => {
+    store.settings.critModifier = event.target.checked;
+    persist();
+  });
 }
 
 function updateCharacterGroup(id, groupId) {
@@ -397,14 +438,21 @@ function rollCheck(btn, characterName) {
   const mod = Number(btn.dataset.mod);
   const label = btn.dataset.label;
   const die = Math.floor(Math.random() * 20) + 1;
-  const total = die + mod;
+
+  let critAdjust = 0;
+  if (store.settings.critModifier) {
+    if (die === 20) critAdjust = 10;
+    else if (die === 1) critAdjust = -10;
+  }
+  const total = die + mod + critAdjust;
 
   const resultEl = btn.closest("tr, .ability-card").querySelector(".roll-result");
-  resultEl.textContent = `d20 (${die}) ${formatMod(mod)} = ${total}`;
+  const critText = critAdjust !== 0 ? ` ${formatMod(critAdjust)} (crit)` : "";
+  resultEl.textContent = `d20 (${die}) ${formatMod(mod)}${critText} = ${total}`;
   resultEl.classList.toggle("nat20", die === 20);
   resultEl.classList.toggle("nat1", die === 1);
 
-  store.rolls.unshift({ name: characterName, label, die, mod, total, at: Date.now() });
+  store.rolls.unshift({ name: characterName, label, die, mod, critAdjust, total, at: Date.now() });
   store.rolls.length = Math.min(store.rolls.length, MAX_ROLLS);
   persist();
   renderRollHistory();
@@ -424,7 +472,8 @@ function renderRollHistory() {
   for (const roll of store.rolls) {
     const li = document.createElement("li");
     li.textContent = `${roll.name} rolled ${roll.total} in ${roll.label} check`;
-    li.title = `d20 (${roll.die}) ${formatMod(roll.mod)} · ${new Date(roll.at).toLocaleTimeString()}`;
+    const critText = roll.critAdjust ? ` ${formatMod(roll.critAdjust)} (crit)` : "";
+    li.title = `d20 (${roll.die}) ${formatMod(roll.mod)}${critText} · ${new Date(roll.at).toLocaleTimeString()}`;
     if (roll.die === 20) li.classList.add("nat20");
     if (roll.die === 1) li.classList.add("nat1");
     rollHistoryList.appendChild(li);
@@ -637,6 +686,9 @@ deleteCancel.addEventListener("click", () => deleteDialog.close());
 deleteConfirmBtn.addEventListener("click", confirmDelete);
 
 clearHistoryBtn.addEventListener("click", clearRollHistory);
+
+tabCharacterBtn.addEventListener("click", () => switchTab("character"));
+tabOptionsBtn.addEventListener("click", () => switchTab("options"));
 
 renderSidebar();
 renderRollHistory();
