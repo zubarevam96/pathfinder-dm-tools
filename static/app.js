@@ -233,13 +233,21 @@ function chipList(items) {
   return `<div class="chip-list">${items.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")}</div>`;
 }
 
-const COIN_LABELS = [["pp", "Platinum"], ["gp", "Gold"], ["sp", "Silver"], ["cp", "Copper"]];
+const COIN_LABELS = [
+  ["pp", "Platinum", "#e5e4e2"],
+  ["gp", "Gold", "#d4af37"],
+  ["sp", "Silver", "#c0c0c0"],
+  ["cp", "Copper", "#cd7f32"],
+];
 
 function moneyRow(money) {
   return `
     <div class="stat-row">
-      ${COIN_LABELS.map(([key, label]) => `
-        <div class="stat"><span class="stat-label">${label}</span><span class="stat-value">${money?.[key] ?? 0}</span></div>
+      ${COIN_LABELS.map(([key, label, color]) => `
+        <div class="stat coin-stat" style="--coin-color: ${color}">
+          <span class="stat-label">${label}</span>
+          <span class="stat-value">${money?.[key] ?? 0}</span>
+        </div>
       `).join("")}
     </div>
   `;
@@ -286,6 +294,84 @@ function armorTable(armorList) {
       ${rows}
     </table>
   `;
+}
+
+function spellcastingSection(build) {
+  const casters = build.spellCasters ?? [];
+  const focusData = build.focus ?? {};
+  const focusPoints = build.focusPoints ?? 0;
+
+  const blocks = [];
+
+  for (const caster of casters) {
+    const ability = caster.ability ?? "cha";
+    const prof = caster.proficiency ?? 0;
+    const total = checkTotal(build, prof, ability);
+    const perDay = caster.perDay ?? [];
+
+    const levelSections = (caster.spells ?? [])
+      .filter((entry) => entry.list && entry.list.length > 0)
+      .map((entry) => {
+        const level = entry.spellLevel;
+        const levelLabel = level === 0 ? "Cantrips" : `Level ${level}`;
+        const slots = perDay[level];
+        const slotLabel = level > 0 && slots ? ` (${slots}/day)` : "";
+        return `
+          <div class="spell-level">
+            <div class="spell-level-label">${escapeHtml(levelLabel)}${slotLabel}</div>
+            ${chipList(entry.list)}
+          </div>
+        `;
+      }).join("");
+
+    if (!levelSections) continue;
+
+    blocks.push(`
+      <div class="caster-block">
+        <div class="caster-header">
+          <h4>${escapeHtml(caster.name)}</h4>
+          <span class="caster-meta">${escapeHtml(caster.magicTradition ?? "")} · ${escapeHtml(caster.spellcastingType ?? "")}</span>
+          <div class="caster-stats">
+            <span>Attack ${formatMod(total)}</span>
+            <span>DC ${10 + total}</span>
+          </div>
+        </div>
+        ${levelSections}
+      </div>
+    `);
+  }
+
+  for (const [tradition, byAbility] of Object.entries(focusData)) {
+    for (const [ability, data] of Object.entries(byAbility)) {
+      const spells = [...(data.focusCantrips ?? []), ...(data.focusSpells ?? [])];
+      if (spells.length === 0) continue;
+
+      const total = checkTotal(build, data.proficiency ?? 0, ability) + (data.itemBonus ?? 0);
+      blocks.push(`
+        <div class="caster-block">
+          <div class="caster-header">
+            <h4>Focus Spells</h4>
+            <span class="caster-meta">${escapeHtml(tradition)}</span>
+            <div class="caster-stats">
+              <span>Attack ${formatMod(total)}</span>
+              <span>DC ${10 + total}</span>
+            </div>
+          </div>
+          ${chipList(spells)}
+        </div>
+      `);
+    }
+  }
+
+  if (blocks.length === 0) {
+    return '<p class="placeholder">No spells</p>';
+  }
+
+  const focusPointsLine = focusPoints > 0
+    ? `<p class="focus-points">Focus Points: <strong>${focusPoints}</strong></p>`
+    : "";
+
+  return `${focusPointsLine}${blocks.join("")}`;
 }
 
 // A weapon/shield can grant a temporary AC bonus that only applies while an
@@ -405,6 +491,11 @@ function renderCharacterSheet(character) {
     <section class="sheet-section">
       <h3>Skills</h3>
       <table class="check-table">${checkTableHead()}${skillRows}${loreRows}</table>
+    </section>
+
+    <section class="sheet-section">
+      <h3>Spells</h3>
+      ${spellcastingSection(build)}
     </section>
 
     <section class="sheet-section">

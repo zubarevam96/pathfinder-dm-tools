@@ -409,6 +409,81 @@ button.subtle {
   border-radius: 999px;
 }
 
+.coin-stat {
+  border-top-color: var(--coin-color);
+}
+
+.coin-stat .stat-label::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--coin-color);
+  border: 1px solid #0003;
+  vertical-align: middle;
+}
+
+.caster-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: var(--shadow);
+}
+
+.caster-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.caster-header h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.caster-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.caster-stats {
+  margin-left: auto;
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.spell-level {
+  margin-top: 0.5rem;
+}
+
+.spell-level:first-of-type {
+  margin-top: 0;
+}
+
+.spell-level-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
+}
+
+.focus-points {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+
 /* --- Sheet sections --- */
 
 .sheet-section {
