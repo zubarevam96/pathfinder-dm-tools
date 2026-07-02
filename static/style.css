@@ -250,6 +250,16 @@ button.subtle {
   color: var(--muted);
 }
 
+.source-id {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.source-id a {
+  color: var(--accent);
+}
+
 .character-actions {
   display: flex;
   align-items: center;

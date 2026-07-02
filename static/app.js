@@ -280,11 +280,15 @@ function renderCharacterSheet(character) {
       <div>
         <h2>${escapeHtml(character.name)}</h2>
         <p class="subtitle">${subtitleParts.map(escapeHtml).join(" · ")}</p>
+        <p class="source-id">Pathbuilder ID:
+          <a href="${escapeHtml(character.link)}" target="_blank" rel="noopener">${escapeHtml(character.sourceId ?? "?")}</a>
+        </p>
       </div>
       <div class="character-actions">
         <select id="group-select">
           <option value="">No group</option>
         </select>
+        <button id="refresh-character-btn">Refresh</button>
         <button id="delete-character-btn" class="danger">Delete</button>
       </div>
     </div>
@@ -332,7 +336,35 @@ function renderCharacterSheet(character) {
   }
   groupSelect.addEventListener("change", () => updateCharacterGroup(character.id, groupSelect.value || null));
 
+  document.getElementById("refresh-character-btn").addEventListener("click", () => refreshCharacter(character.id));
   document.getElementById("delete-character-btn").addEventListener("click", () => openDeleteDialog(character.id, character.name));
+}
+
+async function refreshCharacter(id) {
+  const character = store.characters.find((c) => c.id === id);
+  if (!character) return;
+
+  const btn = document.getElementById("refresh-character-btn");
+  btn.disabled = true;
+  btn.textContent = "Refreshing...";
+
+  try {
+    const fetched = await fetchPathbuilder(character.sourceId ?? character.link);
+    Object.assign(character, {
+      name: fetched.name,
+      sourceId: fetched.sourceId,
+      link: fetched.link,
+      data: fetched.data,
+      savedAt: Date.now() / 1000,
+    });
+    persist();
+    renderSidebar();
+    renderCharacterSheet(character);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = "Refresh";
+    alert(`Failed to refresh: ${err.message}`);
+  }
 }
 
 function selectCharacter(id) {
@@ -443,7 +475,9 @@ async function fetchPathbuilder(link) {
       } catch {}
       throw new Error(proxyError || `Failed to fetch character: ${err.message}`);
     }
-    return response.json();
+    const result = await response.json();
+    result.link = `${PATHBUILDER_JSON_URL}?id=${result.sourceId}`;
+    return result;
   }
 
   if (data.success === false) {
@@ -452,7 +486,7 @@ async function fetchPathbuilder(link) {
   return {
     name: data.build?.name || "Unnamed character",
     sourceId: characterId,
-    link,
+    link: `${PATHBUILDER_JSON_URL}?id=${characterId}`,
     data,
   };
 }
