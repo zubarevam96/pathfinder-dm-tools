@@ -296,6 +296,25 @@ function armorTable(armorList) {
   `;
 }
 
+function inventoryTable(equipment) {
+  if (!equipment || equipment.length === 0) {
+    return '<p class="placeholder">No inventory items</p>';
+  }
+  const rows = equipment.map(([name, qty, note]) => `
+    <tr>
+      <td>${escapeHtml(name ?? "")}</td>
+      <td class="num">${qty ?? 1}</td>
+      <td>${escapeHtml(note ?? "")}</td>
+    </tr>
+  `).join("");
+  return `
+    <table class="check-table">
+      <tr><th>Item</th><th>Qty</th><th>Notes</th></tr>
+      ${rows}
+    </table>
+  `;
+}
+
 function spellcastingSection(build) {
   const casters = build.spellCasters ?? [];
   const focusData = build.focus ?? {};
@@ -506,6 +525,11 @@ function renderCharacterSheet(character) {
     <section class="sheet-section">
       <h3>Armor</h3>
       ${armorTable(build.armor)}
+    </section>
+
+    <section class="sheet-section">
+      <h3>Inventory</h3>
+      ${inventoryTable(build.equipment)}
     </section>
 
     <section class="sheet-section">
