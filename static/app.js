@@ -266,12 +266,28 @@ function chipList(items) {
 // Archives of Nethys has no stable name-based page URL (spells are keyed by
 // a numeric ID), so as a fallback we link to its search endpoint, which
 // takes the name as a query param and reliably surfaces the matching spell
-// as the top result. Known IDs (found by hand — AoN has no public name->ID
-// lookup) go here so those specific spells can link straight to their page.
-const SPELL_IDS = {
-  "Eat Fire": 1352,
-  "Guidance": 1549,
-};
+// as the top result. Known IDs come from static/spell-data/*.json (built by
+// scripts/build_spell_entities.py), loaded into this map at startup — see
+// loadSpellIdMap(). Only name -> id is used here; the entity files also
+// carry traditions/actions for future features, deliberately unused so far.
+let spellIdMap = {};
+
+async function loadSpellIdMap() {
+  try {
+    const response = await fetch("spell-data/cantrips.json");
+    if (!response.ok) return;
+    const entities = await response.json();
+    const map = {};
+    for (const entity of entities) {
+      if (entity.archives_of_nexus_id != null) {
+        map[entity.name] = entity.archives_of_nexus_id;
+      }
+    }
+    spellIdMap = map;
+  } catch {
+    // Non-fatal — spells just fall back to the AoN search link.
+  }
+}
 
 function spellSearchUrl(name) {
   return `https://2e.aonprd.com/Search.aspx?q=${encodeURIComponent(name)}`;
@@ -286,7 +302,7 @@ function spellChipList(items) {
     return '<p class="placeholder">None</p>';
   }
   return `<div class="chip-list">${items.map((item) => {
-    const id = SPELL_IDS[item];
+    const id = spellIdMap[item];
     const url = id ? spellDirectUrl(id) : spellSearchUrl(item);
     return `<a class="chip chip-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" data-spell-name="${escapeHtml(item)}">${escapeHtml(item)}</a>`;
   }).join("")}</div>`;
@@ -318,7 +334,7 @@ function openSpellPopup(id, name) {
 
 function handleSpellChipClick(event, chip) {
   const name = chip.dataset.spellName;
-  const id = SPELL_IDS[name];
+  const id = spellIdMap[name];
   if (!id) return; // unknown spell — fall back to the default search-page link
 
   // Ctrl/Cmd/Shift-click (or middle-click) should still open the direct
@@ -1083,3 +1099,4 @@ tabOptionsBtn.addEventListener("click", () => switchTab("options"));
 renderSidebar();
 renderRollHistory();
 importLegacyIfNeeded();
+loadSpellIdMap();

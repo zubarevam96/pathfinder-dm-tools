@@ -1,0 +1,535 @@
+[
+  {
+    "name": "Approximate",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 864
+  },
+  {
+    "name": "Divine Lance",
+    "traditions": [
+      "divine"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1498
+  },
+  {
+    "name": "Glamorize",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 2353
+  },
+  {
+    "name": "Caustic Blast",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1461
+  },
+  {
+    "name": "Figment",
+    "traditions": [
+      "arcane",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1528
+  },
+  {
+    "name": "Discern Secrets",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1888
+  },
+  {
+    "name": "Murmuration",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1940
+  },
+  {
+    "name": "Wilding Word",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1893
+  },
+  {
+    "name": "Spirit Object",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 2437
+  },
+  {
+    "name": "Sting of the Sea",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1939
+  },
+  {
+    "name": "Vitality Lash",
+    "traditions": [
+      "divine",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1744
+  },
+  {
+    "name": "Buzzing Bites",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 2438
+  },
+  {
+    "name": "Infectious Enthusiasm",
+    "traditions": [
+      "arcane",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 932
+  },
+  {
+    "name": "Live Wire",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 2008
+  },
+  {
+    "name": "Protect Companion",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "1",
+    "archives_of_nexus_id": 975
+  },
+  {
+    "name": "Frost's Touch",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1274
+  },
+  {
+    "name": "Clinging Ice",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1887
+  },
+  {
+    "name": "Prestidigitation",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1639
+  },
+  {
+    "name": "Sigil",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1673
+  },
+  {
+    "name": "Haunting Hymn",
+    "traditions": [
+      "divine",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1999
+  },
+  {
+    "name": "Nudge Fate",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1890
+  },
+  {
+    "name": "Guidance",
+    "traditions": [
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "1",
+    "archives_of_nexus_id": 1549
+  },
+  {
+    "name": "Puff of Poison",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 2016
+  },
+  {
+    "name": "Trade Death for Life",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 2435
+  },
+  {
+    "name": "Frostbite",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1539
+  },
+  {
+    "name": "Detect Magic",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1485
+  },
+  {
+    "name": "Know the Way",
+    "traditions": [
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1582
+  },
+  {
+    "name": "Tangle Vine",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1713
+  },
+  {
+    "name": "Wash Your Luck",
+    "traditions": [
+      "divine",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1031
+  },
+  {
+    "name": "Uplifting Overture",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1779
+  },
+  {
+    "name": "Courageous Anthem",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1763
+  },
+  {
+    "name": "Song of Strength",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1775
+  },
+  {
+    "name": "Ignition",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1565
+  },
+  {
+    "name": "Shroud of Night",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1891
+  },
+  {
+    "name": "Pact Broker",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 2436
+  },
+  {
+    "name": "Forbidding Ward",
+    "traditions": [
+      "divine",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1535
+  },
+  {
+    "name": "Summon Instrument",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult"
+    ],
+    "actions": "3",
+    "archives_of_nexus_id": 1703
+  },
+  {
+    "name": "Void Warp",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1745
+  },
+  {
+    "name": "Scrounger's Glee",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Scatter Scree",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 2021
+  },
+  {
+    "name": "Share Vision",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 2434
+  },
+  {
+    "name": "Bullhorn",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1971
+  },
+  {
+    "name": "Light",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1585
+  },
+  {
+    "name": "Evil Eye",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1889
+  },
+  {
+    "name": "Stoke the Heart",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1892
+  },
+  {
+    "name": "Message",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult"
+    ],
+    "actions": "1",
+    "archives_of_nexus_id": 1598
+  },
+  {
+    "name": "Stabilize",
+    "traditions": [
+      "divine",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1689
+  },
+  {
+    "name": "Spout",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 2031
+  },
+  {
+    "name": "Daze",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1482
+  },
+  {
+    "name": "Read the Air",
+    "traditions": [
+      "divine",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 981
+  },
+  {
+    "name": "Telekinetic Hand",
+    "traditions": [
+      "arcane",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1715
+  },
+  {
+    "name": "Telekinetic Projectile",
+    "traditions": [
+      "arcane",
+      "occult"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1718
+  },
+  {
+    "name": "Gouging Claw",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1546
+  },
+  {
+    "name": "Tame",
+    "traditions": [
+      "occult",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1014
+  },
+  {
+    "name": "Read Aura",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult",
+      "primal"
+    ],
+    "actions": "-",
+    "archives_of_nexus_id": 1646
+  },
+  {
+    "name": "Time Sense",
+    "traditions": [
+      "arcane",
+      "occult"
+    ],
+    "actions": "1",
+    "archives_of_nexus_id": 2611
+  },
+  {
+    "name": "Gale Blast",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1994
+  },
+  {
+    "name": "Shield",
+    "traditions": [
+      "arcane",
+      "divine",
+      "occult"
+    ],
+    "actions": "1",
+    "archives_of_nexus_id": 1671
+  },
+  {
+    "name": "Electric Arc",
+    "traditions": [
+      "arcane",
+      "primal"
+    ],
+    "actions": "2",
+    "archives_of_nexus_id": 1509
+  },
+  {
+    "name": "Rallying Anthem",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1773
+  },
+  {
+    "name": "Triple Time",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1778
+  },
+  {
+    "name": "Dirge of Doom",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1764
+  },
+  {
+    "name": "Song of Marching",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1774
+  },
+  {
+    "name": "House of Imaginary Walls",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1767
+  },
+  {
+    "name": "Allegro",
+    "traditions": [],
+    "actions": "1",
+    "archives_of_nexus_id": 1761
+  }
+]

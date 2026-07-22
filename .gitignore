@@ -8,3 +8,7 @@ venv/
 .env
 data/
 *.log
+
+# Local tooling for parsing data/*.txt into JSON — not shipped, kept local.
+scripts/build_spell_data.py
+scripts/build_spell_entities.py
