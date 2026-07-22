@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <button id="options-btn" class="gear-btn" title="Options" aria-label="Options">⚙</button>
+
   <div class="layout">
     <aside class="sidebar">
       <h1 class="app-title">Pathfinder DM Tools</h1>
@@ -26,10 +28,6 @@
     </aside>
 
     <main class="main">
-      <nav class="tabs">
-        <button class="tab-btn active" id="tab-character" data-tab="character">Character</button>
-        <button class="tab-btn" id="tab-options" data-tab="options">Options</button>
-      </nav>
       <div id="main-content">
         <p class="placeholder">Select a character, or add a new one.</p>
       </div>
@@ -96,6 +94,14 @@
     <div class="dialog-actions">
       <button type="button" id="delete-group-cancel">Cancel</button>
       <button type="button" id="delete-group-confirm" class="danger">Delete</button>
+    </div>
+  </dialog>
+
+  <dialog id="options-dialog">
+    <h2>Options</h2>
+    <div id="options-panel-body"></div>
+    <div class="dialog-actions">
+      <button type="button" id="options-close">Close</button>
     </div>
   </dialog>
 

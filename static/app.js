@@ -44,8 +44,10 @@ const spellDialogBody = document.getElementById("spell-dialog-body");
 const spellDialogOpenTab = document.getElementById("spell-dialog-open-tab");
 const spellDialogClose = document.getElementById("spell-dialog-close");
 
-const tabCharacterBtn = document.getElementById("tab-character");
-const tabOptionsBtn = document.getElementById("tab-options");
+const optionsBtn = document.getElementById("options-btn");
+const optionsDialog = document.getElementById("options-dialog");
+const optionsPanelBody = document.getElementById("options-panel-body");
+const optionsClose = document.getElementById("options-close");
 
 // ---------------------------------------------------------------------------
 // Browser-local storage: each user's characters live in their own browser.
@@ -65,7 +67,7 @@ function loadStore() {
     characters: raw.characters ?? [],
     groups: raw.groups ?? [],
     rolls: raw.rolls ?? [],
-    settings: { critModifier: false, ...raw.settings },
+    settings: { critModifier: false, spellTraditions: false, ...raw.settings },
   };
 }
 
@@ -84,7 +86,6 @@ let selectedId = null;
 let pendingFetch = null;
 let pendingDeleteId = null;
 let pendingDeleteGroupId = null;
-let activeTab = "character";
 
 async function importLegacyIfNeeded() {
   if (store.characters.length || store.groups.length || localStorage.getItem(MIGRATED_KEY)) {
@@ -266,14 +267,15 @@ function chipList(items) {
 // Archives of Nethys has no stable name-based page URL (spells are keyed by
 // a numeric ID), so as a fallback we link to its search endpoint, which
 // takes the name as a query param and reliably surfaces the matching spell
-// as the top result. Known IDs come from static/spell-data/*.json (built by
-// scripts/build_spell_entities.py), loaded into this map at startup — see
-// loadSpellIdMap(). Only name -> id is used here; the entity files also
-// carry traditions/actions for future features, deliberately unused so far.
+// as the top result. Known IDs and traditions come from
+// static/spell-data/*.json (built by scripts/build_spell_entities.py),
+// loaded into these maps at startup — see loadSpellIdMap().
 let spellIdMap = {};
+let spellTraditionMap = {};
 
 async function loadSpellIdMap() {
-  const map = {};
+  const idMap = {};
+  const traditionMap = {};
   for (const file of ["spell-data/cantrips.json", "spell-data/spells.json", "spell-data/focals.json"]) {
     try {
       const response = await fetch(file);
@@ -281,14 +283,40 @@ async function loadSpellIdMap() {
       const entities = await response.json();
       for (const entity of entities) {
         if (entity.archives_of_nexus_id != null) {
-          map[entity.name] = entity.archives_of_nexus_id;
+          idMap[entity.name] = entity.archives_of_nexus_id;
         }
+        traditionMap[entity.name] = entity.traditions ?? [];
       }
     } catch {
       // Non-fatal — spells just fall back to the AoN search link.
     }
   }
-  spellIdMap = map;
+  spellIdMap = idMap;
+  spellTraditionMap = traditionMap;
+}
+
+// Colors mirror the classic PF2e tradition Venn diagram (Arcane/Divine/
+// Occult/Primal).
+const TRADITION_COLORS = {
+  arcane: "#8e44ad",
+  divine: "#d4ac0d",
+  occult: "#e67e22",
+  primal: "#2e8b57",
+};
+const TRADITION_ORDER = ["arcane", "divine", "occult", "primal"];
+
+// Each tradition keeps a fixed grid slot (arcane top-left, divine top-right,
+// occult bottom-left, primal bottom-right) regardless of which traditions a
+// given spell has, so the badge is scannable at a glance across spells.
+function traditionDots(name) {
+  const traditions = spellTraditionMap[name] ?? [];
+  if (traditions.length === 0) return "";
+  const dots = TRADITION_ORDER.map((tradition) => {
+    const present = traditions.includes(tradition);
+    const style = present ? `background:${TRADITION_COLORS[tradition]}` : "background:transparent";
+    return `<span class="tradition-dot" style="${style}" title="${present ? tradition : ""}"></span>`;
+  }).join("");
+  return `<span class="tradition-dots">${dots}</span>`;
 }
 
 function spellSearchUrl(name) {
@@ -299,14 +327,18 @@ function spellDirectUrl(id) {
   return `https://2e.aonprd.com/Spells.aspx?ID=${id}`;
 }
 
-function spellChipList(items) {
+// Focus spells have no tradition of their own (they belong to a class, not
+// arcane/divine/occult/primal), so tradition dots are skipped for them —
+// every dot would just be grey, which is noise, not information.
+function spellChipList(items, { showTraditions = true } = {}) {
   if (!items || items.length === 0) {
     return '<p class="placeholder">None</p>';
   }
   return `<div class="chip-list">${items.map((item) => {
     const id = spellIdMap[item];
     const url = id ? spellDirectUrl(id) : spellSearchUrl(item);
-    return `<a class="chip chip-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" data-spell-name="${escapeHtml(item)}">${escapeHtml(item)}</a>`;
+    const dots = showTraditions && store.settings.spellTraditions ? traditionDots(item) : "";
+    return `<a class="chip chip-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" data-spell-name="${escapeHtml(item)}">${escapeHtml(item)}${dots}</a>`;
   }).join("")}</div>`;
 }
 
@@ -490,7 +522,7 @@ function spellcastingSection(build) {
               <span>DC ${10 + total}</span>
             </div>
           </div>
-          ${spellChipList(spells)}
+          ${spellChipList(spells, { showTraditions: false })}
         </div>
       `);
     }
@@ -747,15 +779,10 @@ function selectCharacter(id) {
     li.classList.toggle("active", li.dataset.id === id);
   }
 
-  switchTab("character");
+  renderMain();
 }
 
-function renderActiveTab() {
-  if (activeTab === "options") {
-    renderOptionsPanel();
-    return;
-  }
-
+function renderMain() {
   const character = store.characters.find((c) => c.id === selectedId);
   if (!character) {
     mainContent.innerHTML = '<p class="placeholder">Select a character, or add a new one.</p>';
@@ -764,32 +791,39 @@ function renderActiveTab() {
   renderCharacterSheet(character);
 }
 
-function switchTab(tab) {
-  activeTab = tab;
-  tabCharacterBtn.classList.toggle("active", tab === "character");
-  tabOptionsBtn.classList.toggle("active", tab === "options");
-  renderActiveTab();
-}
-
-function renderOptionsPanel() {
-  mainContent.innerHTML = `
-    <h2>Options</h2>
-    <div class="options-panel">
-      <label class="option-row">
-        <input type="checkbox" id="opt-crit-modifier" ${store.settings.critModifier ? "checked" : ""} />
-        Add/subtract 10 on critical rolls (natural 20 or natural 1)
-      </label>
-      <p class="option-hint">
-        When enabled, a natural 20 adds 10 to the roll total and a natural 1
-        subtracts 10 — a quick shorthand for critical success/failure margins.
-      </p>
-    </div>
+function openOptionsDialog() {
+  optionsPanelBody.innerHTML = `
+    <label class="option-row">
+      <input type="checkbox" id="opt-crit-modifier" ${store.settings.critModifier ? "checked" : ""} />
+      Add/subtract 10 on critical rolls (natural 20 or natural 1)
+    </label>
+    <p class="option-hint">
+      When enabled, a natural 20 adds 10 to the roll total and a natural 1
+      subtracts 10 — a quick shorthand for critical success/failure margins.
+    </p>
+    <label class="option-row">
+      <input type="checkbox" id="opt-spell-traditions" ${store.settings.spellTraditions ? "checked" : ""} />
+      Show spell tradition dots
+    </label>
+    <p class="option-hint">
+      When enabled, each spell chip shows four dots for arcane, divine,
+      occult, and primal — colored if the spell belongs to that tradition,
+      grey otherwise.
+    </p>
   `;
 
   document.getElementById("opt-crit-modifier").addEventListener("change", (event) => {
     store.settings.critModifier = event.target.checked;
     persist();
   });
+
+  document.getElementById("opt-spell-traditions").addEventListener("change", (event) => {
+    store.settings.spellTraditions = event.target.checked;
+    persist();
+    renderMain();
+  });
+
+  optionsDialog.showModal();
 }
 
 function updateCharacterGroup(id, groupId) {
@@ -1068,7 +1102,7 @@ function confirmDeleteGroup() {
   deleteGroupDialog.close();
   pendingDeleteGroupId = null;
   renderSidebar();
-  if (activeTab === "character" && selectedId) renderActiveTab();
+  if (selectedId) renderMain();
 }
 
 // ---------------------------------------------------------------------------
@@ -1095,8 +1129,8 @@ spellDialogClose.addEventListener("click", () => spellDialog.close());
 
 clearHistoryBtn.addEventListener("click", clearRollHistory);
 
-tabCharacterBtn.addEventListener("click", () => switchTab("character"));
-tabOptionsBtn.addEventListener("click", () => switchTab("options"));
+optionsBtn.addEventListener("click", openOptionsDialog);
+optionsClose.addEventListener("click", () => optionsDialog.close());
 
 renderSidebar();
 renderRollHistory();

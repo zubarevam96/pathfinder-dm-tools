@@ -254,33 +254,21 @@ button.subtle {
   flex-direction: column;
 }
 
-.tabs {
+.gear-btn {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 20;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
   display: flex;
-  gap: 0.25rem;
-  border-bottom: 2px solid var(--border);
-  margin-bottom: 1.5rem;
-}
-
-.tab-btn {
-  border: none;
-  border-radius: 0;
-  background: none;
-  padding: 0.6rem 1.1rem;
-  font-size: 0.95rem;
-  color: var(--muted);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-}
-
-.tab-btn:hover {
-  background: var(--accent-soft);
-  color: var(--text);
-}
-
-.tab-btn.active {
-  color: var(--accent);
-  font-weight: 600;
-  border-bottom-color: var(--accent);
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  line-height: 1;
+  border-radius: 50%;
+  box-shadow: var(--shadow);
 }
 
 #main-content {
@@ -443,6 +431,26 @@ button.subtle {
   background: var(--accent);
   color: var(--accent-contrast);
   border-color: var(--accent);
+}
+
+.tradition-dots {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 2px;
+  width: 14px;
+  height: 14px;
+  padding: 2px;
+  margin-left: 0.4rem;
+  border-radius: 4px;
+  background: var(--border);
+  vertical-align: middle;
+}
+
+.tradition-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
 }
 
 .coin-stat {
