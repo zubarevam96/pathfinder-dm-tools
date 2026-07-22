@@ -273,20 +273,22 @@ function chipList(items) {
 let spellIdMap = {};
 
 async function loadSpellIdMap() {
-  try {
-    const response = await fetch("spell-data/cantrips.json");
-    if (!response.ok) return;
-    const entities = await response.json();
-    const map = {};
-    for (const entity of entities) {
-      if (entity.archives_of_nexus_id != null) {
-        map[entity.name] = entity.archives_of_nexus_id;
+  const map = {};
+  for (const file of ["spell-data/cantrips.json", "spell-data/spells.json"]) {
+    try {
+      const response = await fetch(file);
+      if (!response.ok) continue;
+      const entities = await response.json();
+      for (const entity of entities) {
+        if (entity.archives_of_nexus_id != null) {
+          map[entity.name] = entity.archives_of_nexus_id;
+        }
       }
+    } catch {
+      // Non-fatal — spells just fall back to the AoN search link.
     }
-    spellIdMap = map;
-  } catch {
-    // Non-fatal — spells just fall back to the AoN search link.
   }
+  spellIdMap = map;
 }
 
 function spellSearchUrl(name) {
