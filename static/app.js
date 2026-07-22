@@ -29,8 +29,20 @@ const deleteStatus = document.getElementById("delete-status");
 const deleteCancel = document.getElementById("delete-cancel");
 const deleteConfirmBtn = document.getElementById("delete-confirm");
 
+const deleteGroupDialog = document.getElementById("delete-group-dialog");
+const deleteGroupMessage = document.getElementById("delete-group-message");
+const deleteGroupStatus = document.getElementById("delete-group-status");
+const deleteGroupCancel = document.getElementById("delete-group-cancel");
+const deleteGroupConfirmBtn = document.getElementById("delete-group-confirm");
+
 const rollHistoryList = document.getElementById("roll-history");
 const clearHistoryBtn = document.getElementById("clear-history-btn");
+
+const spellDialog = document.getElementById("spell-dialog");
+const spellDialogTitle = document.getElementById("spell-dialog-title");
+const spellDialogBody = document.getElementById("spell-dialog-body");
+const spellDialogOpenTab = document.getElementById("spell-dialog-open-tab");
+const spellDialogClose = document.getElementById("spell-dialog-close");
 
 const tabCharacterBtn = document.getElementById("tab-character");
 const tabOptionsBtn = document.getElementById("tab-options");
@@ -71,6 +83,7 @@ let store = loadStore();
 let selectedId = null;
 let pendingFetch = null;
 let pendingDeleteId = null;
+let pendingDeleteGroupId = null;
 let activeTab = "character";
 
 async function importLegacyIfNeeded() {
@@ -122,13 +135,30 @@ function buildCharacterItem(character) {
   return li;
 }
 
-function buildGroupSection(title, characters) {
+function buildGroupSection(title, characters, group) {
   const details = document.createElement("details");
   details.className = "group";
   details.open = true;
 
   const summary = document.createElement("summary");
-  summary.textContent = `${title} (${characters.length})`;
+  const summaryText = document.createElement("span");
+  summaryText.textContent = `${title} (${characters.length})`;
+  summary.appendChild(summaryText);
+
+  if (group) {
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "group-delete-btn";
+    deleteBtn.textContent = "×";
+    deleteBtn.title = `Delete group "${group.name}"`;
+    deleteBtn.addEventListener("click", (event) => {
+      event.preventDefault(); // don't toggle the <details> open/closed
+      event.stopPropagation();
+      openDeleteGroupDialog(group.id, group.name);
+    });
+    summary.appendChild(deleteBtn);
+  }
+
   details.appendChild(summary);
 
   const ul = document.createElement("ul");
@@ -161,12 +191,12 @@ function renderSidebar() {
 
   for (const group of groups) {
     const groupCharacters = characters.filter((c) => c.groupId === group.id);
-    characterTree.appendChild(buildGroupSection(group.name, groupCharacters));
+    characterTree.appendChild(buildGroupSection(group.name, groupCharacters, group));
   }
 
   const ungrouped = characters.filter((c) => !c.groupId || !groups.some((g) => g.id === c.groupId));
   if (groups.length === 0 || ungrouped.length > 0) {
-    characterTree.appendChild(buildGroupSection("Ungrouped", ungrouped));
+    characterTree.appendChild(buildGroupSection("Ungrouped", ungrouped, null));
   }
 }
 
@@ -234,20 +264,69 @@ function chipList(items) {
 }
 
 // Archives of Nethys has no stable name-based page URL (spells are keyed by
-// numeric ID we don't have), but its search endpoint takes the name as a
-// query param and reliably surfaces the matching spell as the top result —
-// so link there instead of guessing an ID.
-function spellLink(name) {
+// a numeric ID), so as a fallback we link to its search endpoint, which
+// takes the name as a query param and reliably surfaces the matching spell
+// as the top result. Known IDs (found by hand — AoN has no public name->ID
+// lookup) go here so those specific spells can link straight to their page.
+const SPELL_IDS = {
+  "Eat Fire": 1352,
+  "Guidance": 1549,
+};
+
+function spellSearchUrl(name) {
   return `https://2e.aonprd.com/Search.aspx?q=${encodeURIComponent(name)}`;
+}
+
+function spellDirectUrl(id) {
+  return `https://2e.aonprd.com/Spells.aspx?ID=${id}`;
 }
 
 function spellChipList(items) {
   if (!items || items.length === 0) {
     return '<p class="placeholder">None</p>';
   }
-  return `<div class="chip-list">${items.map((item) => `
-    <a class="chip chip-link" href="${escapeHtml(spellLink(item))}" target="_blank" rel="noopener">${escapeHtml(item)}</a>
-  `).join("")}</div>`;
+  return `<div class="chip-list">${items.map((item) => {
+    const id = SPELL_IDS[item];
+    const url = id ? spellDirectUrl(id) : spellSearchUrl(item);
+    return `<a class="chip chip-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" data-spell-name="${escapeHtml(item)}">${escapeHtml(item)}</a>`;
+  }).join("")}</div>`;
+}
+
+// One hidden iframe per spell ID, kept alive (never removed) in the popup
+// dialog so revisiting an already-viewed spell doesn't re-request the page —
+// only its visibility toggles.
+const spellIframes = new Map();
+
+function openSpellPopup(id, name) {
+  let iframe = spellIframes.get(id);
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.src = spellDirectUrl(id);
+    iframe.loading = "lazy";
+    spellIframes.set(id, iframe);
+    spellDialogBody.appendChild(iframe);
+  }
+
+  for (const [otherId, otherIframe] of spellIframes) {
+    otherIframe.classList.toggle("active", otherId === id);
+  }
+
+  spellDialogTitle.textContent = name;
+  spellDialogOpenTab.href = spellDirectUrl(id);
+  spellDialog.showModal();
+}
+
+function handleSpellChipClick(event, chip) {
+  const name = chip.dataset.spellName;
+  const id = SPELL_IDS[name];
+  if (!id) return; // unknown spell — fall back to the default search-page link
+
+  // Ctrl/Cmd/Shift-click (or middle-click) should still open the direct
+  // page in a new tab as normal, not the in-page popup.
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) return;
+
+  event.preventDefault();
+  openSpellPopup(id, name);
 }
 
 const COIN_LABELS = [
@@ -573,6 +652,10 @@ function renderCharacterSheet(character) {
 
   for (const btn of mainContent.querySelectorAll(".roll-btn")) {
     btn.addEventListener("click", () => rollCheck(btn, character.name));
+  }
+
+  for (const chip of mainContent.querySelectorAll(".chip-link[data-spell-name]")) {
+    chip.addEventListener("click", (event) => handleSpellChipClick(event, chip));
   }
 
   const acValueEl = document.getElementById("ac-value");
@@ -950,6 +1033,26 @@ function confirmDelete() {
   renderSidebar();
 }
 
+function openDeleteGroupDialog(id, name) {
+  pendingDeleteGroupId = id;
+  deleteGroupMessage.textContent = `Are you sure you want to delete the group "${name}"? Its characters will become ungrouped, not deleted. This cannot be undone.`;
+  deleteGroupStatus.textContent = "";
+  deleteGroupDialog.showModal();
+}
+
+function confirmDeleteGroup() {
+  store.groups = store.groups.filter((g) => g.id !== pendingDeleteGroupId);
+  for (const character of store.characters) {
+    if (character.groupId === pendingDeleteGroupId) character.groupId = null;
+  }
+  persist();
+
+  deleteGroupDialog.close();
+  pendingDeleteGroupId = null;
+  renderSidebar();
+  if (activeTab === "character" && selectedId) renderActiveTab();
+}
+
 // ---------------------------------------------------------------------------
 
 newBtn.addEventListener("click", openNewDialog);
@@ -966,6 +1069,11 @@ groupForm.addEventListener("submit", submitNewGroup);
 
 deleteCancel.addEventListener("click", () => deleteDialog.close());
 deleteConfirmBtn.addEventListener("click", confirmDelete);
+
+deleteGroupCancel.addEventListener("click", () => deleteGroupDialog.close());
+deleteGroupConfirmBtn.addEventListener("click", confirmDeleteGroup);
+
+spellDialogClose.addEventListener("click", () => spellDialog.close());
 
 clearHistoryBtn.addEventListener("click", clearRollHistory);
 

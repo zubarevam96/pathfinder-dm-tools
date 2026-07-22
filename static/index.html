@@ -89,6 +89,27 @@
     </div>
   </dialog>
 
+  <dialog id="delete-group-dialog">
+    <h2>Delete group</h2>
+    <p id="delete-group-message"></p>
+    <p class="dialog-status" id="delete-group-status"></p>
+    <div class="dialog-actions">
+      <button type="button" id="delete-group-cancel">Cancel</button>
+      <button type="button" id="delete-group-confirm" class="danger">Delete</button>
+    </div>
+  </dialog>
+
+  <dialog id="spell-dialog" class="spell-dialog">
+    <div class="spell-dialog-header">
+      <span id="spell-dialog-title"></span>
+      <div class="spell-dialog-actions">
+        <a id="spell-dialog-open-tab" href="#" target="_blank" rel="noopener">Open in new tab</a>
+        <button type="button" id="spell-dialog-close">Close</button>
+      </div>
+    </div>
+    <div id="spell-dialog-body"></div>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>
