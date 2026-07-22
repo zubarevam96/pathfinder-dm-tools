@@ -233,6 +233,23 @@ function chipList(items) {
   return `<div class="chip-list">${items.map((item) => `<span class="chip">${escapeHtml(item)}</span>`).join("")}</div>`;
 }
 
+// Archives of Nethys has no stable name-based page URL (spells are keyed by
+// numeric ID we don't have), but its search endpoint takes the name as a
+// query param and reliably surfaces the matching spell as the top result —
+// so link there instead of guessing an ID.
+function spellLink(name) {
+  return `https://2e.aonprd.com/Search.aspx?q=${encodeURIComponent(name)}`;
+}
+
+function spellChipList(items) {
+  if (!items || items.length === 0) {
+    return '<p class="placeholder">None</p>';
+  }
+  return `<div class="chip-list">${items.map((item) => `
+    <a class="chip chip-link" href="${escapeHtml(spellLink(item))}" target="_blank" rel="noopener">${escapeHtml(item)}</a>
+  `).join("")}</div>`;
+}
+
 const COIN_LABELS = [
   ["pp", "Platinum", "#e5e4e2"],
   ["gp", "Gold", "#d4af37"],
@@ -338,7 +355,7 @@ function spellcastingSection(build) {
         return `
           <div class="spell-level">
             <div class="spell-level-label">${escapeHtml(levelLabel)}${slotLabel}</div>
-            ${chipList(entry.list)}
+            ${spellChipList(entry.list)}
           </div>
         `;
       }).join("");
@@ -376,7 +393,7 @@ function spellcastingSection(build) {
               <span>DC ${10 + total}</span>
             </div>
           </div>
-          ${chipList(spells)}
+          ${spellChipList(spells)}
         </div>
       `);
     }

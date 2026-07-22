@@ -409,6 +409,18 @@ button.subtle {
   border-radius: 999px;
 }
 
+.chip-link {
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chip-link:hover {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+}
+
 .coin-stat {
   border-top-color: var(--coin-color);
 }
