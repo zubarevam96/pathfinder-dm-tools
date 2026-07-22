@@ -274,7 +274,7 @@ let spellIdMap = {};
 
 async function loadSpellIdMap() {
   const map = {};
-  for (const file of ["spell-data/cantrips.json", "spell-data/spells.json"]) {
+  for (const file of ["spell-data/cantrips.json", "spell-data/spells.json", "spell-data/focals.json"]) {
     try {
       const response = await fetch(file);
       if (!response.ok) continue;
