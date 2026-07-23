@@ -574,6 +574,15 @@ button.subtle {
   color: var(--muted);
 }
 
+/* Marks any calculated number that has a title="" breakdown of the formula
+   behind it (ability mods, DCs, AC, HP, spell attack/DC) — a dotted
+   underline signals it's hoverable, since native title tooltips otherwise
+   give no visual cue. */
+.calc-hint {
+  cursor: help;
+  border-bottom: 1px dotted var(--muted);
+}
+
 /* --- Check tables --- */
 
 .check-table {

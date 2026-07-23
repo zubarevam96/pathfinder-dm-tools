@@ -233,18 +233,63 @@ function formatMod(mod) {
 }
 
 // PF2e: total = ability mod + proficiency bonus (+ level when trained or better).
-function checkTotal(build, prof, ability) {
-  const mod = abilityMod(build.abilities[ability] ?? 10);
-  return mod + prof + (prof > 0 ? build.level : 0);
+// describeCheck() returns both the total and the individual {value, label}
+// terms that produced it, so the UI can show a "how was this calculated"
+// hint with real numbers instead of just the final total.
+function describeCheck(build, prof, ability) {
+  const score = build.abilities?.[ability] ?? 10;
+  const mod = abilityMod(score);
+  const level = build.level ?? 1;
+  const levelApplies = prof > 0;
+  const total = mod + prof + (levelApplies ? level : 0);
+  const terms = [
+    { value: mod, label: `${ABILITY_NAMES[ability] ?? ability} mod (score ${score})` },
+    { value: prof, label: "proficiency" },
+  ];
+  if (levelApplies) terms.push({ value: level, label: "level" });
+  return { total, terms };
 }
 
-function checkRow(label, ability, prof, total) {
+function checkTotal(build, prof, ability) {
+  return describeCheck(build, prof, ability).total;
+}
+
+// Tooltips list one signed term per line (never a result — that's already
+// shown as the visible number) so they stay readable instead of one long
+// run-on string. Each line carries its own +/- sign, so there's never a
+// literal "+" joiner butting up against a formatMod() sign (the "10 + +1"
+// bug this replaced).
+function formatTerm(term) {
+  return `${formatMod(term.value)} ${term.label}`;
+}
+
+function formulaHint(terms) {
+  return terms.map(formatTerm).join("\n");
+}
+
+// For values that are "10 + <total already shown elsewhere>" — the total's
+// value is visible right next to this hint (e.g. the Mod. column, or an
+// Attack span), so only the base and the total's own line are needed.
+function baseDcHint(total) {
+  return `10 base\n${formatMod(total)} modifier`;
+}
+
+// For values where nothing else on the page already shows the total (AC,
+// Class DC) — spell out the full 10 + term breakdown.
+function baseTenHint(terms) {
+  return [`10 base`, ...terms.map(formatTerm)].join("\n");
+}
+
+function checkRow(label, ability, prof, total, terms) {
+  const dc = 10 + total;
+  const modHint = terms ? formulaHint(terms) : "";
+  const dcHint = baseDcHint(total);
   return `
     <tr>
       <td>${escapeHtml(label)} <span class="ability-tag">${ability}</span></td>
       <td class="prof prof-${prof}">${PROF_LABELS[prof] ?? prof}</td>
-      <td class="num">${formatMod(total)}</td>
-      <td class="num">${10 + total}</td>
+      <td class="num calc-hint" title="${escapeHtml(modHint)}">${formatMod(total)}</td>
+      <td class="num calc-hint" title="${escapeHtml(dcHint)}">${dc}</td>
       <td><button class="roll-btn" data-mod="${total}" data-label="${escapeHtml(label)}">Roll</button></td>
       <td class="roll-result"></td>
     </tr>
@@ -471,7 +516,10 @@ function spellcastingSection(build) {
   for (const caster of casters) {
     const ability = caster.ability ?? "cha";
     const prof = caster.proficiency ?? 0;
-    const total = checkTotal(build, prof, ability);
+    const { total, terms } = describeCheck(build, prof, ability);
+    const dc = 10 + total;
+    const attackHint = formulaHint(terms);
+    const dcHint = baseDcHint(total);
     const perDay = caster.perDay ?? [];
 
     const levelSections = (caster.spells ?? [])
@@ -497,8 +545,8 @@ function spellcastingSection(build) {
           <h4>${escapeHtml(caster.name)}</h4>
           <span class="caster-meta">${escapeHtml(caster.magicTradition ?? "")} · ${escapeHtml(caster.spellcastingType ?? "")}</span>
           <div class="caster-stats">
-            <span>Attack ${formatMod(total)}</span>
-            <span>DC ${10 + total}</span>
+            <span class="calc-hint" title="${escapeHtml(attackHint)}">Attack ${formatMod(total)}</span>
+            <span class="calc-hint" title="${escapeHtml(dcHint)}">DC ${dc}</span>
           </div>
         </div>
         ${levelSections}
@@ -511,15 +559,21 @@ function spellcastingSection(build) {
       const spells = [...(data.focusCantrips ?? []), ...(data.focusSpells ?? [])];
       if (spells.length === 0) continue;
 
-      const total = checkTotal(build, data.proficiency ?? 0, ability) + (data.itemBonus ?? 0);
+      const { total: baseTotal, terms } = describeCheck(build, data.proficiency ?? 0, ability);
+      const itemBonus = data.itemBonus ?? 0;
+      const total = baseTotal + itemBonus;
+      const dc = 10 + total;
+      const attackTerms = itemBonus ? [...terms, { value: itemBonus, label: "item" }] : terms;
+      const attackHint = formulaHint(attackTerms);
+      const dcHint = baseDcHint(total);
       blocks.push(`
         <div class="caster-block">
           <div class="caster-header">
             <h4>Focus Spells</h4>
             <span class="caster-meta">${escapeHtml(tradition)}</span>
             <div class="caster-stats">
-              <span>Attack ${formatMod(total)}</span>
-              <span>DC ${10 + total}</span>
+              <span class="calc-hint" title="${escapeHtml(attackHint)}">Attack ${formatMod(total)}</span>
+              <span class="calc-hint" title="${escapeHtml(dcHint)}">DC ${dc}</span>
             </div>
           </div>
           ${spellChipList(spells, { showTraditions: false })}
@@ -567,8 +621,13 @@ function renderCharacterSheet(character) {
   const hp =
     (attrs.ancestryhp ?? 0) + (attrs.bonushp ?? 0) +
     ((attrs.classhp ?? 0) + conMod + (attrs.bonushpPerLevel ?? 0)) * level;
+  const hpHint =
+    `${formatMod(attrs.ancestryhp ?? 0)} ancestry\n${formatMod(attrs.bonushp ?? 0)} flat bonus\n` +
+    `(${formatMod(attrs.classhp ?? 0)} class ${formatMod(conMod)} Con mod ${formatMod(attrs.bonushpPerLevel ?? 0)} bonus/level) × ${level} level`;
   const speed = (attrs.speed ?? 0) + (attrs.speedBonus ?? 0);
-  const classDC = 10 + checkTotal(build, prof.classDC ?? 0, build.keyability ?? "str");
+  const classDCCheck = describeCheck(build, prof.classDC ?? 0, build.keyability ?? "str");
+  const classDC = 10 + classDCCheck.total;
+  const classDCHint = baseTenHint(classDCCheck.terms);
 
   const subtitleParts = [
     `Level ${level} ${build.ancestry ?? ""} ${build.class ?? ""}`.trim(),
@@ -579,11 +638,17 @@ function renderCharacterSheet(character) {
   const abilityCards = ABILITIES.map((ability) => {
     const score = build.abilities?.[ability] ?? 10;
     const mod = abilityMod(score);
+    const modHint = `(score ${score} - 10) / 2, rounded down`;
+    const dc = 10 + mod;
+    const dcHint = baseDcHint(mod);
     return `
       <div class="ability-card">
         <div class="ability-name">${ABILITY_NAMES[ability]}</div>
         <div class="ability-score">${score}</div>
-        <div class="ability-mod">${formatMod(mod)} <span class="dc">DC ${10 + mod}</span></div>
+        <div class="ability-mod">
+          <span class="calc-hint" title="${escapeHtml(modHint)}">${formatMod(mod)}</span>
+          <span class="dc calc-hint" title="${escapeHtml(dcHint)}">DC ${dc}</span>
+        </div>
         <button class="roll-btn" data-mod="${mod}" data-label="${ABILITY_NAMES[ability]}">Roll</button>
         <div class="roll-result"></div>
       </div>
@@ -593,21 +658,33 @@ function renderCharacterSheet(character) {
   const saveRows = Object.entries(SAVES).map(([save, ability]) => {
     const p = prof[save] ?? 0;
     const label = save.charAt(0).toUpperCase() + save.slice(1);
-    return checkRow(label, ability, p, checkTotal(build, p, ability));
+    const { total, terms } = describeCheck(build, p, ability);
+    return checkRow(label, ability, p, total, terms);
   }).join("");
-  const perceptionRow = checkRow("Perception", "wis", prof.perception ?? 0, checkTotal(build, prof.perception ?? 0, "wis"));
+  const perceptionCheck = describeCheck(build, prof.perception ?? 0, "wis");
+  const perceptionRow = checkRow("Perception", "wis", prof.perception ?? 0, perceptionCheck.total, perceptionCheck.terms);
 
   const skillRows = Object.entries(SKILLS).map(([skill, ability]) => {
     const p = prof[skill] ?? 0;
     const label = skill.charAt(0).toUpperCase() + skill.slice(1);
-    return checkRow(label, ability, p, checkTotal(build, p, ability));
+    const { total, terms } = describeCheck(build, p, ability);
+    return checkRow(label, ability, p, total, terms);
   }).join("");
 
-  const loreRows = (build.lores ?? []).map(([loreName, p]) =>
-    checkRow(`${loreName} Lore`, "int", p ?? 0, checkTotal(build, p ?? 0, "int"))
-  ).join("");
+  const loreRows = (build.lores ?? []).map(([loreName, p]) => {
+    const { total, terms } = describeCheck(build, p ?? 0, "int");
+    return checkRow(`${loreName} Lore`, "int", p ?? 0, total, terms);
+  }).join("");
 
   const baseAC = Number(build.acTotal?.acTotal) || 0;
+  const acProfBonus = Number(build.acTotal?.acProfBonus) || 0;
+  const acAbilityBonus = Number(build.acTotal?.acAbilityBonus) || 0;
+  const acItemBonus = Number(build.acTotal?.acItemBonus) || 0;
+  const baseAcHint = baseTenHint([
+    { value: acProfBonus, label: "proficiency" },
+    { value: acAbilityBonus, label: "ability" },
+    { value: acItemBonus, label: "item" },
+  ]);
   const { hasShield, shieldBonus, hasParry, parryBonus } = getAcBonuses(build);
   const acToggles = `
     ${hasShield ? `<button class="icon-btn" id="toggle-shield" title="Raise a Shield (+${shieldBonus} AC)" data-bonus="${shieldBonus}">🛡</button>` : ""}
@@ -635,12 +712,12 @@ function renderCharacterSheet(character) {
     <div class="stat-row">
       <div class="stat">
         <span class="stat-label">AC</span>
-        <span class="stat-value" id="ac-value">${baseAC}</span>
+        <span class="stat-value calc-hint" id="ac-value" title="${escapeHtml(baseAcHint)}">${baseAC}</span>
         ${acToggles.trim() ? `<div class="ac-toggles">${acToggles}</div>` : ""}
       </div>
-      <div class="stat"><span class="stat-label">HP</span><span class="stat-value">${hp}</span></div>
+      <div class="stat"><span class="stat-label">HP</span><span class="stat-value calc-hint" title="${escapeHtml(hpHint)}">${hp}</span></div>
       <div class="stat"><span class="stat-label">Speed</span><span class="stat-value">${speed} ft</span></div>
-      <div class="stat"><span class="stat-label">Class DC</span><span class="stat-value">${classDC}</span></div>
+      <div class="stat"><span class="stat-label">Class DC</span><span class="stat-value calc-hint" title="${escapeHtml(classDCHint)}">${classDC}</span></div>
     </div>
 
     <section class="sheet-section">
@@ -717,6 +794,9 @@ function renderCharacterSheet(character) {
         .filter((b) => b.classList.contains("active"))
         .reduce((sum, b) => sum + Number(b.dataset.bonus), 0);
       acValueEl.textContent = baseAC + activeBonus;
+      acValueEl.title = activeBonus
+        ? `${baseAcHint}\n${formatMod(activeBonus)} situational`
+        : baseAcHint;
     });
   }
 
