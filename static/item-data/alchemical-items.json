@@ -1,0 +1,2122 @@
+[
+  {
+    "name": "Black Powder (Dose or Round)",
+    "archives_of_nexus_id": 1190
+  },
+  {
+    "name": "Black Powder (Dose or Round)",
+    "archives_of_nexus_id": 1190
+  },
+  {
+    "name": "Black Powder (Horn)",
+    "archives_of_nexus_id": 1190
+  },
+  {
+    "name": "Black Powder (Keg)",
+    "archives_of_nexus_id": 1190
+  },
+  {
+    "name": "Alchemical Gauntlet",
+    "archives_of_nexus_id": 1971
+  },
+  {
+    "name": "Alchemist's Fire",
+    "archives_of_nexus_id": 3287
+  },
+  {
+    "name": "Alchemist's Fire (Lesser)",
+    "archives_of_nexus_id": 3287
+  },
+  {
+    "name": "Alchemist's Fire (Moderate)",
+    "archives_of_nexus_id": 3287
+  },
+  {
+    "name": "Alchemist's Fire (Greater)",
+    "archives_of_nexus_id": 3287
+  },
+  {
+    "name": "Alchemist's Fire (Major)",
+    "archives_of_nexus_id": 3287
+  },
+  {
+    "name": "Sparkler",
+    "archives_of_nexus_id": 1946
+  },
+  {
+    "name": "Vaccine",
+    "archives_of_nexus_id": 1969
+  },
+  {
+    "name": "Vaccine (Minor)",
+    "archives_of_nexus_id": 1969
+  },
+  {
+    "name": "Vaccine (Lesser)",
+    "archives_of_nexus_id": 1969
+  },
+  {
+    "name": "Vaccine (Moderate)",
+    "archives_of_nexus_id": 1969
+  },
+  {
+    "name": "Vaccine (Greater)",
+    "archives_of_nexus_id": 1969
+  },
+  {
+    "name": "Vaccine (Major)",
+    "archives_of_nexus_id": 1969
+  },
+  {
+    "name": "Blasting Stone",
+    "archives_of_nexus_id": 3288
+  },
+  {
+    "name": "Blasting Stone (Lesser)",
+    "archives_of_nexus_id": 3288
+  },
+  {
+    "name": "Blasting Stone (Moderate)",
+    "archives_of_nexus_id": 3288
+  },
+  {
+    "name": "Blasting Stone (Greater)",
+    "archives_of_nexus_id": 3288
+  },
+  {
+    "name": "Blasting Stone (Major)",
+    "archives_of_nexus_id": 3288
+  },
+  {
+    "name": "Blight Bomb",
+    "archives_of_nexus_id": 3289
+  },
+  {
+    "name": "Blight Bomb (Lesser)",
+    "archives_of_nexus_id": 3289
+  },
+  {
+    "name": "Blight Bomb (Moderate)",
+    "archives_of_nexus_id": 3289
+  },
+  {
+    "name": "Blight Bomb (Greater)",
+    "archives_of_nexus_id": 3289
+  },
+  {
+    "name": "Blight Bomb (Major)",
+    "archives_of_nexus_id": 3289
+  },
+  {
+    "name": "Bane Ammunition",
+    "archives_of_nexus_id": 1895
+  },
+  {
+    "name": "Bane Ammunition (Lesser)",
+    "archives_of_nexus_id": 1895
+  },
+  {
+    "name": "Bane Ammunition (Moderate)",
+    "archives_of_nexus_id": 1895
+  },
+  {
+    "name": "Bane Ammunition (Greater)",
+    "archives_of_nexus_id": 1895
+  },
+  {
+    "name": "Smoke Ball",
+    "archives_of_nexus_id": 3360
+  },
+  {
+    "name": "Smoke Ball (Lesser)",
+    "archives_of_nexus_id": 3360
+  },
+  {
+    "name": "Smoke Ball (Greater)",
+    "archives_of_nexus_id": 3360
+  },
+  {
+    "name": "Iron Wine",
+    "archives_of_nexus_id": 3455
+  },
+  {
+    "name": "Skunk Bomb",
+    "archives_of_nexus_id": 1906
+  },
+  {
+    "name": "Skunk Bomb (Lesser)",
+    "archives_of_nexus_id": 1906
+  },
+  {
+    "name": "Skunk Bomb (Moderate)",
+    "archives_of_nexus_id": 1906
+  },
+  {
+    "name": "Skunk Bomb (Greater)",
+    "archives_of_nexus_id": 1906
+  },
+  {
+    "name": "Skunk Bomb (Major)",
+    "archives_of_nexus_id": 1906
+  },
+  {
+    "name": "Snake Oil",
+    "archives_of_nexus_id": 2914
+  },
+  {
+    "name": "Injection Reservoir",
+    "archives_of_nexus_id": 1977
+  },
+  {
+    "name": "Glue Bomb",
+    "archives_of_nexus_id": 3295
+  },
+  {
+    "name": "Glue Bomb (Lesser)",
+    "archives_of_nexus_id": 3295
+  },
+  {
+    "name": "Glue Bomb (Moderate)",
+    "archives_of_nexus_id": 3295
+  },
+  {
+    "name": "Glue Bomb (Greater)",
+    "archives_of_nexus_id": 3295
+  },
+  {
+    "name": "Glue Bomb (Major)",
+    "archives_of_nexus_id": 3295
+  },
+  {
+    "name": "Forensic Dye",
+    "archives_of_nexus_id": 3353
+  },
+  {
+    "name": "Frost Vial",
+    "archives_of_nexus_id": 3293
+  },
+  {
+    "name": "Frost Vial (Lesser)",
+    "archives_of_nexus_id": 3293
+  },
+  {
+    "name": "Frost Vial (Moderate)",
+    "archives_of_nexus_id": 3293
+  },
+  {
+    "name": "Frost Vial (Greater)",
+    "archives_of_nexus_id": 3293
+  },
+  {
+    "name": "Frost Vial (Major)",
+    "archives_of_nexus_id": 3293
+  },
+  {
+    "name": "Aroma Concealer",
+    "archives_of_nexus_id": 3229
+  },
+  {
+    "name": "Antiplague",
+    "archives_of_nexus_id": 3297
+  },
+  {
+    "name": "Antiplague (Lesser)",
+    "archives_of_nexus_id": 3297
+  },
+  {
+    "name": "Antiplague (Moderate)",
+    "archives_of_nexus_id": 3297
+  },
+  {
+    "name": "Antiplague (Greater)",
+    "archives_of_nexus_id": 3297
+  },
+  {
+    "name": "Antiplague (Major)",
+    "archives_of_nexus_id": 3297
+  },
+  {
+    "name": "Bottled Lightning",
+    "archives_of_nexus_id": 3290
+  },
+  {
+    "name": "Bottled Lightning (Lesser)",
+    "archives_of_nexus_id": 3290
+  },
+  {
+    "name": "Bottled Lightning (Moderate)",
+    "archives_of_nexus_id": 3290
+  },
+  {
+    "name": "Bottled Lightning (Greater)",
+    "archives_of_nexus_id": 3290
+  },
+  {
+    "name": "Bottled Lightning (Major)",
+    "archives_of_nexus_id": 3290
+  },
+  {
+    "name": "Theatrical Mutagen",
+    "archives_of_nexus_id": 1968
+  },
+  {
+    "name": "Theatrical Mutagen (Lesser)",
+    "archives_of_nexus_id": 1968
+  },
+  {
+    "name": "Theatrical Mutagen (Moderate)",
+    "archives_of_nexus_id": 1968
+  },
+  {
+    "name": "Theatrical Mutagen (Greater)",
+    "archives_of_nexus_id": 1968
+  },
+  {
+    "name": "Theatrical Mutagen (Major)",
+    "archives_of_nexus_id": 1968
+  },
+  {
+    "name": "Deadweight Mutagen",
+    "archives_of_nexus_id": 1961
+  },
+  {
+    "name": "Deadweight Mutagen (Lesser)",
+    "archives_of_nexus_id": 1961
+  },
+  {
+    "name": "Deadweight Mutagen (Moderate)",
+    "archives_of_nexus_id": 1961
+  },
+  {
+    "name": "Deadweight Mutagen (Greater)",
+    "archives_of_nexus_id": 1961
+  },
+  {
+    "name": "Deadweight Mutagen (Major)",
+    "archives_of_nexus_id": 1961
+  },
+  {
+    "name": "Bestial Mutagen",
+    "archives_of_nexus_id": 3315
+  },
+  {
+    "name": "Bestial Mutagen (Lesser)",
+    "archives_of_nexus_id": 3315
+  },
+  {
+    "name": "Bestial Mutagen (Moderate)",
+    "archives_of_nexus_id": 3315
+  },
+  {
+    "name": "Bestial Mutagen (Greater)",
+    "archives_of_nexus_id": 3315
+  },
+  {
+    "name": "Bestial Mutagen (Major)",
+    "archives_of_nexus_id": 3315
+  },
+  {
+    "name": "Bendy-Arm Mutagen",
+    "archives_of_nexus_id": 1958
+  },
+  {
+    "name": "Bendy-Arm Mutagen (Lesser)",
+    "archives_of_nexus_id": 1958
+  },
+  {
+    "name": "Bendy-Arm Mutagen (Moderate)",
+    "archives_of_nexus_id": 1958
+  },
+  {
+    "name": "Bendy-Arm Mutagen (Greater)",
+    "archives_of_nexus_id": 1958
+  },
+  {
+    "name": "Bendy-Arm Mutagen (Major)",
+    "archives_of_nexus_id": 1958
+  },
+  {
+    "name": "Juggernaut Mutagen",
+    "archives_of_nexus_id": 3318
+  },
+  {
+    "name": "Juggernaut Mutagen (Lesser)",
+    "archives_of_nexus_id": 3318
+  },
+  {
+    "name": "Juggernaut Mutagen (Moderate)",
+    "archives_of_nexus_id": 3318
+  },
+  {
+    "name": "Juggernaut Mutagen (Greater)",
+    "archives_of_nexus_id": 3318
+  },
+  {
+    "name": "Juggernaut Mutagen (Major)",
+    "archives_of_nexus_id": 3318
+  },
+  {
+    "name": "Silvertongue Mutagen",
+    "archives_of_nexus_id": 3321
+  },
+  {
+    "name": "Silvertongue Mutagen (Lesser)",
+    "archives_of_nexus_id": 3321
+  },
+  {
+    "name": "Silvertongue Mutagen (Moderate)",
+    "archives_of_nexus_id": 3321
+  },
+  {
+    "name": "Silvertongue Mutagen (Greater)",
+    "archives_of_nexus_id": 3321
+  },
+  {
+    "name": "Silvertongue Mutagen (Major)",
+    "archives_of_nexus_id": 3321
+  },
+  {
+    "name": "Sanguine Mutagen",
+    "archives_of_nexus_id": 1964
+  },
+  {
+    "name": "Sanguine Mutagen (Lesser)",
+    "archives_of_nexus_id": 1964
+  },
+  {
+    "name": "Sanguine Mutagen (Moderate)",
+    "archives_of_nexus_id": 1964
+  },
+  {
+    "name": "Sanguine Mutagen (Greater)",
+    "archives_of_nexus_id": 1964
+  },
+  {
+    "name": "Sanguine Mutagen (Major)",
+    "archives_of_nexus_id": 1964
+  },
+  {
+    "name": "Cognitive Mutagen",
+    "archives_of_nexus_id": 3316
+  },
+  {
+    "name": "Cognitive Mutagen (Lesser)",
+    "archives_of_nexus_id": 3316
+  },
+  {
+    "name": "Cognitive Mutagen (Moderate)",
+    "archives_of_nexus_id": 3316
+  },
+  {
+    "name": "Cognitive Mutagen (Greater)",
+    "archives_of_nexus_id": 3316
+  },
+  {
+    "name": "Cognitive Mutagen (Major)",
+    "archives_of_nexus_id": 3316
+  },
+  {
+    "name": "Quicksilver Mutagen",
+    "archives_of_nexus_id": 3319
+  },
+  {
+    "name": "Quicksilver Mutagen (Lesser)",
+    "archives_of_nexus_id": 3319
+  },
+  {
+    "name": "Quicksilver Mutagen (Moderate)",
+    "archives_of_nexus_id": 3319
+  },
+  {
+    "name": "Quicksilver Mutagen (Greater)",
+    "archives_of_nexus_id": 3319
+  },
+  {
+    "name": "Quicksilver Mutagen (Major)",
+    "archives_of_nexus_id": 3319
+  },
+  {
+    "name": "Drakeheart Mutagen",
+    "archives_of_nexus_id": 3317
+  },
+  {
+    "name": "Drakeheart Mutagen (Lesser)",
+    "archives_of_nexus_id": 3317
+  },
+  {
+    "name": "Drakeheart Mutagen (Moderate)",
+    "archives_of_nexus_id": 3317
+  },
+  {
+    "name": "Drakeheart Mutagen (Greater)",
+    "archives_of_nexus_id": 3317
+  },
+  {
+    "name": "Drakeheart Mutagen (Major)",
+    "archives_of_nexus_id": 3317
+  },
+  {
+    "name": "Serene Mutagen",
+    "archives_of_nexus_id": 3320
+  },
+  {
+    "name": "Serene Mutagen (Lesser)",
+    "archives_of_nexus_id": 3320
+  },
+  {
+    "name": "Serene Mutagen (Moderate)",
+    "archives_of_nexus_id": 3320
+  },
+  {
+    "name": "Serene Mutagen (Greater)",
+    "archives_of_nexus_id": 3320
+  },
+  {
+    "name": "Serene Mutagen (Major)",
+    "archives_of_nexus_id": 3320
+  },
+  {
+    "name": "Energy Mutagen",
+    "archives_of_nexus_id": 1962
+  },
+  {
+    "name": "Arsenic",
+    "archives_of_nexus_id": 2891
+  },
+  {
+    "name": "Missive Mint",
+    "archives_of_nexus_id": 1923
+  },
+  {
+    "name": "Numbing Tonic",
+    "archives_of_nexus_id": 1963
+  },
+  {
+    "name": "Numbing Tonic (Minor)",
+    "archives_of_nexus_id": 1963
+  },
+  {
+    "name": "Numbing Tonic (Lesser)",
+    "archives_of_nexus_id": 1963
+  },
+  {
+    "name": "Numbing Tonic (Moderate)",
+    "archives_of_nexus_id": 1963
+  },
+  {
+    "name": "Numbing Tonic (Greater)",
+    "archives_of_nexus_id": 1963
+  },
+  {
+    "name": "Numbing Tonic (Major)",
+    "archives_of_nexus_id": 1963
+  },
+  {
+    "name": "Numbing Tonic (True)",
+    "archives_of_nexus_id": 1963
+  },
+  {
+    "name": "Weapon Siphon",
+    "archives_of_nexus_id": 1987
+  },
+  {
+    "name": "Affliction Suppressant",
+    "archives_of_nexus_id": 1956
+  },
+  {
+    "name": "Affliction Suppressant (Lesser)",
+    "archives_of_nexus_id": 1956
+  },
+  {
+    "name": "Affliction Suppressant (Moderate)",
+    "archives_of_nexus_id": 1956
+  },
+  {
+    "name": "Affliction Suppressant (Greater)",
+    "archives_of_nexus_id": 1956
+  },
+  {
+    "name": "Affliction Suppressant (Major)",
+    "archives_of_nexus_id": 1956
+  },
+  {
+    "name": "Ghost Ink",
+    "archives_of_nexus_id": 3354
+  },
+  {
+    "name": "Ghost Charge",
+    "archives_of_nexus_id": 3294
+  },
+  {
+    "name": "Ghost Charge (Lesser)",
+    "archives_of_nexus_id": 3294
+  },
+  {
+    "name": "Ghost Charge (Moderate)",
+    "archives_of_nexus_id": 3294
+  },
+  {
+    "name": "Ghost Charge (Greater)",
+    "archives_of_nexus_id": 3294
+  },
+  {
+    "name": "Ghost Charge (Major)",
+    "archives_of_nexus_id": 3294
+  },
+  {
+    "name": "Antidote",
+    "archives_of_nexus_id": 3296
+  },
+  {
+    "name": "Antidote (Lesser)",
+    "archives_of_nexus_id": 3296
+  },
+  {
+    "name": "Antidote (Moderate)",
+    "archives_of_nexus_id": 3296
+  },
+  {
+    "name": "Antidote (Greater)",
+    "archives_of_nexus_id": 3296
+  },
+  {
+    "name": "Antidote (Major)",
+    "archives_of_nexus_id": 3296
+  },
+  {
+    "name": "Glow Rod",
+    "archives_of_nexus_id": 2910
+  },
+  {
+    "name": "Acid Flask",
+    "archives_of_nexus_id": 3286
+  },
+  {
+    "name": "Acid Flask (Lesser)",
+    "archives_of_nexus_id": 3286
+  },
+  {
+    "name": "Acid Flask (Moderate)",
+    "archives_of_nexus_id": 3286
+  },
+  {
+    "name": "Acid Flask (Greater)",
+    "archives_of_nexus_id": 3286
+  },
+  {
+    "name": "Acid Flask (Major)",
+    "archives_of_nexus_id": 3286
+  },
+  {
+    "name": "Matchstick",
+    "archives_of_nexus_id": 2911
+  },
+  {
+    "name": "Animal Repellent",
+    "archives_of_nexus_id": 1936
+  },
+  {
+    "name": "Animal Repellent (Minor)",
+    "archives_of_nexus_id": 1936
+  },
+  {
+    "name": "Animal Repellent (Lesser)",
+    "archives_of_nexus_id": 1936
+  },
+  {
+    "name": "Animal Repellent (Moderate)",
+    "archives_of_nexus_id": 1936
+  },
+  {
+    "name": "Animal Repellent (Greater)",
+    "archives_of_nexus_id": 1936
+  },
+  {
+    "name": "Animal Repellent (Major)",
+    "archives_of_nexus_id": 1936
+  },
+  {
+    "name": "Elemental Ammunition",
+    "archives_of_nexus_id": 1897
+  },
+  {
+    "name": "Elemental Ammunition (Lesser)",
+    "archives_of_nexus_id": 1897
+  },
+  {
+    "name": "Elemental Ammunition (Moderate)",
+    "archives_of_nexus_id": 1897
+  },
+  {
+    "name": "Elemental Ammunition (Greater)",
+    "archives_of_nexus_id": 1897
+  },
+  {
+    "name": "Dread Ampoule",
+    "archives_of_nexus_id": 3292
+  },
+  {
+    "name": "Dread Ampoule (Lesser)",
+    "archives_of_nexus_id": 3292
+  },
+  {
+    "name": "Dread Ampoule (Moderate)",
+    "archives_of_nexus_id": 3292
+  },
+  {
+    "name": "Dread Ampoule (Greater)",
+    "archives_of_nexus_id": 3292
+  },
+  {
+    "name": "Dread Ampoule (Major)",
+    "archives_of_nexus_id": 3292
+  },
+  {
+    "name": "Journeybread",
+    "archives_of_nexus_id": 1921
+  },
+  {
+    "name": "Journeybread",
+    "archives_of_nexus_id": 1921
+  },
+  {
+    "name": "Journeybread (Power)",
+    "archives_of_nexus_id": 1921
+  },
+  {
+    "name": "Cheetah's Elixir",
+    "archives_of_nexus_id": 3302
+  },
+  {
+    "name": "Cheetah's Elixir (Lesser)",
+    "archives_of_nexus_id": 3302
+  },
+  {
+    "name": "Cheetah's Elixir (Moderate)",
+    "archives_of_nexus_id": 3302
+  },
+  {
+    "name": "Cheetah's Elixir (Greater)",
+    "archives_of_nexus_id": 3302
+  },
+  {
+    "name": "Elixir of Life",
+    "archives_of_nexus_id": 3308
+  },
+  {
+    "name": "Elixir of Life (Minor)",
+    "archives_of_nexus_id": 3308
+  },
+  {
+    "name": "Elixir of Life (Lesser)",
+    "archives_of_nexus_id": 3308
+  },
+  {
+    "name": "Elixir of Life (Moderate)",
+    "archives_of_nexus_id": 3308
+  },
+  {
+    "name": "Elixir of Life (Greater)",
+    "archives_of_nexus_id": 3308
+  },
+  {
+    "name": "Elixir of Life (Major)",
+    "archives_of_nexus_id": 3308
+  },
+  {
+    "name": "Elixir of Life (True)",
+    "archives_of_nexus_id": 3308
+  },
+  {
+    "name": "Eagle-Eye Elixir",
+    "archives_of_nexus_id": 3306
+  },
+  {
+    "name": "Eagle-Eye Elixir (Lesser)",
+    "archives_of_nexus_id": 3306
+  },
+  {
+    "name": "Eagle-Eye Elixir (Moderate)",
+    "archives_of_nexus_id": 3306
+  },
+  {
+    "name": "Eagle-Eye Elixir (Greater)",
+    "archives_of_nexus_id": 3306
+  },
+  {
+    "name": "Eagle-Eye Elixir (Major)",
+    "archives_of_nexus_id": 3306
+  },
+  {
+    "name": "Elixir of Gender Transformation",
+    "archives_of_nexus_id": 3307
+  },
+  {
+    "name": "Elixir of Gender Transformation (Lesser)",
+    "archives_of_nexus_id": 3307
+  },
+  {
+    "name": "Elixir of Gender Transformation (Moderate)",
+    "archives_of_nexus_id": 3307
+  },
+  {
+    "name": "Elixir of Gender Transformation (Greater)",
+    "archives_of_nexus_id": 3307
+  },
+  {
+    "name": "Giant Centipede Venom",
+    "archives_of_nexus_id": 2898
+  },
+  {
+    "name": "Spear Frog Poison",
+    "archives_of_nexus_id": 649
+  },
+  {
+    "name": "Aromatic Ammunition",
+    "archives_of_nexus_id": 1188
+  },
+  {
+    "name": "Belladonna",
+    "archives_of_nexus_id": 3323
+  },
+  {
+    "name": "Ooze Ammunition",
+    "archives_of_nexus_id": 1900
+  },
+  {
+    "name": "Ooze Ammunition (Lesser)",
+    "archives_of_nexus_id": 1900
+  },
+  {
+    "name": "Ooze Ammunition (Moderate)",
+    "archives_of_nexus_id": 1900
+  },
+  {
+    "name": "Ooze Ammunition (Greater)",
+    "archives_of_nexus_id": 1900
+  },
+  {
+    "name": "Ooze Ammunition (Major)",
+    "archives_of_nexus_id": 1900
+  },
+  {
+    "name": "Bravo's Brew",
+    "archives_of_nexus_id": 3300
+  },
+  {
+    "name": "Bravo's Brew (Lesser)",
+    "archives_of_nexus_id": 3300
+  },
+  {
+    "name": "Bravo's Brew (Moderate)",
+    "archives_of_nexus_id": 3300
+  },
+  {
+    "name": "Bravo's Brew (Greater)",
+    "archives_of_nexus_id": 3300
+  },
+  {
+    "name": "Bottled Catharsis",
+    "archives_of_nexus_id": 3299
+  },
+  {
+    "name": "Bottled Catharsis (Minor)",
+    "archives_of_nexus_id": 3299
+  },
+  {
+    "name": "Bottled Catharsis (Lesser)",
+    "archives_of_nexus_id": 3299
+  },
+  {
+    "name": "Bottled Catharsis (Moderate)",
+    "archives_of_nexus_id": 3299
+  },
+  {
+    "name": "Bottled Catharsis (Greater)",
+    "archives_of_nexus_id": 3299
+  },
+  {
+    "name": "Bottled Catharsis (Major)",
+    "archives_of_nexus_id": 3299
+  },
+  {
+    "name": "Cooperative Waffles",
+    "archives_of_nexus_id": 1911
+  },
+  {
+    "name": "Cooperative Waffles",
+    "archives_of_nexus_id": 1911
+  },
+  {
+    "name": "Cooperative Waffles (Greater)",
+    "archives_of_nexus_id": 1911
+  },
+  {
+    "name": "Tatzlwyrm's Gasp",
+    "archives_of_nexus_id": 3241
+  },
+  {
+    "name": "Life Shot",
+    "archives_of_nexus_id": 1899
+  },
+  {
+    "name": "Life Shot (Minor)",
+    "archives_of_nexus_id": 1899
+  },
+  {
+    "name": "Life Shot (Lesser)",
+    "archives_of_nexus_id": 1899
+  },
+  {
+    "name": "Life Shot (Moderate)",
+    "archives_of_nexus_id": 1899
+  },
+  {
+    "name": "Life Shot (Greater)",
+    "archives_of_nexus_id": 1899
+  },
+  {
+    "name": "Life Shot (Major)",
+    "archives_of_nexus_id": 1899
+  },
+  {
+    "name": "Life Shot (True)",
+    "archives_of_nexus_id": 1899
+  },
+  {
+    "name": "Lethargy Poison",
+    "archives_of_nexus_id": 2902
+  },
+  {
+    "name": "Looter's Lethargy",
+    "archives_of_nexus_id": 809
+  },
+  {
+    "name": "Surging Serum",
+    "archives_of_nexus_id": 3313
+  },
+  {
+    "name": "Surging Serum (Minor)",
+    "archives_of_nexus_id": 3313
+  },
+  {
+    "name": "Surging Serum (Lesser)",
+    "archives_of_nexus_id": 3313
+  },
+  {
+    "name": "Surging Serum (Moderate)",
+    "archives_of_nexus_id": 3313
+  },
+  {
+    "name": "Surging Serum (Greater)",
+    "archives_of_nexus_id": 3313
+  },
+  {
+    "name": "Surging Serum (Major)",
+    "archives_of_nexus_id": 3313
+  },
+  {
+    "name": "Alchemist's Flamethrower",
+    "archives_of_nexus_id": 1972
+  },
+  {
+    "name": "Emetic Paste",
+    "archives_of_nexus_id": 1939
+  },
+  {
+    "name": "Emetic Paste (Lesser)",
+    "archives_of_nexus_id": 1939
+  },
+  {
+    "name": "Emetic Paste (Moderate)",
+    "archives_of_nexus_id": 1939
+  },
+  {
+    "name": "Emetic Paste (Greater)",
+    "archives_of_nexus_id": 1939
+  },
+  {
+    "name": "Silver Salve",
+    "archives_of_nexus_id": 2912
+  },
+  {
+    "name": "Mender's Soup",
+    "archives_of_nexus_id": 1922
+  },
+  {
+    "name": "Soothing Tonic",
+    "archives_of_nexus_id": 1965
+  },
+  {
+    "name": "Soothing Tonic (Lesser)",
+    "archives_of_nexus_id": 1965
+  },
+  {
+    "name": "Soothing Tonic (Moderate)",
+    "archives_of_nexus_id": 1965
+  },
+  {
+    "name": "Soothing Tonic (Greater)",
+    "archives_of_nexus_id": 1965
+  },
+  {
+    "name": "Soothing Tonic (Major)",
+    "archives_of_nexus_id": 1965
+  },
+  {
+    "name": "Cat's Eye Elixir",
+    "archives_of_nexus_id": 2883
+  },
+  {
+    "name": "Darkvision Elixir",
+    "archives_of_nexus_id": 3305
+  },
+  {
+    "name": "Darkvision Elixir (Lesser)",
+    "archives_of_nexus_id": 3305
+  },
+  {
+    "name": "Darkvision Elixir (Moderate)",
+    "archives_of_nexus_id": 3305
+  },
+  {
+    "name": "Darkvision Elixir (Greater)",
+    "archives_of_nexus_id": 3305
+  },
+  {
+    "name": "Comprehension Elixir",
+    "archives_of_nexus_id": 3303
+  },
+  {
+    "name": "Comprehension Elixir (Lesser)",
+    "archives_of_nexus_id": 3303
+  },
+  {
+    "name": "Comprehension Elixir (Greater)",
+    "archives_of_nexus_id": 3303
+  },
+  {
+    "name": "Black Adder Venom",
+    "archives_of_nexus_id": 2892
+  },
+  {
+    "name": "Spiderfoot Brew (Major)",
+    "archives_of_nexus_id": 1461
+  },
+  {
+    "name": "Spiderfoot Brew",
+    "archives_of_nexus_id": 1966
+  },
+  {
+    "name": "Spiderfoot Brew (Lesser)",
+    "archives_of_nexus_id": 1966
+  },
+  {
+    "name": "Spiderfoot Brew (Moderate)",
+    "archives_of_nexus_id": 1966
+  },
+  {
+    "name": "Spiderfoot Brew (Greater)",
+    "archives_of_nexus_id": 1966
+  },
+  {
+    "name": "Witch's Finger",
+    "archives_of_nexus_id": 1935
+  },
+  {
+    "name": "Splatrope Extruder",
+    "archives_of_nexus_id": 1985
+  },
+  {
+    "name": "Diplomat's Charcuterie",
+    "archives_of_nexus_id": 1914
+  },
+  {
+    "name": "Auric Noodles",
+    "archives_of_nexus_id": 1909
+  },
+  {
+    "name": "Camouflage Dye",
+    "archives_of_nexus_id": 1937
+  },
+  {
+    "name": "Camouflage Dye (Lesser)",
+    "archives_of_nexus_id": 1937
+  },
+  {
+    "name": "Camouflage Dye (Greater)",
+    "archives_of_nexus_id": 1937
+  },
+  {
+    "name": "Cytillesh Oil",
+    "archives_of_nexus_id": 3330
+  },
+  {
+    "name": "Graveroot",
+    "archives_of_nexus_id": 2900
+  },
+  {
+    "name": "Tracker's Stew",
+    "archives_of_nexus_id": 1933
+  },
+  {
+    "name": "Colorful Coating (Blue)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Colorful Coating (Blue)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Colorful Coating (Green)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Colorful Coating (Indigo)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Colorful Coating (Orange)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Colorful Coating (Red)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Colorful Coating (Yellow)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Colorful Coating (Violet)",
+    "archives_of_nexus_id": 1938
+  },
+  {
+    "name": "Revealing Mist",
+    "archives_of_nexus_id": 1943
+  },
+  {
+    "name": "Revealing Mist (Lesser)",
+    "archives_of_nexus_id": 1943
+  },
+  {
+    "name": "Revealing Mist (Greater)",
+    "archives_of_nexus_id": 1943
+  },
+  {
+    "name": "Blood Booster",
+    "archives_of_nexus_id": 1957
+  },
+  {
+    "name": "Blood Booster (Lesser)",
+    "archives_of_nexus_id": 1957
+  },
+  {
+    "name": "Blood Booster (Moderate)",
+    "archives_of_nexus_id": 1957
+  },
+  {
+    "name": "Blood Booster (Greater)",
+    "archives_of_nexus_id": 1957
+  },
+  {
+    "name": "Violet Venom",
+    "archives_of_nexus_id": 651
+  },
+  {
+    "name": "Blood Sight Elixir",
+    "archives_of_nexus_id": 3490
+  },
+  {
+    "name": "Blood Sight Elixir (Lesser)",
+    "archives_of_nexus_id": 3490
+  },
+  {
+    "name": "Blood Sight Elixir (Moderate)",
+    "archives_of_nexus_id": 3490
+  },
+  {
+    "name": "Blood Sight Elixir (Greater)",
+    "archives_of_nexus_id": 3490
+  },
+  {
+    "name": "Blood Sight Elixir (Major)",
+    "archives_of_nexus_id": 3490
+  },
+  {
+    "name": "Sprite Apple (Chartreuse)",
+    "archives_of_nexus_id": 1932
+  },
+  {
+    "name": "Sprite Apple (Golden)",
+    "archives_of_nexus_id": 1932
+  },
+  {
+    "name": "Sprite Apple (Pink)",
+    "archives_of_nexus_id": 1932
+  },
+  {
+    "name": "Sprite Apple (Chartreuse)",
+    "archives_of_nexus_id": 1932
+  },
+  {
+    "name": "Sprite Apple (Teal)",
+    "archives_of_nexus_id": 1932
+  },
+  {
+    "name": "Blue Dragonfly Poison",
+    "archives_of_nexus_id": 484
+  },
+  {
+    "name": "Saboteur's Friend",
+    "archives_of_nexus_id": 1928
+  },
+  {
+    "name": "Glue Bullet",
+    "archives_of_nexus_id": 1195
+  },
+  {
+    "name": "Fury Cocktail",
+    "archives_of_nexus_id": 1917
+  },
+  {
+    "name": "Fury Cocktail (Lesser)",
+    "archives_of_nexus_id": 1917
+  },
+  {
+    "name": "Fury Cocktail (Moderate)",
+    "archives_of_nexus_id": 1917
+  },
+  {
+    "name": "Fury Cocktail (Greater)",
+    "archives_of_nexus_id": 1917
+  },
+  {
+    "name": "Crystal Shards",
+    "archives_of_nexus_id": 3291
+  },
+  {
+    "name": "Crystal Shards (Moderate)",
+    "archives_of_nexus_id": 3291
+  },
+  {
+    "name": "Crystal Shards (Greater)",
+    "archives_of_nexus_id": 3291
+  },
+  {
+    "name": "Crystal Shards (Major)",
+    "archives_of_nexus_id": 3291
+  },
+  {
+    "name": "Cinnamon Seers",
+    "archives_of_nexus_id": 1910
+  },
+  {
+    "name": "Fearflower Nectar",
+    "archives_of_nexus_id": 2897
+  },
+  {
+    "name": "Exsanguinating Ammunition",
+    "archives_of_nexus_id": 1193
+  },
+  {
+    "name": "Exsanguinating Ammunition",
+    "archives_of_nexus_id": 1193
+  },
+  {
+    "name": "Exsanguinating Ammunition (Greater)",
+    "archives_of_nexus_id": 1193
+  },
+  {
+    "name": "Exsanguinating Ammunition (Major)",
+    "archives_of_nexus_id": 1193
+  },
+  {
+    "name": "Taster's Folly",
+    "archives_of_nexus_id": 2017
+  },
+  {
+    "name": "Cooling Elixir",
+    "archives_of_nexus_id": 3304
+  },
+  {
+    "name": "Cooling Elixir (Lesser)",
+    "archives_of_nexus_id": 3304
+  },
+  {
+    "name": "Cooling Elixir (Moderate)",
+    "archives_of_nexus_id": 3304
+  },
+  {
+    "name": "Cooling Elixir (Greater)",
+    "archives_of_nexus_id": 3304
+  },
+  {
+    "name": "Alchemical Chart",
+    "archives_of_nexus_id": 1970
+  },
+  {
+    "name": "Alchemical Chart (Lesser)",
+    "archives_of_nexus_id": 1970
+  },
+  {
+    "name": "Alchemical Chart (Moderate)",
+    "archives_of_nexus_id": 1970
+  },
+  {
+    "name": "Alchemical Chart (Greater)",
+    "archives_of_nexus_id": 1970
+  },
+  {
+    "name": "Ghost Ampoule",
+    "archives_of_nexus_id": 1948
+  },
+  {
+    "name": "Rainbow Vinegar",
+    "archives_of_nexus_id": 3456
+  },
+  {
+    "name": "Rainbow Vinegar",
+    "archives_of_nexus_id": 3456
+  },
+  {
+    "name": "Rainbow Vinegar (Greater)",
+    "archives_of_nexus_id": 3456
+  },
+  {
+    "name": "Leadenleg",
+    "archives_of_nexus_id": 3339
+  },
+  {
+    "name": "Timeless Salts",
+    "archives_of_nexus_id": 3362
+  },
+  {
+    "name": "Brightshade",
+    "archives_of_nexus_id": 1994
+  },
+  {
+    "name": "Phantom Roll",
+    "archives_of_nexus_id": 1925
+  },
+  {
+    "name": "Healing Vapor",
+    "archives_of_nexus_id": 1941
+  },
+  {
+    "name": "Healing Vapor (Lesser)",
+    "archives_of_nexus_id": 1941
+  },
+  {
+    "name": "Healing Vapor (Moderate)",
+    "archives_of_nexus_id": 1941
+  },
+  {
+    "name": "Healing Vapor (Greater)",
+    "archives_of_nexus_id": 1941
+  },
+  {
+    "name": "Healing Vapor (Major)",
+    "archives_of_nexus_id": 1941
+  },
+  {
+    "name": "Dread Helm",
+    "archives_of_nexus_id": 1976
+  },
+  {
+    "name": "Bomber's Eye Elixir",
+    "archives_of_nexus_id": 3298
+  },
+  {
+    "name": "Bomber's Eye Elixir (Lesser)",
+    "archives_of_nexus_id": 3298
+  },
+  {
+    "name": "Bomber's Eye Elixir (Greater)",
+    "archives_of_nexus_id": 3298
+  },
+  {
+    "name": "Witchwarg Elixir",
+    "archives_of_nexus_id": 3314
+  },
+  {
+    "name": "Witchwarg Elixir (Lesser)",
+    "archives_of_nexus_id": 3314
+  },
+  {
+    "name": "Witchwarg Elixir (Moderate)",
+    "archives_of_nexus_id": 3314
+  },
+  {
+    "name": "Witchwarg Elixir (Greater)",
+    "archives_of_nexus_id": 3314
+  },
+  {
+    "name": "Stone Fist Elixir",
+    "archives_of_nexus_id": 2890
+  },
+  {
+    "name": "Mistform Elixir",
+    "archives_of_nexus_id": 3310
+  },
+  {
+    "name": "Mistform Elixir (Lesser)",
+    "archives_of_nexus_id": 3310
+  },
+  {
+    "name": "Mistform Elixir (Moderate)",
+    "archives_of_nexus_id": 3310
+  },
+  {
+    "name": "Mistform Elixir (Greater)",
+    "archives_of_nexus_id": 3310
+  },
+  {
+    "name": "Essence of Mandragora",
+    "archives_of_nexus_id": 3239
+  },
+  {
+    "name": "Absolute Solvent",
+    "archives_of_nexus_id": 3351
+  },
+  {
+    "name": "Absolute Solvent (Lesser)",
+    "archives_of_nexus_id": 3351
+  },
+  {
+    "name": "Absolute Solvent (Moderate)",
+    "archives_of_nexus_id": 3351
+  },
+  {
+    "name": "Absolute Solvent (Greater)",
+    "archives_of_nexus_id": 3351
+  },
+  {
+    "name": "Hippogriff in a Jar",
+    "archives_of_nexus_id": 1949
+  },
+  {
+    "name": "Mustard Powder",
+    "archives_of_nexus_id": 2008
+  },
+  {
+    "name": "Remote Trigger",
+    "archives_of_nexus_id": 1983
+  },
+  {
+    "name": "Living Leaf Weave",
+    "archives_of_nexus_id": 1978
+  },
+  {
+    "name": "Soothing Powder",
+    "archives_of_nexus_id": 1945
+  },
+  {
+    "name": "Soothing Powder (Lesser)",
+    "archives_of_nexus_id": 1945
+  },
+  {
+    "name": "Soothing Powder (Greater)",
+    "archives_of_nexus_id": 1945
+  },
+  {
+    "name": "Pheromone Flare",
+    "archives_of_nexus_id": 3230
+  },
+  {
+    "name": "Pheromone Flare (Lesser)",
+    "archives_of_nexus_id": 3230
+  },
+  {
+    "name": "Pheromone Flare (Moderate)",
+    "archives_of_nexus_id": 3230
+  },
+  {
+    "name": "Pheromone Flare (Greater)",
+    "archives_of_nexus_id": 3230
+  },
+  {
+    "name": "Viperous Elixir",
+    "archives_of_nexus_id": 3238
+  },
+  {
+    "name": "Viperous Elixir (Lesser)",
+    "archives_of_nexus_id": 3238
+  },
+  {
+    "name": "Viperous Elixir (Moderate)",
+    "archives_of_nexus_id": 3238
+  },
+  {
+    "name": "Viperous Elixir (Greater)",
+    "archives_of_nexus_id": 3238
+  },
+  {
+    "name": "Ginger Chew",
+    "archives_of_nexus_id": 1919
+  },
+  {
+    "name": "Poison Concentrator",
+    "archives_of_nexus_id": 1981
+  },
+  {
+    "name": "Poison Concentrator (Lesser)",
+    "archives_of_nexus_id": 1981
+  },
+  {
+    "name": "Poison Concentrator (Moderate)",
+    "archives_of_nexus_id": 1981
+  },
+  {
+    "name": "Poison Concentrator (Greater)",
+    "archives_of_nexus_id": 1981
+  },
+  {
+    "name": "Poison Concentrator (Major)",
+    "archives_of_nexus_id": 1981
+  },
+  {
+    "name": "Clown Monarch",
+    "archives_of_nexus_id": 1997
+  },
+  {
+    "name": "Magnetic Shield",
+    "archives_of_nexus_id": 1979
+  },
+  {
+    "name": "Pucker Pickle",
+    "archives_of_nexus_id": 1927
+  },
+  {
+    "name": "Freeze Ammunition",
+    "archives_of_nexus_id": 1898
+  },
+  {
+    "name": "Stone Body Mutagen",
+    "archives_of_nexus_id": 1967
+  },
+  {
+    "name": "Blister Ammunition",
+    "archives_of_nexus_id": 1896
+  },
+  {
+    "name": "Blister Ammunition (Lesser)",
+    "archives_of_nexus_id": 1896
+  },
+  {
+    "name": "Blister Ammunition (Moderate)",
+    "archives_of_nexus_id": 1896
+  },
+  {
+    "name": "Blister Ammunition (Greater)",
+    "archives_of_nexus_id": 1896
+  },
+  {
+    "name": "Contagion Metabolizer",
+    "archives_of_nexus_id": 1960
+  },
+  {
+    "name": "Contagion Metabolizer (Lesser)",
+    "archives_of_nexus_id": 1960
+  },
+  {
+    "name": "Contagion Metabolizer (Moderate)",
+    "archives_of_nexus_id": 1960
+  },
+  {
+    "name": "Contagion Metabolizer (Greater)",
+    "archives_of_nexus_id": 1960
+  },
+  {
+    "name": "Collar of the Shifting Spider",
+    "archives_of_nexus_id": 1975
+  },
+  {
+    "name": "Eroding Bullet",
+    "archives_of_nexus_id": 1192
+  },
+  {
+    "name": "Bomb Coagulant Alembic",
+    "archives_of_nexus_id": 1973
+  },
+  {
+    "name": "Ooze Skin",
+    "archives_of_nexus_id": 1980
+  },
+  {
+    "name": "Crackling Bubble Gum",
+    "archives_of_nexus_id": 1912
+  },
+  {
+    "name": "Crackling Bubble Gum (Lesser)",
+    "archives_of_nexus_id": 1912
+  },
+  {
+    "name": "Crackling Bubble Gum (Moderate)",
+    "archives_of_nexus_id": 1912
+  },
+  {
+    "name": "Crackling Bubble Gum (Greater)",
+    "archives_of_nexus_id": 1912
+  },
+  {
+    "name": "Crackling Bubble Gum (Major)",
+    "archives_of_nexus_id": 1912
+  },
+  {
+    "name": "Animal Pheromones",
+    "archives_of_nexus_id": 3228
+  },
+  {
+    "name": "Animal Pheromones (Lesser)",
+    "archives_of_nexus_id": 3228
+  },
+  {
+    "name": "Animal Pheromones (Moderate)",
+    "archives_of_nexus_id": 3228
+  },
+  {
+    "name": "Animal Pheromones (Greater)",
+    "archives_of_nexus_id": 3228
+  },
+  {
+    "name": "Sea Touch Elixir",
+    "archives_of_nexus_id": 3311
+  },
+  {
+    "name": "Sea Touch Elixir (Lesser)",
+    "archives_of_nexus_id": 3311
+  },
+  {
+    "name": "Sea Touch Elixir (Moderate)",
+    "archives_of_nexus_id": 3311
+  },
+  {
+    "name": "Sea Touch Elixir (Greater)",
+    "archives_of_nexus_id": 3311
+  },
+  {
+    "name": "Spider Venom",
+    "archives_of_nexus_id": 2906
+  },
+  {
+    "name": "Egg Cream Fizz",
+    "archives_of_nexus_id": 1915
+  },
+  {
+    "name": "Tarantula Ampoule",
+    "archives_of_nexus_id": 3233
+  },
+  {
+    "name": "Scholar's Drop",
+    "archives_of_nexus_id": 1929
+  },
+  {
+    "name": "Antipode Oil",
+    "archives_of_nexus_id": 1989
+  },
+  {
+    "name": "Implosion Dust",
+    "archives_of_nexus_id": 1942
+  },
+  {
+    "name": "Implosion Dust (Lesser)",
+    "archives_of_nexus_id": 1942
+  },
+  {
+    "name": "Implosion Dust (Moderate)",
+    "archives_of_nexus_id": 1942
+  },
+  {
+    "name": "Implosion Dust (Greater)",
+    "archives_of_nexus_id": 1942
+  },
+  {
+    "name": "Sense-Dulling Hood",
+    "archives_of_nexus_id": 1944
+  },
+  {
+    "name": "Sense-Dulling Hood (Lesser)",
+    "archives_of_nexus_id": 1944
+  },
+  {
+    "name": "Sense-Dulling Hood (Greater)",
+    "archives_of_nexus_id": 1944
+  },
+  {
+    "name": "Insight Coffee",
+    "archives_of_nexus_id": 1920
+  },
+  {
+    "name": "Insight Coffee (Lesser)",
+    "archives_of_nexus_id": 1920
+  },
+  {
+    "name": "Insight Coffee (Moderate)",
+    "archives_of_nexus_id": 1920
+  },
+  {
+    "name": "Insight Coffee (Greater)",
+    "archives_of_nexus_id": 1920
+  },
+  {
+    "name": "Frogskin Tincture",
+    "archives_of_nexus_id": 3234
+  },
+  {
+    "name": "Silver Crescent",
+    "archives_of_nexus_id": 1930
+  },
+  {
+    "name": "Silver Crescent (Lesser)",
+    "archives_of_nexus_id": 1930
+  },
+  {
+    "name": "Silver Crescent (Moderate)",
+    "archives_of_nexus_id": 1930
+  },
+  {
+    "name": "Silver Crescent (Greater)",
+    "archives_of_nexus_id": 1930
+  },
+  {
+    "name": "Gearbinder Oil",
+    "archives_of_nexus_id": 1940
+  },
+  {
+    "name": "Gearbinder Oil (Lesser)",
+    "archives_of_nexus_id": 1940
+  },
+  {
+    "name": "Gearbinder Oil (Moderate)",
+    "archives_of_nexus_id": 1940
+  },
+  {
+    "name": "Gearbinder Oil (Greater)",
+    "archives_of_nexus_id": 1940
+  },
+  {
+    "name": "Soothing Toddy",
+    "archives_of_nexus_id": 1931
+  },
+  {
+    "name": "Sargassum Phial",
+    "archives_of_nexus_id": 3232
+  },
+  {
+    "name": "Giant Scorpion Venom",
+    "archives_of_nexus_id": 2899
+  },
+  {
+    "name": "Everlasting Adhesive",
+    "archives_of_nexus_id": 3352
+  },
+  {
+    "name": "Warding Element Draught",
+    "archives_of_nexus_id": 1934
+  },
+  {
+    "name": "Sportlebore Capsule",
+    "archives_of_nexus_id": 3240
+  },
+  {
+    "name": "Preserved Moonflower",
+    "archives_of_nexus_id": 3457
+  },
+  {
+    "name": "Skinstitch Salve",
+    "archives_of_nexus_id": 3359
+  },
+  {
+    "name": "Smother Shroud",
+    "archives_of_nexus_id": 2014
+  },
+  {
+    "name": "Ommatophoric Mutagen",
+    "archives_of_nexus_id": 3236
+  },
+  {
+    "name": "Pepper Poultice",
+    "archives_of_nexus_id": 3676
+  },
+  {
+    "name": "Powered Full Plate",
+    "archives_of_nexus_id": 1982
+  },
+  {
+    "name": "Tangle Root Toxin",
+    "archives_of_nexus_id": 3347
+  },
+  {
+    "name": "Stupor Poison",
+    "archives_of_nexus_id": 2016
+  },
+  {
+    "name": "Owl Screech Egg",
+    "archives_of_nexus_id": 1924
+  },
+  {
+    "name": "Scarlet Mist",
+    "archives_of_nexus_id": 2012
+  },
+  {
+    "name": "Hive Mother Bottle",
+    "archives_of_nexus_id": 3231
+  },
+  {
+    "name": "Galvanic Chew",
+    "archives_of_nexus_id": 1918
+  },
+  {
+    "name": "Nettleweed Residue",
+    "archives_of_nexus_id": 3343
+  },
+  {
+    "name": "Curare",
+    "archives_of_nexus_id": 1999
+  },
+  {
+    "name": "Octopus Bottle",
+    "archives_of_nexus_id": 1952
+  },
+  {
+    "name": "Firefoot Popcorn",
+    "archives_of_nexus_id": 1916
+  },
+  {
+    "name": "Purple Pepper Powder",
+    "archives_of_nexus_id": 3677
+  },
+  {
+    "name": "Sun Dazzler",
+    "archives_of_nexus_id": 1984
+  },
+  {
+    "name": "Puppetmaster Extract",
+    "archives_of_nexus_id": 3663
+  },
+  {
+    "name": "Wyvern Poison",
+    "archives_of_nexus_id": 2909
+  },
+  {
+    "name": "Warpwobble Poison",
+    "archives_of_nexus_id": 2020
+  },
+  {
+    "name": "Poison Fizz",
+    "archives_of_nexus_id": 1926
+  },
+  {
+    "name": "Poison Fizz (Lesser)",
+    "archives_of_nexus_id": 1926
+  },
+  {
+    "name": "Poison Fizz (Moderate)",
+    "archives_of_nexus_id": 1926
+  },
+  {
+    "name": "Poison Fizz (Greater)",
+    "archives_of_nexus_id": 1926
+  },
+  {
+    "name": "Careless Delight",
+    "archives_of_nexus_id": 1995
+  },
+  {
+    "name": "Arbor Wine",
+    "archives_of_nexus_id": 1908
+  },
+  {
+    "name": "Arbor Wine",
+    "archives_of_nexus_id": 1908
+  },
+  {
+    "name": "Arbor Wine (Aged)",
+    "archives_of_nexus_id": 1908
+  },
+  {
+    "name": "Enervating Powder",
+    "archives_of_nexus_id": 3332
+  },
+  {
+    "name": "Chromatic Jellyfish Oil",
+    "archives_of_nexus_id": 1959
+  },
+  {
+    "name": "Chromatic Jellyfish Oil (Lesser)",
+    "archives_of_nexus_id": 1959
+  },
+  {
+    "name": "Chromatic Jellyfish Oil (Moderate)",
+    "archives_of_nexus_id": 1959
+  },
+  {
+    "name": "Chromatic Jellyfish Oil (Greater)",
+    "archives_of_nexus_id": 1959
+  },
+  {
+    "name": "Sightless Tincture",
+    "archives_of_nexus_id": 2013
+  },
+  {
+    "name": "Pallesthetic Mutagen",
+    "archives_of_nexus_id": 3237
+  },
+  {
+    "name": "Spider Root",
+    "archives_of_nexus_id": 2905
+  },
+  {
+    "name": "Aurochs Jerky",
+    "archives_of_nexus_id": 3668
+  },
+  {
+    "name": "Bottled Roc",
+    "archives_of_nexus_id": 1947
+  },
+  {
+    "name": "Wolfsbane",
+    "archives_of_nexus_id": 2908
+  },
+  {
+    "name": "Dragon Pearl",
+    "archives_of_nexus_id": 3482
+  },
+  {
+    "name": "Breath of the Mantis God",
+    "archives_of_nexus_id": 3491
+  },
+  {
+    "name": "Bone Dreadnought Plate",
+    "archives_of_nexus_id": 1974
+  },
+  {
+    "name": "Tyrant Ampoule",
+    "archives_of_nexus_id": 1953
+  },
+  {
+    "name": "Delve Scale",
+    "archives_of_nexus_id": 1913
+  },
+  {
+    "name": "Nethershade",
+    "archives_of_nexus_id": 3342
+  },
+  {
+    "name": "Blisterwort",
+    "archives_of_nexus_id": 1991
+  },
+  {
+    "name": "Gnawbone Toxin",
+    "archives_of_nexus_id": 2005
+  },
+  {
+    "name": "Whirlwind Vial",
+    "archives_of_nexus_id": 1954
+  },
+  {
+    "name": "Blightburn Resin",
+    "archives_of_nexus_id": 2894
+  },
+  {
+    "name": "Dancing Lamentation",
+    "archives_of_nexus_id": 2000
+  },
+  {
+    "name": "Trueshape Bomb",
+    "archives_of_nexus_id": 1907
+  },
+  {
+    "name": "Trueshape Bomb",
+    "archives_of_nexus_id": 1907
+  },
+  {
+    "name": "Trueshape Bomb (Greater)",
+    "archives_of_nexus_id": 1907
+  },
+  {
+    "name": "Clubhead Poison",
+    "archives_of_nexus_id": 1998
+  },
+  {
+    "name": "Shatterstone",
+    "archives_of_nexus_id": 1905
+  },
+  {
+    "name": "Shatterstone",
+    "archives_of_nexus_id": 1905
+  },
+  {
+    "name": "Shatterstone (Greater)",
+    "archives_of_nexus_id": 1905
+  },
+  {
+    "name": "Lodestone Bomb",
+    "archives_of_nexus_id": 1904
+  },
+  {
+    "name": "Lodestone Bomb",
+    "archives_of_nexus_id": 1904
+  },
+  {
+    "name": "Lodestone Bomb (Greater)",
+    "archives_of_nexus_id": 1904
+  },
+  {
+    "name": "Boulder Seed",
+    "archives_of_nexus_id": 1903
+  },
+  {
+    "name": "Boulder Seed",
+    "archives_of_nexus_id": 1903
+  },
+  {
+    "name": "Boulder Seed (Greater)",
+    "archives_of_nexus_id": 1903
+  },
+  {
+    "name": "Slumber Wine",
+    "archives_of_nexus_id": 2904
+  },
+  {
+    "name": "Astringent Venom",
+    "archives_of_nexus_id": 1990
+  },
+  {
+    "name": "Cave Worm Venom",
+    "archives_of_nexus_id": 3328
+  },
+  {
+    "name": "Gorgon's Breath",
+    "archives_of_nexus_id": 554
+  },
+  {
+    "name": "Rusting Ammunition",
+    "archives_of_nexus_id": 1901
+  },
+  {
+    "name": "Rusting Ammunition (Moderate)",
+    "archives_of_nexus_id": 1901
+  },
+  {
+    "name": "Rusting Ammunition (Greater)",
+    "archives_of_nexus_id": 1901
+  },
+  {
+    "name": "Hydra Mutagen",
+    "archives_of_nexus_id": 3235
+  },
+  {
+    "name": "Worm Vial",
+    "archives_of_nexus_id": 1955
+  },
+  {
+    "name": "Pummel-Growth Toxin",
+    "archives_of_nexus_id": 2011
+  },
+  {
+    "name": "Deathcap Powder",
+    "archives_of_nexus_id": 2896
+  },
+  {
+    "name": "Execution Powder",
+    "archives_of_nexus_id": 2001
+  },
+  {
+    "name": "Unending Itch",
+    "archives_of_nexus_id": 2018
+  },
+  {
+    "name": "Fraudslayer Oil",
+    "archives_of_nexus_id": 2006
+  },
+  {
+    "name": "Blightburn Bomb",
+    "archives_of_nexus_id": 1902
+  },
+  {
+    "name": "Blightburn Bomb",
+    "archives_of_nexus_id": 1902
+  },
+  {
+    "name": "Blightburn Bomb (Greater)",
+    "archives_of_nexus_id": 1902
+  },
+  {
+    "name": "Eldritch Flare",
+    "archives_of_nexus_id": 2002
+  },
+  {
+    "name": "Mukradi Jar",
+    "archives_of_nexus_id": 1951
+  },
+  {
+    "name": "Mindfog Mist",
+    "archives_of_nexus_id": 2903
+  },
+  {
+    "name": "Troll Hide",
+    "archives_of_nexus_id": 1986
+  },
+  {
+    "name": "Cerulean Scourge",
+    "archives_of_nexus_id": 3329
+  },
+  {
+    "name": "Brimstone Fumes",
+    "archives_of_nexus_id": 2895
+  },
+  {
+    "name": "Hemlock",
+    "archives_of_nexus_id": 2901
+  },
+  {
+    "name": "False Hope",
+    "archives_of_nexus_id": 2003
+  },
+  {
+    "name": "Breathtaking Vapor",
+    "archives_of_nexus_id": 1993
+  },
+  {
+    "name": "Choleric Contagion",
+    "archives_of_nexus_id": 1996
+  },
+  {
+    "name": "King's Sleep",
+    "archives_of_nexus_id": 3338
+  },
+  {
+    "name": "Kraken Bottle",
+    "archives_of_nexus_id": 1950
+  },
+  {
+    "name": "Pale Fade",
+    "archives_of_nexus_id": 2010
+  },
+  {
+    "name": "Black Lotus Extract",
+    "archives_of_nexus_id": 2893
+  },
+  {
+    "name": "Achaekek's Kiss",
+    "archives_of_nexus_id": 1988
+  },
+  {
+    "name": "Tears of Death",
+    "archives_of_nexus_id": 2907
+  },
+  {
+    "name": "Nightmare Salt",
+    "archives_of_nexus_id": 557
+  },
+  {
+    "name": "Philosopher's Stone",
+    "archives_of_nexus_id": 133
+  },
+  {
+    "name": "Elixir of Rejuvenation",
+    "archives_of_nexus_id": 3309
+  }
+]

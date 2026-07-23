@@ -438,7 +438,10 @@ let itemIdMap = {};
 
 async function loadItemIdMap() {
   const map = {};
-  for (const [category, file] of [["armor", "item-data/armor.json"]]) {
+  for (const [category, file] of [
+    ["armor", "item-data/armor.json"],
+    ["equipment", "item-data/alchemical-items.json"],
+  ]) {
     try {
       const response = await fetch(file);
       if (!response.ok) continue;
