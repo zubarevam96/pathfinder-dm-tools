@@ -620,6 +620,17 @@ button.subtle {
   background: var(--accent-soft);
 }
 
+.item-link {
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.item-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .check-table .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -751,7 +762,9 @@ dialog select:focus {
   margin-bottom: 0.5rem;
 }
 
-.spell-dialog {
+/* Shared popup for any Archives of Nethys reference page — spells, armor,
+   weapons, and inventory items all reuse this one dialog. */
+.aon-dialog {
   width: 90vw;
   max-width: 900px;
   height: 85vh;
@@ -762,12 +775,12 @@ dialog select:focus {
 /* Layout only applies once actually open — otherwise this would override
    the browser's default `dialog:not([open]) { display: none }` and the
    dialog would render (empty) even before showModal() is ever called. */
-#spell-dialog[open] {
+#aon-dialog[open] {
   display: flex;
   flex-direction: column;
 }
 
-.spell-dialog-header {
+.aon-dialog-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -777,34 +790,34 @@ dialog select:focus {
   flex-shrink: 0;
 }
 
-#spell-dialog-title {
+#aon-dialog-title {
   font-weight: 600;
   color: var(--accent);
 }
 
-.spell-dialog-actions {
+.aon-dialog-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-#spell-dialog-open-tab {
+#aon-dialog-open-tab {
   font-size: 0.85rem;
   color: var(--muted);
 }
 
-.spell-dialog-actions button {
+.aon-dialog-actions button {
   padding: 0.35rem 0.8rem;
   font-size: 0.85rem;
 }
 
-#spell-dialog-body {
+#aon-dialog-body {
   position: relative;
   flex: 1;
   min-height: 0;
 }
 
-#spell-dialog-body iframe {
+#aon-dialog-body iframe {
   display: none;
   position: absolute;
   inset: 0;
@@ -813,6 +826,6 @@ dialog select:focus {
   border: none;
 }
 
-#spell-dialog-body iframe.active {
+#aon-dialog-body iframe.active {
   display: block;
 }

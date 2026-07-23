@@ -38,11 +38,11 @@ const deleteGroupConfirmBtn = document.getElementById("delete-group-confirm");
 const rollHistoryList = document.getElementById("roll-history");
 const clearHistoryBtn = document.getElementById("clear-history-btn");
 
-const spellDialog = document.getElementById("spell-dialog");
-const spellDialogTitle = document.getElementById("spell-dialog-title");
-const spellDialogBody = document.getElementById("spell-dialog-body");
-const spellDialogOpenTab = document.getElementById("spell-dialog-open-tab");
-const spellDialogClose = document.getElementById("spell-dialog-close");
+const aonDialog = document.getElementById("aon-dialog");
+const aonDialogTitle = document.getElementById("aon-dialog-title");
+const aonDialogBody = document.getElementById("aon-dialog-body");
+const aonDialogOpenTab = document.getElementById("aon-dialog-open-tab");
+const aonDialogClose = document.getElementById("aon-dialog-close");
 
 const optionsBtn = document.getElementById("options-btn");
 const optionsDialog = document.getElementById("options-dialog");
@@ -387,28 +387,29 @@ function spellChipList(items, { showTraditions = true } = {}) {
   }).join("")}</div>`;
 }
 
-// One hidden iframe per spell ID, kept alive (never removed) in the popup
-// dialog so revisiting an already-viewed spell doesn't re-request the page —
-// only its visibility toggles.
-const spellIframes = new Map();
+// One hidden iframe per distinct AoN URL, kept alive (never removed) in the
+// popup dialog so revisiting an already-viewed page doesn't re-request it —
+// only its visibility toggles. Shared by spells, armor, weapons, and
+// inventory items — they all resolve down to "an AoN page URL" either way.
+const aonIframes = new Map();
 
-function openSpellPopup(id, name) {
-  let iframe = spellIframes.get(id);
+function openAonPopup(url, name) {
+  let iframe = aonIframes.get(url);
   if (!iframe) {
     iframe = document.createElement("iframe");
-    iframe.src = spellDirectUrl(id);
+    iframe.src = url;
     iframe.loading = "lazy";
-    spellIframes.set(id, iframe);
-    spellDialogBody.appendChild(iframe);
+    aonIframes.set(url, iframe);
+    aonDialogBody.appendChild(iframe);
   }
 
-  for (const [otherId, otherIframe] of spellIframes) {
-    otherIframe.classList.toggle("active", otherId === id);
+  for (const [otherUrl, otherIframe] of aonIframes) {
+    otherIframe.classList.toggle("active", otherUrl === url);
   }
 
-  spellDialogTitle.textContent = name;
-  spellDialogOpenTab.href = spellDirectUrl(id);
-  spellDialog.showModal();
+  aonDialogTitle.textContent = name;
+  aonDialogOpenTab.href = url;
+  aonDialog.showModal();
 }
 
 function handleSpellChipClick(event, chip) {
@@ -421,7 +422,66 @@ function handleSpellChipClick(event, chip) {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) return;
 
   event.preventDefault();
-  openSpellPopup(id, name);
+  openAonPopup(spellDirectUrl(id), name);
+}
+
+// Armor, weapons, and inventory items don't have a fixed reference list the
+// way spells do — Pathbuilder can report literally anything a character is
+// carrying, including homebrew or DM-renamed items — so a direct AoN link
+// is only available when itemIdMap (built from static/item-data/*.json,
+// e.g. armor.json) recognizes the exact name. Everything else falls back
+// to AoN's search page, same as an unrecognized spell. Inventory items are
+// checked against the same map, since armor sometimes shows up loose in a
+// character's inventory instead of the dedicated armor list.
+const AON_ITEM_PAGES = { armor: "Armor.aspx", weapon: "Weapons.aspx", equipment: "Equipment.aspx" };
+let itemIdMap = {};
+
+async function loadItemIdMap() {
+  const map = {};
+  for (const [category, file] of [["armor", "item-data/armor.json"]]) {
+    try {
+      const response = await fetch(file);
+      if (!response.ok) continue;
+      const entities = await response.json();
+      for (const entity of entities) {
+        if (entity.archives_of_nexus_id != null) {
+          map[entity.name] = { category, id: entity.archives_of_nexus_id };
+        }
+      }
+    } catch {
+      // Non-fatal — items just fall back to the AoN search link.
+    }
+  }
+  itemIdMap = map;
+}
+
+function itemLink(name) {
+  const item = itemIdMap[name];
+  if (item) {
+    return { url: `https://2e.aonprd.com/${AON_ITEM_PAGES[item.category]}?ID=${item.id}`, category: item.category, id: item.id };
+  }
+  return { url: spellSearchUrl(name), category: null, id: null };
+}
+
+// displayText is what's shown (e.g. "Cold Iron (Standard-Grade) Clan
+// Dagger"), lookupName is the base item name to resolve against itemIdMap
+// and to search AoN by (e.g. "Clan Dagger") — they differ whenever a
+// weapon/armor has a material or rune prefix baked into its display name.
+function itemNameLink(displayText, lookupName = displayText) {
+  const { url, category, id } = itemLink(lookupName);
+  const dataAttrs = category ? ` data-aon-category="${category}" data-aon-id="${id}"` : "";
+  return `<a class="item-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" data-item-name="${escapeHtml(lookupName)}"${dataAttrs}>${escapeHtml(displayText)}</a>`;
+}
+
+function handleItemLinkClick(event, link) {
+  const category = link.dataset.aonCategory;
+  const id = link.dataset.aonId;
+  if (!category || !id) return; // unrecognized item — fall back to the default search-page link
+
+  if (event.ctrlKey || event.metaKey || event.shiftKey || event.button === 1) return;
+
+  event.preventDefault();
+  openAonPopup(`https://2e.aonprd.com/${AON_ITEM_PAGES[category]}?ID=${id}`, link.dataset.itemName);
 }
 
 const COIN_LABELS = [
@@ -450,7 +510,7 @@ function weaponsTable(weapons) {
   }
   const rows = weapons.map((w) => `
     <tr>
-      <td>${escapeHtml(w.display || w.name)}</td>
+      <td>${itemNameLink(w.display || w.name, w.name)}</td>
       <td class="num">${formatMod(w.attack ?? 0)}</td>
       <td>${escapeHtml(w.die ?? "-")}${w.damageBonus ? " " + formatMod(w.damageBonus) : ""} ${escapeHtml(w.damageType ?? "")}</td>
       <td>${escapeHtml(w.prof ?? "")}</td>
@@ -472,7 +532,7 @@ function armorTable(armorList) {
     const runeNotes = [a.pot ? `+${a.pot} potency` : "", a.res || ""].filter(Boolean).join(", ");
     return `
       <tr>
-        <td>${escapeHtml(a.display || a.name)}</td>
+        <td>${itemNameLink(a.display || a.name, a.name)}</td>
         <td>${escapeHtml(a.prof ?? "")}</td>
         <td>${a.worn ? "Worn" : ""}</td>
         <td>${escapeHtml(runeNotes)}</td>
@@ -493,7 +553,7 @@ function inventoryTable(equipment) {
   }
   const rows = equipment.map(([name, qty, note]) => `
     <tr>
-      <td>${escapeHtml(name ?? "")}</td>
+      <td>${name ? itemNameLink(name) : ""}</td>
       <td class="num">${qty ?? 1}</td>
       <td>${escapeHtml(note ?? "")}</td>
     </tr>
@@ -783,6 +843,10 @@ function renderCharacterSheet(character) {
 
   for (const chip of mainContent.querySelectorAll(".chip-link[data-spell-name]")) {
     chip.addEventListener("click", (event) => handleSpellChipClick(event, chip));
+  }
+
+  for (const link of mainContent.querySelectorAll(".item-link[data-item-name]")) {
+    link.addEventListener("click", (event) => handleItemLinkClick(event, link));
   }
 
   const acValueEl = document.getElementById("ac-value");
@@ -1205,7 +1269,7 @@ deleteConfirmBtn.addEventListener("click", confirmDelete);
 deleteGroupCancel.addEventListener("click", () => deleteGroupDialog.close());
 deleteGroupConfirmBtn.addEventListener("click", confirmDeleteGroup);
 
-spellDialogClose.addEventListener("click", () => spellDialog.close());
+aonDialogClose.addEventListener("click", () => aonDialog.close());
 
 clearHistoryBtn.addEventListener("click", clearRollHistory);
 
@@ -1216,3 +1280,4 @@ renderSidebar();
 renderRollHistory();
 importLegacyIfNeeded();
 loadSpellIdMap();
+loadItemIdMap();
