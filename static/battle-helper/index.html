@@ -13,12 +13,74 @@
       <a class="sidebar-link" href="../">&larr; Pathfinder DM Tools</a>
       <h1 class="app-title">Battle Helper</h1>
     </header>
-    <main class="battle-main">
-      <canvas id="battle-grid" class="battle-grid"></canvas>
-      <p class="placeholder" id="battle-selection-label">Click a square to select it.</p>
-    </main>
+
+    <div class="battle-body">
+      <section class="battle-box battle-box-left">
+        <div class="battle-box-section">
+          <h2>Roster</h2>
+          <p class="battle-panel-hint">Click a character, then click an empty square to place them.</p>
+          <ul id="battle-roster" class="battle-roster"></ul>
+        </div>
+        <div class="battle-box-section">
+          <div class="battle-log-header">
+            <h2>Event Log</h2>
+            <div class="battle-log-actions">
+              <button id="battle-undo" class="subtle" title="Undo (Ctrl+Z)">&#8630; Undo</button>
+              <button id="battle-redo" class="subtle" title="Redo (Ctrl+Shift+Z)">&#8631; Redo</button>
+            </div>
+          </div>
+          <ul id="battle-log" class="event-log"></ul>
+        </div>
+      </section>
+
+      <div class="battle-center-col">
+        <section class="battle-box battle-box-map">
+          <canvas id="battle-grid" class="battle-grid"></canvas>
+        </section>
+
+        <div class="battle-row-bottom">
+          <section id="battle-stat-panel" class="battle-box battle-box-bottom-left">
+            <p class="placeholder">Click a square to select it.</p>
+          </section>
+          <section class="battle-box battle-box-bottom-right">
+            <p class="placeholder">Reserved for future use.</p>
+          </section>
+        </div>
+      </div>
+
+      <section class="battle-box battle-box-right">
+        <h2>Initiative Track</h2>
+        <ul id="battle-initiative" class="battle-initiative"></ul>
+      </section>
+    </div>
   </div>
 
+  <dialog id="battle-hp-dialog">
+    <h2>Adjust HP — <span id="battle-hp-dialog-name"></span></h2>
+    <div class="hp-adjust-row">
+      <button type="button" class="hp-step" data-step="-5">&minus;5</button>
+      <button type="button" class="hp-step" data-step="-1">&minus;1</button>
+      <input type="number" id="battle-hp-input" value="0" />
+      <button type="button" class="hp-step" data-step="1">+1</button>
+      <button type="button" class="hp-step" data-step="5">+5</button>
+    </div>
+    <div class="hp-action-row">
+      <div id="hp-action-group-damage" class="hp-action-group">
+        <button type="button" id="hp-action-half" class="hp-action">Half<br />Damage</button>
+        <button type="button" id="hp-action-full" class="hp-action danger">Full<br />Damage</button>
+        <button type="button" id="hp-action-double" class="hp-action danger">Double<br />Damage</button>
+      </div>
+      <div id="hp-action-group-heal" class="hp-action-group">
+        <button type="button" id="hp-action-heal" class="hp-action success">Heal</button>
+        <button type="button" id="hp-action-temp" class="hp-action">Temp<br />HP</button>
+      </div>
+    </div>
+    <div class="dialog-actions">
+      <button type="button" id="battle-hp-close">Close</button>
+    </div>
+  </dialog>
+
+  <script src="../pf2e-math.js"></script>
   <script src="battle-helper.js"></script>
 </body>
 </html>

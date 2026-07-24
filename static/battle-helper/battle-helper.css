@@ -1,12 +1,25 @@
-/* Battle Helper page — layout and grid canvas styling only.
+/* Battle Helper page — a "boxing" layout: map center-top, roster+log left
+   and initiative track right (both full page height), selected-object
+   info + a reserved box split across the bottom of the center column.
    Colors/tokens (--bg, --surface, --border, --accent, ...) come from
    ../style.css so this page stays in sync with the rest of the app,
    including dark mode. */
 
 .battle-layout {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+/* Reserve a spot in the layout for a control that isn't always applicable
+   (e.g. the shield toggle, or an HP-dialog action button for the wrong
+   sign) without letting its absence resize or shift anything else. Always
+   render the element; toggle this class instead of adding/removing it —
+   see "Avoiding layout jumps" in the battle-helper-architecture skill. */
+.invisible {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .battle-header {
@@ -28,22 +41,516 @@
   padding-bottom: 0;
 }
 
-.battle-main {
+.battle-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  align-items: stretch;
+}
+
+.battle-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.battle-box h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* Left/right sidebars stretch to match the center column's full height
+   (map + bottom row), i.e. they reach all the way to the bottom of the
+   page's content area — see the battle-helper-architecture skill's
+   "boxing" layout section. */
+.battle-box-left,
+.battle-box-right {
+  width: 280px;
+  flex-shrink: 0;
+  gap: 0.75rem;
+}
+
+.battle-box-left .battle-box-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.battle-box-left .battle-box-section + .battle-box-section {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.battle-box-right {
+  overflow: hidden;
+}
+
+.battle-center-col {
   flex: 1;
   display: flex;
   flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.battle-box-map {
+  flex: 1;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1.5rem;
+  justify-content: center;
   overflow: auto;
 }
 
 .battle-grid {
   max-width: 100%;
   height: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  box-shadow: var(--shadow);
+  border-radius: 4px;
   cursor: pointer;
+}
+
+/* The bottom-left box sits directly under the left sidebar's right edge —
+   "sticking" to it, per the layout spec — since both are now within the
+   same flex row as the (full-height) sidebar. */
+.battle-row-bottom {
+  display: flex;
+  gap: 1rem;
+  height: 220px;
+}
+
+.battle-box-bottom-left,
+.battle-box-bottom-right {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.battle-panel-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.battle-roster,
+.battle-initiative,
+.event-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+
+.battle-roster-item {
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.battle-roster-item:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.battle-roster-item.armed {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.battle-initiative li {
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.battle-roster .placeholder,
+.battle-initiative .placeholder {
+  border: none;
+  padding: 0.2rem 0;
+  font-size: 0.82rem;
+}
+
+.battle-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.battle-log-header h2 {
+  margin: 0;
+}
+
+.battle-log-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.battle-log-actions button[hidden] {
+  display: none;
+}
+
+.event-log li {
+  padding: 0.3rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.event-log li:first-child {
+  background: var(--accent-soft);
+  border-radius: 4px;
+}
+
+.event-log li.empty {
+  color: var(--muted);
+  font-style: italic;
+  border-bottom: none;
+}
+
+.event-log li.undone {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+/* --- Selected-object info box --- */
+
+/* Two clusters pinned to opposite edges, not one row where the HP bar
+   stretches to fill the gap — see renderStatPanel()'s comment. The empty
+   space between them when both clusters are narrower than the row is
+   intentional. */
+.battle-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.battle-stat-left,
+.battle-stat-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* justify-content:center (not the header's old align-items:stretch) keeps
+   this box sized to exactly its own content — label + value + the shield
+   toggle's reserved slot, present or not — instead of stretching to match
+   a taller sibling and leaving dead space under the AC number. */
+/* The whole panel is the button (only enabled — via the `disabled`
+   attribute — when the character actually has a shield to raise), not a
+   separate icon button inside a static box: raising the shield toggles
+   `.active`, and the shield icon in the corner is decorative only. Fixed
+   square size regardless of shield/no-shield, since both render the same
+   3-item content (label, value, an icon that's simply absent when there's
+   no shield — not reserved-but-invisible, since nothing here would jump:
+   the panel's size is fixed by width/height, not derived from content). */
+/* Sized to its content (label + value + the corner icon slot) rather than
+   the earlier fixed 4.4rem square, which left a lot of visibly dead space
+   around a 2-line, 2-character value. */
+.battle-stat-ac {
+  position: relative;
+  flex-shrink: 0;
+  width: 3.2rem;
+  height: 3.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: 6px;
+}
+
+.battle-stat-ac .stat-label {
+  font-size: 0.6rem;
+}
+
+.battle-stat-ac .stat-value {
+  font-size: 1.1rem;
+}
+
+.battle-stat-ac:disabled {
+  cursor: default;
+}
+
+/* A light, single-property highlight (border only) — not a background
+   swap or a big brightness jump — so hover reads as "this is clickable"
+   without being jarring. Skipped for the disabled (no shield) state,
+   which isn't actually clickable. */
+.battle-stat-ac:not(:disabled):hover {
+  border-color: var(--accent);
+}
+
+/* :not(:disabled):hover above simply doesn't match when disabled — it
+   doesn't cancel anything. The global button:hover rule (border-color:
+   var(--accent)) still matches a disabled button (CSS :hover isn't
+   blocked by the disabled attribute) and would apply unopposed without
+   this, highlighting a panel that isn't actually clickable. Reset back to
+   the base look, re-declaring border-top-color since the shorthand
+   border-color here touches all four sides including the accent stripe. */
+.battle-stat-ac:disabled:hover {
+  border-color: var(--border);
+  border-top-color: var(--accent);
+}
+
+.battle-stat-ac.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border-color: var(--accent);
+}
+
+.battle-stat-ac.active:hover {
+  filter: brightness(1.1);
+}
+
+/* .stat-label/.stat-value set their own color elsewhere in the app (grey
+   label, default text color) — override both when the panel goes
+   accent-colored so the numbers stay readable, the same contrast problem
+   as the HP bar's hover state below. */
+.battle-stat-ac.active .stat-label,
+.battle-stat-ac.active .stat-value {
+  color: var(--accent-contrast);
+}
+
+.battle-stat-ac-shield-icon {
+  position: absolute;
+  bottom: 1px;
+  right: 3px;
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+.battle-hp-bar {
+  position: relative;
+  width: 11rem;
+  height: 2.2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  /* Dark grey = "absent" HP (the unfilled portion), independent of theme —
+     it reads as an empty trough in both light and dark mode. */
+  background: #33302c;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+/* Cancels the global button:hover accent-soft tint (which washes over the
+   white HP text and makes it nearly unreadable) but still gives a light,
+   single-property highlight — matching .battle-stat-ac's hover — instead
+   of no feedback at all. */
+.battle-hp-bar:hover {
+  border-color: var(--accent);
+  background: #33302c;
+}
+
+.battle-hp-bar-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: var(--success);
+}
+
+.battle-hp-bar-fill.low {
+  background: var(--danger);
+}
+
+/* Temp HP renders as its own blue segment immediately to the right of the
+   HP fill (positioned via inline `left`, set in renderStatPanel()), not a
+   separate badge — both segments' widths are percentages of maxHp+tempHp
+   together, so adding temp HP visibly shrinks the HP/absent portions to
+   make room for it rather than changing the bar's own size. */
+.battle-hp-bar-temp-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: #3b82f6;
+}
+
+.battle-hp-bar-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.battle-stat-identity {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.battle-stat-name {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.battle-stat-level {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.battle-remove-btn {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: var(--danger);
+  color: white;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* Re-asserts the solid background: without it, the global button:hover
+   rule's translucent accent-soft tint replaces (not layers over) this
+   button's solid --danger fill, an abrupt, washed-out color swap that
+   read as "too strong" rather than a light hover cue. */
+.battle-remove-btn:hover {
+  background: var(--danger);
+  filter: brightness(1.1);
+}
+
+.battle-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 0.4rem;
+}
+
+.battle-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.35rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.battle-stat .stat-label {
+  font-size: 0.62rem;
+}
+
+.battle-stat .stat-value {
+  font-size: 1.05rem;
+}
+
+/* --- HP adjustment dialog --- */
+
+.hp-adjust-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.hp-adjust-row input {
+  width: 5rem;
+  text-align: center;
+  flex: none;
+}
+
+.hp-step {
+  width: 2.4rem;
+  padding: 0.4rem 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The damage group and the heal group are stacked on top of each other in
+   the same spot — a fixed-height positioning context with both groups
+   absolutely filling it (inset:0) — rather than side by side. Side by side
+   (even at equal flex-basis) centers each group within only its own half,
+   which visually reads as "depending on" the other group's presence/width.
+   Stacked, each group centers within the FULL row on its own, and because
+   .hp-action-row's height is fixed regardless of which group (or neither)
+   has visible buttons, showing/hiding buttons never resizes the dialog —
+   see "Avoiding layout jumps" in the battle-helper-architecture skill. */
+.hp-action-row {
+  position: relative;
+  height: 4.6rem;
+}
+
+.hp-action-group {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Hiding must happen on the whole group, not individual buttons: an empty
+   group is still a full-size stacked box and would silently swallow
+   clicks meant for the other group underneath (a positioned box captures
+   pointer events over its area even with nothing visible inside it).
+   This override is required, not decoration — the plain `hidden`
+   attribute alone would do nothing here, since our own `display: flex`
+   above outranks the browser's built-in `[hidden] { display: none }` rule
+   (author styles beat user-agent styles regardless of specificity). */
+.hp-action-group[hidden] {
+  display: none;
+}
+
+.hp-action {
+  width: 4.6rem;
+  height: 4.6rem;
+  padding: 0.3rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.hp-action.danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.hp-action.danger:hover {
+  filter: brightness(1.1);
+}
+
+.hp-action.success {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+
+.hp-action.success:hover {
+  filter: brightness(1.1);
 }

@@ -26,6 +26,7 @@ jobs:
         run: python -m py_compile app.py
       - name: Check frontend JS syntax
         run: |
+          node --check static/pf2e-math.js
           node --check static/app.js
           node --check static/battle-helper/battle-helper.js
 
