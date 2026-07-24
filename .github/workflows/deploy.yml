@@ -25,7 +25,9 @@ jobs:
       - name: Byte-compile the Flask app
         run: python -m py_compile app.py
       - name: Check frontend JS syntax
-        run: node --check static/app.js
+        run: |
+          node --check static/app.js
+          node --check static/battle-helper/battle-helper.js
 
   deploy:
     needs: check

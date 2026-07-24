@@ -42,6 +42,14 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.get("/battle-helper/")
+def battle_helper():
+    # Flask's static handler doesn't resolve directory indexes on its own
+    # (unlike GitHub Pages in production), so this mirrors that behavior
+    # for local dev.
+    return send_from_directory(app.static_folder, "battle-helper/index.html")
+
+
 @app.post("/api/fetch")
 def fetch_character():
     payload = request.get_json(silent=True) or {}
