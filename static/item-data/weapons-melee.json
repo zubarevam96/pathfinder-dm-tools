@@ -1,0 +1,630 @@
+[
+  {
+    "name": "Fist",
+    "archives_of_nexus_id": 356
+  },
+  {
+    "name": "Fighting Oar",
+    "archives_of_nexus_id": 505
+  },
+  {
+    "name": "War Gavel",
+    "archives_of_nexus_id": 507
+  },
+  {
+    "name": "Mace",
+    "archives_of_nexus_id": 362
+  },
+  {
+    "name": "Longspear",
+    "archives_of_nexus_id": 361
+  },
+  {
+    "name": "Club",
+    "archives_of_nexus_id": 357
+  },
+  {
+    "name": "Knuckle Duster",
+    "archives_of_nexus_id": 185
+  },
+  {
+    "name": "Katar",
+    "archives_of_nexus_id": 369
+  },
+  {
+    "name": "Dagger",
+    "archives_of_nexus_id": 358
+  },
+  {
+    "name": "Clan Dagger",
+    "archives_of_nexus_id": 368
+  },
+  {
+    "name": "Spear",
+    "archives_of_nexus_id": 365
+  },
+  {
+    "name": "Corset Knife",
+    "archives_of_nexus_id": 278
+  },
+  {
+    "name": "Gauntlet",
+    "archives_of_nexus_id": 359
+  },
+  {
+    "name": "Light Mace",
+    "archives_of_nexus_id": 360
+  },
+  {
+    "name": "Morningstar",
+    "archives_of_nexus_id": 363
+  },
+  {
+    "name": "Shears",
+    "archives_of_nexus_id": 119
+  },
+  {
+    "name": "Palstave",
+    "archives_of_nexus_id": 506
+  },
+  {
+    "name": "Staff",
+    "archives_of_nexus_id": 367
+  },
+  {
+    "name": "Forked Bipod",
+    "archives_of_nexus_id": 184
+  },
+  {
+    "name": "Sickle",
+    "archives_of_nexus_id": 364
+  },
+  {
+    "name": "Tri-Bladed Katar",
+    "archives_of_nexus_id": 540
+  },
+  {
+    "name": "Spiked Gauntlet",
+    "archives_of_nexus_id": 366
+  },
+  {
+    "name": "Halberd",
+    "archives_of_nexus_id": 381
+  },
+  {
+    "name": "Crescent Cross",
+    "archives_of_nexus_id": 345
+  },
+  {
+    "name": "Bayonet",
+    "archives_of_nexus_id": 186
+  },
+  {
+    "name": "Bec de Corbin",
+    "archives_of_nexus_id": 272
+  },
+  {
+    "name": "Bo Staff",
+    "archives_of_nexus_id": 372
+  },
+  {
+    "name": "Combat Lure",
+    "archives_of_nexus_id": 277
+  },
+  {
+    "name": "Combat Fishing Pole",
+    "archives_of_nexus_id": 508
+  },
+  {
+    "name": "Battle Saddle",
+    "archives_of_nexus_id": 271
+  },
+  {
+    "name": "Fighting Fan",
+    "archives_of_nexus_id": 93
+  },
+  {
+    "name": "Warhammer",
+    "archives_of_nexus_id": 403
+  },
+  {
+    "name": "Battle Axe",
+    "archives_of_nexus_id": 371
+  },
+  {
+    "name": "War Flail",
+    "archives_of_nexus_id": 402
+  },
+  {
+    "name": "Wakizashi",
+    "archives_of_nexus_id": 419
+  },
+  {
+    "name": "Guisarme",
+    "archives_of_nexus_id": 380
+  },
+  {
+    "name": "Gladius",
+    "archives_of_nexus_id": 510
+  },
+  {
+    "name": "Glaive",
+    "archives_of_nexus_id": 375
+  },
+  {
+    "name": "Gnome Hooked Hammer",
+    "archives_of_nexus_id": 408
+  },
+  {
+    "name": "Main-gauche",
+    "archives_of_nexus_id": 387
+  },
+  {
+    "name": "Greatclub",
+    "archives_of_nexus_id": 377
+  },
+  {
+    "name": "Greatpick",
+    "archives_of_nexus_id": 378
+  },
+  {
+    "name": "Greatsword",
+    "archives_of_nexus_id": 379
+  },
+  {
+    "name": "Maul",
+    "archives_of_nexus_id": 388
+  },
+  {
+    "name": "Greataxe",
+    "archives_of_nexus_id": 376
+  },
+  {
+    "name": "Longsword",
+    "archives_of_nexus_id": 386
+  },
+  {
+    "name": "Long Hammer",
+    "archives_of_nexus_id": 293
+  },
+  {
+    "name": "Rope Dart",
+    "archives_of_nexus_id": 301
+  },
+  {
+    "name": "Earthbreaker",
+    "archives_of_nexus_id": 281
+  },
+  {
+    "name": "Umbrella Injector",
+    "archives_of_nexus_id": 171
+  },
+  {
+    "name": "Injection Spear",
+    "archives_of_nexus_id": 170
+  },
+  {
+    "name": "Lance",
+    "archives_of_nexus_id": 383
+  },
+  {
+    "name": "Kama",
+    "archives_of_nexus_id": 410
+  },
+  {
+    "name": "Katana",
+    "archives_of_nexus_id": 411
+  },
+  {
+    "name": "Dagger Pistol (Melee)",
+    "archives_of_nexus_id": 216
+  },
+  {
+    "name": "Pick",
+    "archives_of_nexus_id": 389
+  },
+  {
+    "name": "Claw Blade",
+    "archives_of_nexus_id": 470
+  },
+  {
+    "name": "Whip",
+    "archives_of_nexus_id": 404
+  },
+  {
+    "name": "Dancer's Spear",
+    "archives_of_nexus_id": 279
+  },
+  {
+    "name": "Shortsword",
+    "archives_of_nexus_id": 398
+  },
+  {
+    "name": "Scythe",
+    "archives_of_nexus_id": 394
+  },
+  {
+    "name": "Kris",
+    "archives_of_nexus_id": 264
+  },
+  {
+    "name": "Cruuk",
+    "archives_of_nexus_id": 471
+  },
+  {
+    "name": "Kukri",
+    "archives_of_nexus_id": 413
+  },
+  {
+    "name": "Kusarigama",
+    "archives_of_nexus_id": 165
+  },
+  {
+    "name": "Lancer",
+    "archives_of_nexus_id": 346
+  },
+  {
+    "name": "Light Pick",
+    "archives_of_nexus_id": 385
+  },
+  {
+    "name": "Light Hammer",
+    "archives_of_nexus_id": 384
+  },
+  {
+    "name": "Leiomano",
+    "archives_of_nexus_id": 166
+  },
+  {
+    "name": "Liuyedao",
+    "archives_of_nexus_id": 491
+  },
+  {
+    "name": "Horsechopper",
+    "archives_of_nexus_id": 409
+  },
+  {
+    "name": "Macuahuitl",
+    "archives_of_nexus_id": 511
+  },
+  {
+    "name": "Machete",
+    "archives_of_nexus_id": 95
+  },
+  {
+    "name": "Bastard Sword",
+    "archives_of_nexus_id": 370
+  },
+  {
+    "name": "Tengu Gale Blade",
+    "archives_of_nexus_id": 479
+  },
+  {
+    "name": "Sword Cane",
+    "archives_of_nexus_id": 400
+  },
+  {
+    "name": "Mikazuki",
+    "archives_of_nexus_id": 347
+  },
+  {
+    "name": "Mambele",
+    "archives_of_nexus_id": 96
+  },
+  {
+    "name": "Meteor Hammer",
+    "archives_of_nexus_id": 97
+  },
+  {
+    "name": "Mace Multipistol (Melee)",
+    "archives_of_nexus_id": 220
+  },
+  {
+    "name": "Sap",
+    "archives_of_nexus_id": 392
+  },
+  {
+    "name": "Naginata",
+    "archives_of_nexus_id": 98
+  },
+  {
+    "name": "Starknife",
+    "archives_of_nexus_id": 399
+  },
+  {
+    "name": "Nunchaku",
+    "archives_of_nexus_id": 414
+  },
+  {
+    "name": "Orc Knuckle Dagger",
+    "archives_of_nexus_id": 415
+  },
+  {
+    "name": "Orc Skewermaul",
+    "archives_of_nexus_id": 527
+  },
+  {
+    "name": "Gaff",
+    "archives_of_nexus_id": 121
+  },
+  {
+    "name": "Panabas",
+    "archives_of_nexus_id": 265
+  },
+  {
+    "name": "Pantograph Gauntlet",
+    "archives_of_nexus_id": 172
+  },
+  {
+    "name": "Rapier Pistol (Melee)",
+    "archives_of_nexus_id": 222
+  },
+  {
+    "name": "Whipstaff",
+    "archives_of_nexus_id": 308
+  },
+  {
+    "name": "Filcher's Fork",
+    "archives_of_nexus_id": 407
+  },
+  {
+    "name": "Black Powder Knuckle Dusters (Melee)",
+    "archives_of_nexus_id": 214
+  },
+  {
+    "name": "Bow Staff",
+    "archives_of_nexus_id": 344
+  },
+  {
+    "name": "Breaching Pike",
+    "archives_of_nexus_id": 274
+  },
+  {
+    "name": "Piercing Wind (Melee)",
+    "archives_of_nexus_id": 221
+  },
+  {
+    "name": "Rapier",
+    "archives_of_nexus_id": 391
+  },
+  {
+    "name": "Ranseur",
+    "archives_of_nexus_id": 390
+  },
+  {
+    "name": "Hand Adze",
+    "archives_of_nexus_id": 475
+  },
+  {
+    "name": "Fishing Lure",
+    "archives_of_nexus_id": 515
+  },
+  {
+    "name": "Sai",
+    "archives_of_nexus_id": 416
+  },
+  {
+    "name": "Sansetsukon",
+    "archives_of_nexus_id": 302
+  },
+  {
+    "name": "Scimitar",
+    "archives_of_nexus_id": 393
+  },
+  {
+    "name": "Scizore",
+    "archives_of_nexus_id": 303
+  },
+  {
+    "name": "Dogslicer",
+    "archives_of_nexus_id": 405
+  },
+  {
+    "name": "Fangwire",
+    "archives_of_nexus_id": 473
+  },
+  {
+    "name": "Adze",
+    "archives_of_nexus_id": 467
+  },
+  {
+    "name": "Tonfa",
+    "archives_of_nexus_id": 245
+  },
+  {
+    "name": "Hatchet",
+    "archives_of_nexus_id": 382
+  },
+  {
+    "name": "Trident",
+    "archives_of_nexus_id": 401
+  },
+  {
+    "name": "Cane Pistol (Melee)",
+    "archives_of_nexus_id": 215
+  },
+  {
+    "name": "Tekko-Kagi",
+    "archives_of_nexus_id": 101
+  },
+  {
+    "name": "Tetsubo",
+    "archives_of_nexus_id": 444
+  },
+  {
+    "name": "Shield Bash",
+    "archives_of_nexus_id": 395
+  },
+  {
+    "name": "Shield Boss",
+    "archives_of_nexus_id": 396
+  },
+  {
+    "name": "Urumi",
+    "archives_of_nexus_id": 102
+  },
+  {
+    "name": "Reinforced Stock",
+    "archives_of_nexus_id": 187
+  },
+  {
+    "name": "Falchion",
+    "archives_of_nexus_id": 373
+  },
+  {
+    "name": "Flyssa",
+    "archives_of_nexus_id": 285
+  },
+  {
+    "name": "Khakkara",
+    "archives_of_nexus_id": 126
+  },
+  {
+    "name": "Khopesh",
+    "archives_of_nexus_id": 94
+  },
+  {
+    "name": "Temple Sword",
+    "archives_of_nexus_id": 418
+  },
+  {
+    "name": "Flail",
+    "archives_of_nexus_id": 374
+  },
+  {
+    "name": "Jiu Huan Dao",
+    "archives_of_nexus_id": 99
+  },
+  {
+    "name": "Zhuazhi Bang",
+    "archives_of_nexus_id": 494
+  },
+  {
+    "name": "Bladed Scarf",
+    "archives_of_nexus_id": 91
+  },
+  {
+    "name": "Spiked Chain",
+    "archives_of_nexus_id": 417
+  },
+  {
+    "name": "Shield Spikes",
+    "archives_of_nexus_id": 397
+  },
+  {
+    "name": "Shuan Ji",
+    "archives_of_nexus_id": 492
+  },
+  {
+    "name": "Elven Curve Blade",
+    "archives_of_nexus_id": 406
+  },
+  {
+    "name": "Gnome Amalgam Musket (Melee)",
+    "archives_of_nexus_id": 217
+  },
+  {
+    "name": "Polytool",
+    "archives_of_nexus_id": 100
+  },
+  {
+    "name": "Axe Musket (Melee)",
+    "archives_of_nexus_id": 213
+  },
+  {
+    "name": "Gun Sword (Melee)",
+    "archives_of_nexus_id": 218
+  },
+  {
+    "name": "Hammer Gun (Melee)",
+    "archives_of_nexus_id": 219
+  },
+  {
+    "name": "Three Peaked Tree (Melee)",
+    "archives_of_nexus_id": 223
+  },
+  {
+    "name": "Gnome Flickmace",
+    "archives_of_nexus_id": 421
+  },
+  {
+    "name": "Dwarven Waraxe",
+    "archives_of_nexus_id": 420
+  },
+  {
+    "name": "Dwarven Dorn-Dergar",
+    "archives_of_nexus_id": 280
+  },
+  {
+    "name": "Spirit Thresher",
+    "archives_of_nexus_id": 478
+  },
+  {
+    "name": "Sawtooth Saber",
+    "archives_of_nexus_id": 423
+  },
+  {
+    "name": "Kalis",
+    "archives_of_nexus_id": 263
+  },
+  {
+    "name": "Karambit",
+    "archives_of_nexus_id": 164
+  },
+  {
+    "name": "Wrecker",
+    "archives_of_nexus_id": 348
+  },
+  {
+    "name": "Flying Talon",
+    "archives_of_nexus_id": 474
+  },
+  {
+    "name": "Butterfly Sword",
+    "archives_of_nexus_id": 162
+  },
+  {
+    "name": "Nodachi",
+    "archives_of_nexus_id": 298
+  },
+  {
+    "name": "Orc Necksplitter",
+    "archives_of_nexus_id": 422
+  },
+  {
+    "name": "Three-Section Naginata",
+    "archives_of_nexus_id": 305
+  },
+  {
+    "name": "Falcata",
+    "archives_of_nexus_id": 282
+  },
+  {
+    "name": "Feng Huo Lun",
+    "archives_of_nexus_id": 167
+  },
+  {
+    "name": "Tricky Pick",
+    "archives_of_nexus_id": 481
+  },
+  {
+    "name": "Whip Claw",
+    "archives_of_nexus_id": 482
+  },
+  {
+    "name": "Capturing Spetum",
+    "archives_of_nexus_id": 469
+  },
+  {
+    "name": "Chain Sword",
+    "archives_of_nexus_id": 276
+  },
+  {
+    "name": "Hook Sword",
+    "archives_of_nexus_id": 163
+  },
+  {
+    "name": "Explosive Dogslicer (Melee)",
+    "archives_of_nexus_id": 224
+  }
+]

@@ -1,0 +1,322 @@
+[
+  {
+    "name": "Crossbow",
+    "archives_of_nexus_id": 425
+  },
+  {
+    "name": "Atlatl",
+    "archives_of_nexus_id": 329
+  },
+  {
+    "name": "Dart",
+    "archives_of_nexus_id": 426
+  },
+  {
+    "name": "Blowgun",
+    "archives_of_nexus_id": 424
+  },
+  {
+    "name": "Coat Pistol",
+    "archives_of_nexus_id": 189
+  },
+  {
+    "name": "Flintlock Musket",
+    "archives_of_nexus_id": 191
+  },
+  {
+    "name": "Flintlock Pistol",
+    "archives_of_nexus_id": 192
+  },
+  {
+    "name": "Fire Lance",
+    "archives_of_nexus_id": 190
+  },
+  {
+    "name": "Javelin",
+    "archives_of_nexus_id": 429
+  },
+  {
+    "name": "Long Air Repeater",
+    "archives_of_nexus_id": 194
+  },
+  {
+    "name": "Air Repeater",
+    "archives_of_nexus_id": 188
+  },
+  {
+    "name": "Sling",
+    "archives_of_nexus_id": 430
+  },
+  {
+    "name": "Hand Cannon",
+    "archives_of_nexus_id": 193
+  },
+  {
+    "name": "Hand Crossbow",
+    "archives_of_nexus_id": 427
+  },
+  {
+    "name": "Heavy Crossbow",
+    "archives_of_nexus_id": 428
+  },
+  {
+    "name": "Alchemical Bomb",
+    "archives_of_nexus_id": 431
+  },
+  {
+    "name": "Arquebus",
+    "archives_of_nexus_id": 195
+  },
+  {
+    "name": "War Javelin",
+    "archives_of_nexus_id": 512
+  },
+  {
+    "name": "Bola",
+    "archives_of_nexus_id": 92
+  },
+  {
+    "name": "Boomerang",
+    "archives_of_nexus_id": 332
+  },
+  {
+    "name": "Gakgung",
+    "archives_of_nexus_id": 334
+  },
+  {
+    "name": "Harmona Gun",
+    "archives_of_nexus_id": 202
+  },
+  {
+    "name": "Harpoon",
+    "archives_of_nexus_id": 336
+  },
+  {
+    "name": "Thunder Sling",
+    "archives_of_nexus_id": 147
+  },
+  {
+    "name": "Double-Barreled Pistol",
+    "archives_of_nexus_id": 199
+  },
+  {
+    "name": "Longbow",
+    "archives_of_nexus_id": 436
+  },
+  {
+    "name": "Dawnsilver Tree",
+    "archives_of_nexus_id": 204
+  },
+  {
+    "name": "Dart Umbrella",
+    "archives_of_nexus_id": 175
+  },
+  {
+    "name": "Kestros",
+    "archives_of_nexus_id": 513
+  },
+  {
+    "name": "Clan Pistol",
+    "archives_of_nexus_id": 197
+  },
+  {
+    "name": "Shortbow",
+    "archives_of_nexus_id": 437
+  },
+  {
+    "name": "Shield Bow",
+    "archives_of_nexus_id": 339
+  },
+  {
+    "name": "Blunderbuss",
+    "archives_of_nexus_id": 196
+  },
+  {
+    "name": "Gauntlet Bow",
+    "archives_of_nexus_id": 335
+  },
+  {
+    "name": "Arbalest",
+    "archives_of_nexus_id": 432
+  },
+  {
+    "name": "Pepperbox",
+    "archives_of_nexus_id": 205
+  },
+  {
+    "name": "Dragon Mouth Pistol",
+    "archives_of_nexus_id": null
+  },
+  {
+    "name": "Halfling Sling Staff",
+    "archives_of_nexus_id": 438
+  },
+  {
+    "name": "Spraysling",
+    "archives_of_nexus_id": 340
+  },
+  {
+    "name": "Rotary Bow",
+    "archives_of_nexus_id": 338
+  },
+  {
+    "name": "Shuriken",
+    "archives_of_nexus_id": 439
+  },
+  {
+    "name": "Chakram",
+    "archives_of_nexus_id": 235
+  },
+  {
+    "name": "Chakri",
+    "archives_of_nexus_id": 270
+  },
+  {
+    "name": "Double-barreled Musket",
+    "archives_of_nexus_id": 198
+  },
+  {
+    "name": "Jezail",
+    "archives_of_nexus_id": 203
+  },
+  {
+    "name": "Dueling Pistol",
+    "archives_of_nexus_id": 201
+  },
+  {
+    "name": "Composite Longbow",
+    "archives_of_nexus_id": 434
+  },
+  {
+    "name": "Composite Shortbow",
+    "archives_of_nexus_id": 435
+  },
+  {
+    "name": "Spoon Gun",
+    "archives_of_nexus_id": 225
+  },
+  {
+    "name": "Repeating Heavy Crossbow",
+    "archives_of_nexus_id": 450
+  },
+  {
+    "name": "Slide Pistol",
+    "archives_of_nexus_id": 206
+  },
+  {
+    "name": "Big Boom Gun",
+    "archives_of_nexus_id": 226
+  },
+  {
+    "name": "Backpack Ballista",
+    "archives_of_nexus_id": 447
+  },
+  {
+    "name": "Sukgung",
+    "archives_of_nexus_id": 341
+  },
+  {
+    "name": "Daikyu",
+    "archives_of_nexus_id": 472
+  },
+  {
+    "name": "Flingflenser",
+    "archives_of_nexus_id": 208
+  },
+  {
+    "name": "Hongali Hornbow",
+    "archives_of_nexus_id": 238
+  },
+  {
+    "name": "Taw Launcher",
+    "archives_of_nexus_id": 146
+  },
+  {
+    "name": "Barricade Buster",
+    "archives_of_nexus_id": 330
+  },
+  {
+    "name": "Dwarven Scattergun",
+    "archives_of_nexus_id": 207
+  },
+  {
+    "name": "Phalanx Piercer",
+    "archives_of_nexus_id": 337
+  },
+  {
+    "name": "Repeating Crossbow",
+    "archives_of_nexus_id": 176
+  },
+  {
+    "name": "Repeating Hand Crossbow",
+    "archives_of_nexus_id": 177
+  },
+  {
+    "name": "Backpack Catapult",
+    "archives_of_nexus_id": 174
+  },
+  {
+    "name": "Bolts",
+    "archives_of_nexus_id": 441
+  },
+  {
+    "name": "Backpack Ballista Bolts",
+    "archives_of_nexus_id": 179
+  },
+  {
+    "name": "Bolts (Phalanx Piercer)",
+    "archives_of_nexus_id": 351
+  },
+  {
+    "name": "Backpack Catapult Stones",
+    "archives_of_nexus_id": 180
+  },
+  {
+    "name": "Magazine (Air Repeater)",
+    "archives_of_nexus_id": 209
+  },
+  {
+    "name": "Magazine (Long Air Repeater)",
+    "archives_of_nexus_id": 210
+  },
+  {
+    "name": "Repeating Heavy Crossbow Magazine",
+    "archives_of_nexus_id": 183
+  },
+  {
+    "name": "8-Round Magazine",
+    "archives_of_nexus_id": 349
+  },
+  {
+    "name": "Repeating Crossbow Magazine",
+    "archives_of_nexus_id": 181
+  },
+  {
+    "name": "Repeating Hand Crossbow Magazine",
+    "archives_of_nexus_id": 182
+  },
+  {
+    "name": "Firearm Ammunition (10 rounds)",
+    "archives_of_nexus_id": 211
+  },
+  {
+    "name": "Firearm Ammunition (5 rounds)",
+    "archives_of_nexus_id": 212
+  },
+  {
+    "name": "Sling Bullets",
+    "archives_of_nexus_id": 442
+  },
+  {
+    "name": "Spray Pellet",
+    "archives_of_nexus_id": 353
+  },
+  {
+    "name": "Blowgun Darts",
+    "archives_of_nexus_id": 440
+  },
+  {
+    "name": "Arrows",
+    "archives_of_nexus_id": 443
+  }
+]

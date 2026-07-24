@@ -433,7 +433,7 @@ function handleSpellChipClick(event, chip) {
 // to AoN's search page, same as an unrecognized spell. Inventory items are
 // checked against the same map, since armor sometimes shows up loose in a
 // character's inventory instead of the dedicated armor list.
-const AON_ITEM_PAGES = { armor: "Armor.aspx", weapon: "Weapons.aspx", equipment: "Equipment.aspx" };
+const AON_ITEM_PAGES = { armor: "Armor.aspx", weapon: "Weapons.aspx", equipment: "Equipment.aspx", shield: "Shields.aspx" };
 let itemIdMap = {};
 
 async function loadItemIdMap() {
@@ -441,6 +441,9 @@ async function loadItemIdMap() {
   for (const [category, file] of [
     ["armor", "item-data/armor.json"],
     ["equipment", "item-data/alchemical-items.json"],
+    ["weapon", "item-data/weapons-melee.json"],
+    ["weapon", "item-data/weapons-ranged.json"],
+    ["shield", "item-data/shields.json"],
   ]) {
     try {
       const response = await fetch(file);
