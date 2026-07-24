@@ -22,6 +22,16 @@ const hpDialogName = document.getElementById("battle-hp-dialog-name");
 const hpInput = document.getElementById("battle-hp-input");
 const hpCloseBtn = document.getElementById("battle-hp-close");
 
+const initiativeDialog = document.getElementById("battle-initiative-dialog");
+const initiativeDialogName = document.getElementById("battle-initiative-dialog-name");
+const initiativeForm = document.getElementById("battle-initiative-form");
+const initiativeInput = document.getElementById("battle-initiative-input");
+const initiativeCloseBtn = document.getElementById("battle-initiative-close");
+
+const addObjectForm = document.getElementById("battle-add-object-form");
+const addObjectNameInput = document.getElementById("battle-add-object-name");
+const logClearBtn = document.getElementById("battle-log-clear");
+
 const COLS = 24;
 const ROWS = 16;
 const SQUARE_SIZE = 40; // px — each square is 5 ft per PF2e's grid convention
@@ -31,16 +41,21 @@ canvas.height = ROWS * SQUARE_SIZE;
 
 // ---------------------------------------------------------------------------
 // Battle state: the only things that live behind dispatch()/undo()/redo().
-// Everything else below (selectedSquareKey, armedCharacterId) is UI-only —
+// Everything else below (selectedSquareKey, armedEntityId) is UI-only —
 // see the battle-helper-architecture skill for why that split matters.
 
-let battleState = { placements: {}, hp: {}, tempHp: {} }; // hp/tempHp: character id -> value
+let battleState = { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [] };
+// hp/tempHp/initiative: entity id -> value; customObjects: id -> { name };
+// initiativeOrder: entity ids in the order the initiative track displays
+// them — manually reorderable by drag-and-drop, independent of the
+// initiative numbers (see the battle-helper-architecture skill).
 let eventLog = []; // [{ type, label, before, after, at }]
 let cursor = -1; // index into eventLog of the last applied event
 
 let selectedSquareKey = null; // square the player clicked to inspect
-let armedCharacterId = null; // roster character about to be placed
-let hpDialogCharacterId = null; // character the HP dialog is currently open for
+let armedEntityId = null; // roster character or custom object about to be placed
+let hpDialogCharacterId = null; // character the HP dialog is currently open for (never a custom object — they have no HP dialog)
+let initiativeDialogEntityId = null; // entity the initiative dialog is currently open for (character or custom object)
 
 // Raise a Shield is situational, like the main app's AC toggle — it isn't
 // baked into the sheet and wouldn't surprise anyone by disappearing on
@@ -53,12 +68,12 @@ function loadBattleStore() {
   try {
     const raw = JSON.parse(localStorage.getItem(BATTLE_STORE_KEY)) ?? {};
     return {
-      state: { placements: {}, hp: {}, tempHp: {}, ...raw.state },
+      state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], ...raw.state },
       eventLog: raw.eventLog ?? [],
       cursor: raw.cursor ?? -1,
     };
   } catch {
-    return { state: { placements: {}, hp: {}, tempHp: {} }, eventLog: [], cursor: -1 };
+    return { state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [] }, eventLog: [], cursor: -1 };
   }
 }
 
@@ -79,8 +94,38 @@ function loadCharacters() {
   }
 }
 
+// A placement, roster entry, or initiative-track entry can point at either
+// a real character (from the main app's store) or a custom object (name
+// only, tracked in battleState.customObjects — see the
+// battle-helper-architecture skill's "Custom objects" section). This is
+// the one place that knows how to resolve either kind by id, so the rest
+// of the file can treat them uniformly wherever only a name is needed.
+function findEntity(id) {
+  const character = loadCharacters().find((c) => c.id === id);
+  if (character) return { id, name: character.name, build: character.data?.build ?? null, isCustom: false };
+  const custom = battleState.customObjects[id];
+  if (custom) return { id, name: custom.name, build: null, isCustom: true };
+  return null;
+}
+
 function squareKey(row, col) {
   return `${row},${col}`;
+}
+
+// The initiative track's order is manual (drag-and-drop), not derived from
+// the initiative number — see the battle-helper-architecture skill. This
+// reconciles battleState.initiativeOrder against battleState.placements at
+// read time rather than writing a fixup back: drops any id no longer
+// placed (should already be pruned by remove-token, but defensive) and
+// appends any placed id missing from the order (covers battle state saved
+// before this feature existed, and any other implicit-append edge case),
+// without mutating state outside dispatch().
+function initiativeOrderIds() {
+  const order = battleState.initiativeOrder ?? [];
+  const placedIds = Object.values(battleState.placements);
+  const placedSet = new Set(placedIds);
+  const missing = placedIds.filter((id) => !order.includes(id));
+  return [...order.filter((id) => placedSet.has(id)), ...missing];
 }
 
 // Current HP defaults to max whenever it hasn't been tracked yet (a
@@ -100,7 +145,7 @@ function currentTempHp(characterId) {
 // ---------------------------------------------------------------------------
 // Event-driven state changes. Every function that mutates battleState goes
 // through dispatch() — see the battle-helper-architecture skill. Selection
-// (selectedSquareKey, armedCharacterId) never does.
+// (selectedSquareKey, armedEntityId) never does.
 
 function dispatch(type, label, mutate) {
   const before = structuredClone(battleState);
@@ -171,10 +216,9 @@ function drawGrid() {
     ctx.stroke();
   }
 
-  const byId = new Map(loadCharacters().map((c) => [c.id, c]));
-  for (const [key, characterId] of Object.entries(battleState.placements)) {
-    const character = byId.get(characterId);
-    if (!character) continue;
+  for (const [key, entityId] of Object.entries(battleState.placements)) {
+    const entity = findEntity(entityId);
+    if (!entity) continue;
     const [row, col] = key.split(",").map(Number);
     const cx = col * SQUARE_SIZE + SQUARE_SIZE / 2;
     const cy = row * SQUARE_SIZE + SQUARE_SIZE / 2;
@@ -189,7 +233,7 @@ function drawGrid() {
     ctx.font = "bold 14px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText((character.name || "?").trim()[0]?.toUpperCase() ?? "?", cx, cy);
+    ctx.fillText((entity.name || "?").trim()[0]?.toUpperCase() ?? "?", cx, cy);
   }
 
   if (selectedSquareKey) {
@@ -202,37 +246,135 @@ function drawGrid() {
 
 function renderRoster() {
   const placedIds = new Set(Object.values(battleState.placements));
-  const unplaced = loadCharacters().filter((c) => !placedIds.has(c.id));
+  const characters = loadCharacters().map((c) => ({ id: c.id, name: c.name, isCustom: false }));
+  const customs = Object.entries(battleState.customObjects).map(([id, obj]) => ({ id, name: obj.name, isCustom: true }));
+  const unplaced = [...characters, ...customs].filter((e) => !placedIds.has(e.id));
 
-  if (unplaced.length === 0) {
-    rosterList.innerHTML = '<li class="placeholder">No characters available — add one on the main page.</li>';
-    return;
+  rosterList.innerHTML = unplaced.length
+    ? unplaced.map((e) => `
+        <li class="battle-roster-item${e.id === armedEntityId ? " armed" : ""}" data-entity-id="${escapeHtml(e.id)}">
+          <span class="battle-roster-item-name">${escapeHtml(e.name)}</span>
+          ${e.isCustom ? `<button type="button" class="battle-remove-btn battle-roster-delete" data-entity-id="${escapeHtml(e.id)}" title="Delete ${escapeHtml(e.name)}" aria-label="Delete ${escapeHtml(e.name)}">&times;</button>` : ""}
+        </li>
+      `).join("")
+    : '<li class="placeholder">No characters available — add one on the main page, or add a custom object below.</li>';
+
+  for (const li of rosterList.querySelectorAll("[data-entity-id]")) {
+    li.addEventListener("click", () => {
+      const id = li.dataset.entityId;
+      armedEntityId = armedEntityId === id ? null : id;
+      render();
+    });
   }
 
-  rosterList.innerHTML = unplaced.map((c) => `
-    <li class="battle-roster-item${c.id === armedCharacterId ? " armed" : ""}" data-character-id="${escapeHtml(c.id)}">
-      ${escapeHtml(c.name)}
-    </li>
-  `).join("");
-
-  for (const li of rosterList.querySelectorAll("[data-character-id]")) {
-    li.addEventListener("click", () => {
-      const id = li.dataset.characterId;
-      armedCharacterId = armedCharacterId === id ? null : id;
-      render();
+  // Only custom objects get a delete button — real characters are managed
+  // on the main page, not here. stopPropagation() keeps this from also
+  // triggering the <li>'s own click handler (arming it for placement).
+  for (const btn of rosterList.querySelectorAll(".battle-roster-delete")) {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const id = btn.dataset.entityId;
+      const entity = findEntity(id);
+      if (!entity) return;
+      dispatch("delete-custom-object", `Deleted ${entity.name}`, (state) => {
+        delete state.customObjects[id];
+        delete state.initiative[id];
+      });
+      if (armedEntityId === id) armedEntityId = null;
     });
   }
 }
 
+let dragEntityId = null; // entity id currently being dragged in the initiative track — UI-only, not battle state
+
 function renderInitiative() {
-  const byId = new Map(loadCharacters().map((c) => [c.id, c]));
-  const placed = Object.values(battleState.placements)
-    .map((id) => byId.get(id))
+  const placed = initiativeOrderIds()
+    .map((id) => findEntity(id))
     .filter(Boolean);
 
-  initiativeList.innerHTML = placed.length
-    ? placed.map((c) => `<li>${escapeHtml(c.name)}</li>`).join("")
-    : '<li class="placeholder">No one on the field yet.</li>';
+  if (!placed.length) {
+    initiativeList.innerHTML = '<li class="placeholder">No one on the field yet.</li>';
+    return;
+  }
+
+  initiativeList.innerHTML = placed.map((e) => {
+    const initiative = battleState.initiative[e.id];
+    return `
+      <li draggable="true" data-entity-id="${escapeHtml(e.id)}">
+        <span class="battle-initiative-name">${escapeHtml(e.name)}</span>
+        <button type="button" class="battle-initiative-value" draggable="false" data-entity-id="${escapeHtml(e.id)}" title="Set initiative">${initiative != null ? initiative : "—"}</button>
+      </li>
+    `;
+  }).join("");
+
+  for (const btn of initiativeList.querySelectorAll(".battle-initiative-value")) {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const entity = findEntity(btn.dataset.entityId);
+      if (entity) openInitiativeDialog(entity.id, entity.name);
+    });
+  }
+
+  // Native HTML5 drag-and-drop reorders battleState.initiativeOrder. This
+  // is a real battle-state change (Rule 1), so it goes through dispatch()
+  // like everything else — dragging is undoable the same as any other
+  // action, not a UI-only convenience. Scoped to "li[data-entity-id]", not
+  // the bare attribute selector — the value button also carries
+  // data-entity-id (for its own click handler above), and would otherwise
+  // wrongly get drag handlers meant for the row.
+  for (const li of initiativeList.querySelectorAll("li[data-entity-id]")) {
+    li.addEventListener("dragstart", () => {
+      dragEntityId = li.dataset.entityId;
+      li.classList.add("dragging");
+    });
+    li.addEventListener("dragend", () => {
+      li.classList.remove("dragging");
+      dragEntityId = null;
+    });
+    li.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      if (li.dataset.entityId !== dragEntityId) li.classList.add("drag-over");
+    });
+    li.addEventListener("dragleave", () => {
+      li.classList.remove("drag-over");
+    });
+    li.addEventListener("drop", (event) => {
+      event.preventDefault();
+      li.classList.remove("drag-over");
+      const targetId = li.dataset.entityId;
+      const draggedId = dragEntityId;
+      if (!draggedId || draggedId === targetId) return;
+      const draggedEntity = findEntity(draggedId);
+      dispatch("reorder-initiative", `Moved ${draggedEntity?.name ?? "entity"} in the initiative track`, (state) => {
+        const order = initiativeOrderIds();
+        const from = order.indexOf(draggedId);
+        const to = order.indexOf(targetId);
+        if (from === -1 || to === -1) return;
+        order.splice(from, 1);
+        order.splice(to, 0, draggedId);
+        state.initiativeOrder = order;
+      });
+    });
+  }
+}
+
+// Shared by both renderStatPanel() branches below (full character panel,
+// name-only custom-object panel) so "remove from field" behaves
+// identically either way — same event type, same state cleanup.
+function bindRemoveButton(entityId, name) {
+  document.getElementById("battle-remove-token").addEventListener("click", () => {
+    const key = selectedSquareKey;
+    dispatch("remove-token", `Removed ${name} from the field`, (state) => {
+      delete state.placements[key];
+      delete state.hp[entityId];
+      delete state.tempHp[entityId];
+      delete state.initiative[entityId];
+      state.initiativeOrder = state.initiativeOrder.filter((id) => id !== entityId);
+    });
+    raisedShieldIds.delete(entityId);
+    selectedSquareKey = null;
+    render();
+  });
 }
 
 function renderStatPanel() {
@@ -241,19 +383,43 @@ function renderStatPanel() {
     return;
   }
 
-  const characterId = battleState.placements[selectedSquareKey];
-  if (!characterId) {
+  const entityId = battleState.placements[selectedSquareKey];
+  if (!entityId) {
     statPanel.innerHTML = '<p class="placeholder">Empty square.</p>';
     return;
   }
 
-  const character = loadCharacters().find((c) => c.id === characterId);
-  const build = character?.data?.build;
-  if (!character || !build) {
-    statPanel.innerHTML = '<p class="placeholder">No sheet data for this character.</p>';
+  const entity = findEntity(entityId);
+  if (!entity) {
+    statPanel.innerHTML = '<p class="placeholder">Empty square.</p>';
     return;
   }
 
+  // Custom objects (name only, by design) and — as a defensive fallback —
+  // any real character missing sheet data get the same minimal panel:
+  // just a name and a way to remove them from the field.
+  if (!entity.build) {
+    statPanel.innerHTML = `
+      <div class="battle-stat-header">
+        <div class="battle-stat-left">
+          <button id="battle-remove-token" class="battle-remove-btn" title="Remove from field" aria-label="Remove from field">&times;</button>
+          <div class="battle-stat-identity">
+            <span class="battle-stat-name">${escapeHtml(entity.name)}</span>
+          </div>
+        </div>
+      </div>
+      <p class="placeholder">${entity.isCustom ? "Custom object — no additional stats." : "No sheet data for this character."}</p>
+    `;
+    bindRemoveButton(entityId, entity.name);
+    return;
+  }
+
+  // Past this point entity.build is guaranteed (the branch above already
+  // returned otherwise), so this is always a real character — renamed for
+  // readability in the rest of this function, which is character-specific.
+  const character = entity;
+  const characterId = entityId;
+  const build = entity.build;
   const prof = build.proficiencies ?? {};
   const attrs = build.attributes ?? {};
   const maxHp = computeMaxHp(build);
@@ -315,17 +481,7 @@ function renderStatPanel() {
     </div>
   `;
 
-  document.getElementById("battle-remove-token").addEventListener("click", () => {
-    const key = selectedSquareKey;
-    dispatch("remove-token", `Removed ${character.name} from the field`, (state) => {
-      delete state.placements[key];
-      delete state.hp[characterId];
-      delete state.tempHp[characterId];
-    });
-    raisedShieldIds.delete(characterId);
-    selectedSquareKey = null;
-    render();
-  });
+  bindRemoveButton(characterId, character.name);
 
   document.getElementById("battle-hp-bar").addEventListener("click", () => {
     openHpDialog(characterId, character.name);
@@ -514,6 +670,48 @@ hpTempBtn.addEventListener("click", () => {
 hpCloseBtn.addEventListener("click", () => hpDialog.close());
 
 // ---------------------------------------------------------------------------
+// Initiative dialog. Opened from the small clickable value box on an
+// initiative-track row (works for characters and custom objects alike,
+// since initiative isn't part of a character's sheet data). Setting or
+// clearing it is the only battle-state change here, so it's the only part
+// that dispatches — opening/closing the dialog and staging the input are
+// UI-only, the same split as the HP dialog.
+
+function openInitiativeDialog(entityId, name) {
+  initiativeDialogEntityId = entityId;
+  initiativeDialogName.textContent = name;
+  const current = battleState.initiative[entityId];
+  initiativeInput.value = current != null ? current : "";
+  initiativeDialog.showModal();
+}
+
+initiativeForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entityId = initiativeDialogEntityId;
+  const entity = findEntity(entityId);
+  if (!entity) {
+    initiativeDialog.close();
+    return;
+  }
+
+  const raw = initiativeInput.value.trim();
+  if (raw === "") {
+    dispatch("set-initiative", `Cleared ${entity.name}'s initiative`, (state) => {
+      delete state.initiative[entityId];
+    });
+  } else {
+    const value = Number(raw);
+    if (Number.isNaN(value)) return;
+    dispatch("set-initiative", `Set ${entity.name}'s initiative to ${value}`, (state) => {
+      state.initiative[entityId] = value;
+    });
+  }
+  initiativeDialog.close();
+});
+
+initiativeCloseBtn.addEventListener("click", () => initiativeDialog.close());
+
+// ---------------------------------------------------------------------------
 // Interaction
 
 function squareFromEvent(event) {
@@ -534,18 +732,21 @@ canvas.addEventListener("click", (event) => {
   const key = squareKey(square.row, square.col);
   const occupantId = battleState.placements[key];
 
-  if (armedCharacterId) {
+  if (armedEntityId) {
     if (!occupantId) {
-      const character = loadCharacters().find((c) => c.id === armedCharacterId);
-      if (character) {
-        dispatch("place-token", `Placed ${character.name} on the field`, (state) => {
-          state.placements[key] = armedCharacterId;
-          state.hp[armedCharacterId] = computeMaxHp(character.data.build);
-          delete state.tempHp[armedCharacterId];
+      const entity = findEntity(armedEntityId);
+      if (entity) {
+        dispatch("place-token", `Placed ${entity.name} on the field`, (state) => {
+          state.placements[key] = armedEntityId;
+          // Custom objects have no build data, so no HP to initialize —
+          // per the battle-helper-architecture skill, they're name-only.
+          if (entity.build) state.hp[armedEntityId] = computeMaxHp(entity.build);
+          delete state.tempHp[armedEntityId];
+          state.initiativeOrder.push(armedEntityId);
         });
       }
     }
-    armedCharacterId = null;
+    armedEntityId = null;
     render();
     return;
   }
@@ -558,6 +759,27 @@ canvas.addEventListener("click", (event) => {
 
 undoBtn.addEventListener("click", undo);
 redoBtn.addEventListener("click", redo);
+
+addObjectForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = addObjectNameInput.value.trim();
+  if (!name) return;
+  const id = `custom-${crypto.randomUUID()}`;
+  dispatch("add-custom-object", `Added ${name} to the roster`, (state) => {
+    state.customObjects[id] = { name };
+  });
+  addObjectNameInput.value = "";
+});
+
+// Clears the event LOG itself, not battle state — there's nothing to
+// dispatch() here (Rule 1 only governs battleState) and nothing to undo
+// afterward, since undo/redo work by walking eventLog, which this empties.
+logClearBtn.addEventListener("click", () => {
+  eventLog = [];
+  cursor = -1;
+  persistBattleStore();
+  render();
+});
 
 document.addEventListener("keydown", (event) => {
   if (!event.ctrlKey || event.key.toLowerCase() !== "z" && event.key.toLowerCase() !== "y") return;

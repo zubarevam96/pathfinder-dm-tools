@@ -154,6 +154,10 @@
 }
 
 .battle-roster-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
   padding: 0.4rem 0.6rem;
   margin-bottom: 0.35rem;
   border: 1px solid var(--border);
@@ -172,11 +176,71 @@
   color: var(--accent-contrast);
 }
 
+.battle-roster-item-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reuses .battle-remove-btn's look (small red circle) but smaller, to fit
+   a roster row rather than the stat panel header. Only rendered for
+   custom objects — see renderRoster()'s comment. */
+.battle-roster-delete {
+  width: 1.2rem;
+  height: 1.2rem;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
 .battle-initiative li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
   padding: 0.4rem 0.6rem;
   margin-bottom: 0.35rem;
   border: 1px solid var(--border);
   border-radius: 6px;
+  cursor: grab;
+}
+
+.battle-initiative li.dragging {
+  opacity: 0.4;
+}
+
+.battle-initiative li.drag-over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.battle-initiative-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A small clickable box, not a plain label — click opens the initiative
+   dialog. Re-declares background on hover (not just border-color) for the
+   same reason .battle-hp-bar does: the global button:hover tint would
+   otherwise wash it out. */
+.battle-initiative-value {
+  flex-shrink: 0;
+  min-width: 1.6rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.battle-initiative-value:hover {
+  border-color: var(--accent);
+  background: var(--bg);
 }
 
 .battle-roster .placeholder,
@@ -186,10 +250,44 @@
   font-size: 0.82rem;
 }
 
+.battle-add-object-form {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  flex-shrink: 0;
+}
+
+.battle-initiative-form {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.battle-initiative-form input {
+  width: 5rem;
+  text-align: center;
+  flex: none;
+}
+
+.battle-add-object-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.82rem;
+}
+
+.battle-add-object-form button {
+  flex-shrink: 0;
+}
+
+/* Left-aligned in reading order (Clear, then the title, then Undo/Redo
+   immediately after it) rather than space-between — Undo/Redo should sit
+   next to "Event Log", not be pushed off to the box's far edge. */
 .battle-log-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }

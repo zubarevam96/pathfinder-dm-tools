@@ -20,9 +20,14 @@
           <h2>Roster</h2>
           <p class="battle-panel-hint">Click a character, then click an empty square to place them.</p>
           <ul id="battle-roster" class="battle-roster"></ul>
+          <form id="battle-add-object-form" class="battle-add-object-form">
+            <input type="text" id="battle-add-object-name" placeholder="Custom object name" maxlength="60" />
+            <button type="submit" class="subtle">Add</button>
+          </form>
         </div>
         <div class="battle-box-section">
           <div class="battle-log-header">
+            <button id="battle-log-clear" class="subtle" title="Clear event log">Clear</button>
             <h2>Event Log</h2>
             <div class="battle-log-actions">
               <button id="battle-undo" class="subtle" title="Undo (Ctrl+Z)">&#8630; Undo</button>
@@ -77,6 +82,17 @@
     </div>
     <div class="dialog-actions">
       <button type="button" id="battle-hp-close">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="battle-initiative-dialog">
+    <h2>Set Initiative — <span id="battle-initiative-dialog-name"></span></h2>
+    <form id="battle-initiative-form" class="battle-initiative-form">
+      <input type="number" id="battle-initiative-input" placeholder="—" />
+      <button type="submit" class="subtle">Set</button>
+    </form>
+    <div class="dialog-actions">
+      <button type="button" id="battle-initiative-close">Close</button>
     </div>
   </dialog>
 
