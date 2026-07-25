@@ -11,6 +11,7 @@ const BATTLE_STORE_KEY = "pathfinder-dm-tools:battle";
 const canvas = document.getElementById("battle-grid");
 const ctx = canvas.getContext("2d");
 const statPanel = document.getElementById("battle-stat-panel");
+const appearancePanel = document.getElementById("battle-appearance-panel");
 const rosterList = document.getElementById("battle-roster");
 const initiativeList = document.getElementById("battle-initiative");
 const logList = document.getElementById("battle-log");
@@ -44,11 +45,16 @@ canvas.height = ROWS * SQUARE_SIZE;
 // Everything else below (selectedSquareKey, armedEntityId) is UI-only —
 // see the battle-helper-architecture skill for why that split matters.
 
-let battleState = { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [] };
+let battleState = { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {} };
 // hp/tempHp/initiative: entity id -> value; customObjects: id -> { name };
 // initiativeOrder: entity ids in the order the initiative track displays
 // them — manually reorderable by drag-and-drop, independent of the
-// initiative numbers (see the battle-helper-architecture skill).
+// initiative numbers; appearance: entity id -> { shape, letters,
+// textColor, shapeColor } (all optional — see getAppearance()). Unlike
+// hp/tempHp/initiative, appearance is NOT reset on remove-token: it's a
+// visual identity for the entity, not battle progress, so it should
+// survive being pulled off and put back on the field.
+// (see the battle-helper-architecture skill's "Token appearance" section)
 let eventLog = []; // [{ type, label, before, after, at }]
 let cursor = -1; // index into eventLog of the last applied event
 
@@ -56,6 +62,15 @@ let selectedSquareKey = null; // square the player clicked to inspect
 let armedEntityId = null; // roster character or custom object about to be placed
 let hpDialogCharacterId = null; // character the HP dialog is currently open for (never a custom object — they have no HP dialog)
 let initiativeDialogEntityId = null; // entity the initiative dialog is currently open for (character or custom object)
+
+// Map drag-and-drop (mouse-based, not native HTML5 DnD — canvas has no
+// sub-element to attach draggable="true" to). All UI-only until a real
+// drop happens; the drop itself is a dispatch(), same as any other move.
+let dragFromKey = null; // square a token drag started from, or null
+let dragHoverKey = null; // square currently under the cursor mid-drag
+let dragStartPos = null; // {x,y} client coords at mousedown — distinguishes a real drag from a simple click
+let dragMoved = false; // true once mouse movement crossed DRAG_THRESHOLD — suppresses the click handler that would otherwise also fire
+const DRAG_THRESHOLD = 4; // px
 
 // Raise a Shield is situational, like the main app's AC toggle — it isn't
 // baked into the sheet and wouldn't surprise anyone by disappearing on
@@ -68,12 +83,12 @@ function loadBattleStore() {
   try {
     const raw = JSON.parse(localStorage.getItem(BATTLE_STORE_KEY)) ?? {};
     return {
-      state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], ...raw.state },
+      state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, ...raw.state },
       eventLog: raw.eventLog ?? [],
       cursor: raw.cursor ?? -1,
     };
   } catch {
-    return { state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [] }, eventLog: [], cursor: -1 };
+    return { state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {} }, eventLog: [], cursor: -1 };
   }
 }
 
@@ -108,8 +123,59 @@ function findEntity(id) {
   return null;
 }
 
+// Default token letters: one letter from each of the first two words, or
+// the first two letters of the only word if there's just one — e.g.
+// "Tumb Kamneshit" -> "TK", "Goblin" -> "GO", "" -> "?". Only used when
+// the entity has no letters override (see getAppearance()).
+function defaultInitials(name) {
+  const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+// Merges a stored appearance override (battleState.appearance[id], any
+// subset of these four fields) with computed defaults — mirrors
+// currentHp()/currentTempHp()'s "default unless tracked" pattern. Colors
+// default to the live theme's --accent/--accent-contrast (already hex,
+// see style.css), so an uncustomized token keeps following light/dark
+// mode; once a color is picked it's a literal, fixed hex value.
+function getAppearance(entityId, name) {
+  const stored = battleState.appearance[entityId] ?? {};
+  return {
+    shape: stored.shape ?? "circle",
+    letters: stored.letters ?? defaultInitials(name),
+    textColor: stored.textColor ?? cssVar("--accent-contrast"),
+    shapeColor: stored.shapeColor ?? cssVar("--accent"),
+  };
+}
+
 function squareKey(row, col) {
   return `${row},${col}`;
+}
+
+// Reverse of battleState.placements[squareKey] = entityId — used to select
+// an entity's square from the initiative track. Placement is 1:1 (an
+// entity occupies exactly one square), so the first match is the only one.
+function squareKeyForEntity(entityId) {
+  return Object.entries(battleState.placements).find(([, id]) => id === entityId)?.[0] ?? null;
+}
+
+// PF2e's actual diagonal-movement rule (see the pf2e-battle-grid skill):
+// diagonal steps alternate 5/10 ft, not a flat 5 ft each — the first
+// diagonal costs 5, the second 10, then it repeats. Straight (non-
+// diagonal) steps are always a flat 5 ft. rowDelta/colDelta are in
+// squares, not feet.
+function pf2eDistanceFeet(rowDelta, colDelta) {
+  const dx = Math.abs(colDelta);
+  const dy = Math.abs(rowDelta);
+  const diagonal = Math.min(dx, dy);
+  const straight = Math.max(dx, dy) - diagonal;
+  let feet = straight * 5;
+  for (let i = 0; i < diagonal; i++) {
+    feet += i % 2 === 0 ? 5 : 10;
+  }
+  return feet;
 }
 
 // The initiative track's order is manual (drag-and-drop), not derived from
@@ -183,12 +249,43 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Traces a token's outline into the current canvas path — caller fills it.
+// One of the four appearance.shape values from getAppearance().
+function traceTokenShape(shape, cx, cy, radius) {
+  ctx.beginPath();
+  switch (shape) {
+    case "square": {
+      const s = radius * 1.7;
+      ctx.rect(cx - s / 2, cy - s / 2, s, s);
+      break;
+    }
+    case "diamond":
+      ctx.moveTo(cx, cy - radius);
+      ctx.lineTo(cx + radius, cy);
+      ctx.lineTo(cx, cy + radius);
+      ctx.lineTo(cx - radius, cy);
+      ctx.closePath();
+      break;
+    case "triangle": {
+      const h = radius * 1.8;
+      ctx.moveTo(cx, cy - h * 0.6);
+      ctx.lineTo(cx + h * 0.58, cy + h * 0.4);
+      ctx.lineTo(cx - h * 0.58, cy + h * 0.4);
+      ctx.closePath();
+      break;
+    }
+    case "circle":
+    default:
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      break;
+  }
+}
+
 function drawGrid() {
   const surface = cssVar("--surface");
   const border = cssVar("--border");
   const accent = cssVar("--accent");
   const accentSoft = cssVar("--accent-soft");
-  const accentContrast = cssVar("--accent-contrast");
 
   ctx.fillStyle = surface;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -216,6 +313,26 @@ function drawGrid() {
     ctx.stroke();
   }
 
+  // Mid-drag feedback: dim the origin square, tint the hovered square
+  // green (valid drop — empty) or red (invalid — occupied). Drawn under
+  // the tokens so the dragged token still visibly sits at its origin
+  // square throughout the drag; it only actually moves on drop.
+  if (dragFromKey) {
+    const [row, col] = dragFromKey.split(",").map(Number);
+    ctx.fillStyle = border;
+    ctx.globalAlpha = 0.5;
+    ctx.fillRect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+    ctx.globalAlpha = 1;
+  }
+  if (dragHoverKey && dragHoverKey !== dragFromKey) {
+    const [row, col] = dragHoverKey.split(",").map(Number);
+    const valid = !battleState.placements[dragHoverKey];
+    ctx.fillStyle = cssVar(valid ? "--success" : "--danger");
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+    ctx.globalAlpha = 1;
+  }
+
   for (const [key, entityId] of Object.entries(battleState.placements)) {
     const entity = findEntity(entityId);
     if (!entity) continue;
@@ -223,17 +340,17 @@ function drawGrid() {
     const cx = col * SQUARE_SIZE + SQUARE_SIZE / 2;
     const cy = row * SQUARE_SIZE + SQUARE_SIZE / 2;
     const radius = SQUARE_SIZE / 2 - 4;
+    const appearance = getAppearance(entityId, entity.name);
 
-    ctx.fillStyle = accent;
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.fillStyle = appearance.shapeColor;
+    traceTokenShape(appearance.shape, cx, cy, radius);
     ctx.fill();
 
-    ctx.fillStyle = accentContrast;
-    ctx.font = "bold 14px sans-serif";
+    ctx.fillStyle = appearance.textColor;
+    ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText((entity.name || "?").trim()[0]?.toUpperCase() ?? "?", cx, cy);
+    ctx.fillText(appearance.letters, cx, cy);
   }
 
   if (selectedSquareKey) {
@@ -279,6 +396,7 @@ function renderRoster() {
       dispatch("delete-custom-object", `Deleted ${entity.name}`, (state) => {
         delete state.customObjects[id];
         delete state.initiative[id];
+        delete state.appearance[id];
       });
       if (armedEntityId === id) armedEntityId = null;
     });
@@ -297,10 +415,15 @@ function renderInitiative() {
     return;
   }
 
+  // Selection is shared both ways with the map: a square selected on the
+  // grid highlights its entity's row here (this lookup), and clicking a
+  // row below selects that entity's square on the grid.
+  const selectedEntityId = selectedSquareKey ? battleState.placements[selectedSquareKey] : null;
+
   initiativeList.innerHTML = placed.map((e) => {
     const initiative = battleState.initiative[e.id];
     return `
-      <li draggable="true" data-entity-id="${escapeHtml(e.id)}">
+      <li draggable="true" data-entity-id="${escapeHtml(e.id)}" class="${e.id === selectedEntityId ? "selected" : ""}">
         <span class="battle-initiative-name">${escapeHtml(e.name)}</span>
         <button type="button" class="battle-initiative-value" draggable="false" data-entity-id="${escapeHtml(e.id)}" title="Set initiative">${initiative != null ? initiative : "—"}</button>
       </li>
@@ -323,6 +446,17 @@ function renderInitiative() {
   // data-entity-id (for its own click handler above), and would otherwise
   // wrongly get drag handlers meant for the row.
   for (const li of initiativeList.querySelectorAll("li[data-entity-id]")) {
+    // Selecting a square (empty or occupied) to inspect it is UI-only —
+    // not an event, per the battle-helper-architecture skill — same as
+    // clicking the square itself on the grid. The value button above
+    // already stopPropagation()s so this doesn't also fire on that click.
+    li.addEventListener("click", () => {
+      const key = squareKeyForEntity(li.dataset.entityId);
+      if (key) {
+        selectedSquareKey = key;
+        render();
+      }
+    });
     li.addEventListener("dragstart", () => {
       dragEntityId = li.dataset.entityId;
       li.classList.add("dragging");
@@ -496,6 +630,98 @@ function renderStatPanel() {
   }
 }
 
+const TOKEN_SHAPES = [
+  { value: "circle", label: "●", title: "Circle" },
+  { value: "square", label: "■", title: "Square" },
+  { value: "diamond", label: "◆", title: "Diamond" },
+  { value: "triangle", label: "▲", title: "Triangle" },
+];
+
+// Patches battleState.appearance[entityId] — deletes a key when its patch
+// value is undefined (used to revert a field back to its computed
+// default) rather than leaving a dangling `undefined` in the object.
+function updateAppearance(entityId, patch, label) {
+  dispatch("update-appearance", label, (state) => {
+    const current = { ...state.appearance[entityId] };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete current[key];
+      else current[key] = value;
+    }
+    state.appearance[entityId] = current;
+  });
+}
+
+// Bottom-right box: how the selected entity's token looks on the map —
+// shape, letters, text color, shape color. Mirrors the same
+// selectedSquareKey as renderStatPanel() (selecting a square drives both
+// panels together), and — like the initiative dialog — works for any
+// placed entity, custom objects included.
+function renderAppearancePanel() {
+  if (!selectedSquareKey) {
+    appearancePanel.innerHTML = '<p class="placeholder">Click a square to select it.</p>';
+    return;
+  }
+
+  const entityId = battleState.placements[selectedSquareKey];
+  if (!entityId) {
+    appearancePanel.innerHTML = '<p class="placeholder">Empty square.</p>';
+    return;
+  }
+
+  const entity = findEntity(entityId);
+  if (!entity) {
+    appearancePanel.innerHTML = '<p class="placeholder">Empty square.</p>';
+    return;
+  }
+
+  const appearance = getAppearance(entityId, entity.name);
+
+  appearancePanel.innerHTML = `
+    <h2>Token Appearance</h2>
+    <div class="battle-appearance-row">
+      <span class="battle-appearance-label">Shape</span>
+      <div class="battle-appearance-shapes">
+        ${TOKEN_SHAPES.map((s) => `
+          <button type="button" class="battle-shape-btn${s.value === appearance.shape ? " active" : ""}" data-shape="${s.value}" title="${s.title}">${s.label}</button>
+        `).join("")}
+      </div>
+    </div>
+    <div class="battle-appearance-row">
+      <span class="battle-appearance-label">Letters</span>
+      <input type="text" id="battle-appearance-letters" maxlength="2" value="${escapeHtml(appearance.letters)}" />
+    </div>
+    <div class="battle-appearance-row">
+      <span class="battle-appearance-label">Text color</span>
+      <input type="color" id="battle-appearance-text-color" value="${appearance.textColor}" />
+    </div>
+    <div class="battle-appearance-row">
+      <span class="battle-appearance-label">Shape color</span>
+      <input type="color" id="battle-appearance-shape-color" value="${appearance.shapeColor}" />
+    </div>
+  `;
+
+  for (const btn of appearancePanel.querySelectorAll(".battle-shape-btn")) {
+    btn.addEventListener("click", () => {
+      const shape = btn.dataset.shape;
+      updateAppearance(entityId, { shape }, `Set ${entity.name}'s token shape to ${shape}`);
+    });
+  }
+
+  // change (not input) so typing/dragging a color wheel doesn't spam the
+  // undo log with one event per intermediate value — only the committed
+  // result is a real action.
+  document.getElementById("battle-appearance-letters").addEventListener("change", (event) => {
+    const value = event.target.value.trim().slice(0, 2).toUpperCase();
+    updateAppearance(entityId, { letters: value || undefined }, `Set ${entity.name}'s token letters to "${value || defaultInitials(entity.name)}"`);
+  });
+  document.getElementById("battle-appearance-text-color").addEventListener("change", (event) => {
+    updateAppearance(entityId, { textColor: event.target.value }, `Changed ${entity.name}'s token text color`);
+  });
+  document.getElementById("battle-appearance-shape-color").addEventListener("change", (event) => {
+    updateAppearance(entityId, { shapeColor: event.target.value }, `Changed ${entity.name}'s token shape color`);
+  });
+}
+
 function renderLog() {
   if (eventLog.length === 0) {
     logList.innerHTML = '<li class="empty">No actions yet</li>';
@@ -527,6 +753,7 @@ function render() {
   renderRoster();
   renderInitiative();
   renderStatPanel();
+  renderAppearancePanel();
   renderLog();
   renderUndoRedoButtons();
 }
@@ -726,7 +953,90 @@ function squareFromEvent(event) {
   return { row, col };
 }
 
+// A token move: distance uses PF2e's real diagonal-alternating rule (not
+// straight-line/Euclidean), logged alongside the start/end square
+// coordinates so the log line is useful for tracking actual movement
+// spent, not just "something moved somewhere."
+function moveToken(fromKey, toKey) {
+  const entityId = battleState.placements[fromKey];
+  const entity = findEntity(entityId);
+  if (!entity) return;
+
+  const [fromRow, fromCol] = fromKey.split(",").map(Number);
+  const [toRow, toCol] = toKey.split(",").map(Number);
+  const feet = pf2eDistanceFeet(toRow - fromRow, toCol - fromCol);
+
+  dispatch(
+    "move-token",
+    `Moved ${entity.name} ${feet} ft, from (${fromCol}, ${fromRow}) to (${toCol}, ${toRow})`,
+    (state) => {
+      delete state.placements[fromKey];
+      state.placements[toKey] = entityId;
+    }
+  );
+  selectedSquareKey = toKey;
+}
+
+// Map drag-and-drop is mouse-based, not native HTML5 DnD — canvas has no
+// per-square element to make draggable="true". mousedown only arms a
+// potential drag (an occupied square, and not while a roster entity is
+// armed for placement); it only becomes a real drag once mousemove
+// crosses DRAG_THRESHOLD, so a plain click still reaches the click
+// handler below unaffected. mouseup is on window, not canvas, so a drag
+// that ends outside the grid still cleanly cancels instead of getting
+// stuck.
+canvas.addEventListener("mousedown", (event) => {
+  const square = squareFromEvent(event);
+  if (!square) return;
+  const key = squareKey(square.row, square.col);
+  if (!battleState.placements[key] || armedEntityId) return;
+  dragFromKey = key;
+  dragStartPos = { x: event.clientX, y: event.clientY };
+  dragMoved = false;
+});
+
+canvas.addEventListener("mousemove", (event) => {
+  if (!dragFromKey) return;
+  if (!dragMoved) {
+    const dx = event.clientX - dragStartPos.x;
+    const dy = event.clientY - dragStartPos.y;
+    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    dragMoved = true;
+    canvas.style.cursor = "grabbing";
+  }
+  const square = squareFromEvent(event);
+  dragHoverKey = square ? squareKey(square.row, square.col) : null;
+  drawGrid();
+});
+
+window.addEventListener("mouseup", (event) => {
+  if (!dragFromKey) return;
+  if (dragMoved) {
+    const square = squareFromEvent(event);
+    const targetKey = square ? squareKey(square.row, square.col) : null;
+    if (targetKey && targetKey !== dragFromKey && !battleState.placements[targetKey]) {
+      moveToken(dragFromKey, targetKey);
+    }
+  }
+  dragFromKey = null;
+  dragHoverKey = null;
+  canvas.style.cursor = "";
+  render();
+  // Cleared a tick after mouseup, not immediately: the browser still
+  // fires "click" on canvas right after this if the drag started and
+  // ended on it, and that handler needs to see dragMoved as true to
+  // suppress itself. If mouseup happened outside the canvas (no click
+  // will ever fire to do that reset), this timeout is what prevents
+  // dragMoved from staying stuck true and swallowing the next real click.
+  setTimeout(() => { dragMoved = false; }, 0);
+});
+
 canvas.addEventListener("click", (event) => {
+  if (dragMoved) {
+    dragMoved = false;
+    return;
+  }
+
   const square = squareFromEvent(event);
   if (!square) return;
   const key = squareKey(square.row, square.col);

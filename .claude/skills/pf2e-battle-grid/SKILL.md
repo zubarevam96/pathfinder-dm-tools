@@ -66,28 +66,29 @@ Stealth to avoid detection:
 
 ## Feature roadmap for `static/battle-helper/`
 
-Current state: a plain square-grid `<canvas>`, click-to-select a square,
-nothing else. Per the project owner's stated end goal ("work through a
-full battle from begin to end"), likely future layers, roughly in the
-order they'd naturally get built:
+Per the project owner's stated end goal ("work through a full battle from
+begin to end"), likely future layers, roughly in the order they'd
+naturally get built (see `battle-helper-architecture` for how each
+shipped item is actually implemented — this list is the rules groundwork,
+not the code):
 
-1. **Tokens** — place a character/monster on a square, sized per the table
-   above (a Large creature's token should occupy and select as a 2×2
-   block, not one square).
-2. **Distance/movement** — given the diagonal 5/10 rule above, a "how far
-   is square A from square B" or "can this token reach that square with
-   its Speed" helper is the natural next feature, and must implement the
-   alternating diagonal count correctly, not simple Chebyshev/Euclidean
-   distance.
-3. **Initiative tracker** — turn order list, tied to placed tokens.
-4. **HP/condition tracking per token** — likely reusing this repo's
-   existing character data (`store.characters`) so a token can link back
-   to a full character sheet already in the app instead of being a bare
-   placeholder.
-5. **Reach/flanking helpers** — highlight threatened squares from a
-   token's reach, flag flanking per the rule above.
-6. **Terrain/cover markers** — mark squares as difficult terrain or
-   cover-granting, feeding into the AC/Reflex bonuses above.
-
-None of this is built yet — this list exists so future work has the rules
-groundwork already laid out instead of re-deriving it each time.
+1. **Tokens** — ✅ shipped. Characters and name-only custom objects can be
+   placed on the grid, with customizable shape/letters/colors. Still
+   single-square only — a Large+ creature's token occupying a 2×2+ block
+   per the size table above isn't built yet.
+2. **Distance/movement** — ✅ shipped (drag-and-drop a token to a new
+   square). Uses the real alternating-diagonal rule above via
+   `pf2eDistanceFeet(rowDelta, colDelta)`, not Chebyshev/Euclidean
+   distance. Not yet built: a "can this token reach that square with its
+   Speed" reachability check/highlight — currently any empty square is a
+   valid drop target regardless of distance or the mover's Speed.
+3. **Initiative tracker** — ✅ shipped: turn order list tied to placed
+   tokens, drag-reorderable, with an optional initiative number per
+   entity.
+4. **HP/condition tracking per token** — ✅ HP/temp HP shipped, reusing
+   this repo's character data (`store.characters`) live rather than a
+   snapshot. Conditions (frightened, prone, etc.) not yet built.
+5. **Reach/flanking helpers** — not built. Highlight threatened squares
+   from a token's reach, flag flanking per the rule above.
+6. **Terrain/cover markers** — not built. Mark squares as difficult
+   terrain or cover-granting, feeding into the AC/Reflex bonuses above.

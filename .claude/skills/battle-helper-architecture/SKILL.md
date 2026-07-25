@@ -76,7 +76,11 @@ Setting initiative and drag-reordering the initiative track (see
 "Initiative track" below) are `dispatch("set-initiative", ...)` and
 `dispatch("reorder-initiative", ...)` respectively — both real,
 undoable battle-state changes, not UI staging, even though dragging feels
-like a UI interaction.
+like a UI interaction. Changing a token's shape, letters, or colors (see
+"Token appearance" below) is `dispatch("update-appearance", ...)` via the
+shared `updateAppearance()` helper — one dispatch per committed change,
+not one per pixel of a dragged color-wheel value (see that section for why
+`change`, not `input`, is what triggers it).
 
 **What does *not* go through `dispatch()`:** anything that only changes
 *what the UI is showing*, not the actual battle — selecting a square to
@@ -157,12 +161,14 @@ regions:
     both clusters are narrower than the row, the empty center is
     intentional, not a bug — then the remaining checks (Fortitude/Reflex/Will/
     Perception/Speed) in a grid below.
-  - **Bottom-right**: reserved, currently just a placeholder
-    (`.battle-box-bottom-right`) — no assigned purpose yet, don't
-    repurpose it without checking with the project owner first. (A
-    "set initiative" panel briefly lived here; it was moved to a dialog —
-    see "Initiative track" below — specifically so this box could go back
-    to being unclaimed.)
+  - **Bottom-right**: the token appearance panel
+    (`#battle-appearance-panel`, `renderAppearancePanel()`) — shape,
+    letters, text color, and shape color for the selected entity's token
+    on the map. Mirrors the same `selectedSquareKey` as the stat panel
+    next to it. See "Token appearance" below. (A "set initiative" panel
+    briefly lived here before being moved to a dialog instead — this box
+    has now been claimed for something else; if it needs to change again,
+    check with the project owner first, same as any assigned box.)
 
 Because the sidebars are full-height flex children of the same row as the
 center column, they naturally stretch to match its height (map + bottom
@@ -437,6 +443,18 @@ carries the same attribute (for its own click handler, so it can look up
 which entity it belongs to), and the unscoped selector would wrongly
 attach `dragstart`/`dragover`/etc. handlers to the button too.
 
+**Selection is shared both ways between the map and the track**, and it's
+still UI-only (`selectedSquareKey`), not a `dispatch()` — same reasoning
+as clicking a square directly. Clicking a row (outside the value button,
+which `stopPropagation()`s) looks up that entity's square via
+`squareKeyForEntity(entityId)` — the reverse of `placements[squareKey] =
+entityId` — and sets `selectedSquareKey` to it, same as a canvas click.
+The other direction needs no new code: `renderInitiative()` already reads
+`selectedSquareKey` on every `render()` to compute
+`battleState.placements[selectedSquareKey]` and adds `.selected` to that
+entity's row, so selecting a square on the grid highlights the matching
+row for free, the same render pass that already updates the stat panel.
+
 `initiativeOrderIds()` reads `initiativeOrder` reconciled against current
 `placements` — drops any id no longer placed (defensive; `remove-token`
 should already have pruned it) and appends any placed id missing from the
@@ -445,3 +463,107 @@ This is a **read-time-only** fixup: it returns a corrected list without
 writing it back to `battleState`, the same pattern `currentHp()`/
 `currentTempHp()` use for defaulting missing tracked values — reconcile on
 read, don't mutate outside `dispatch()`.
+
+## Token appearance
+
+`battleState.appearance` (`{ id: { shape, letters, textColor,
+shapeColor } }`) controls how an entity's token is drawn on the canvas —
+all four fields are optional per entity, and `getAppearance(entityId,
+name)` is the one place that merges a stored override with computed
+defaults (`currentHp()`'s "default unless tracked" pattern again):
+`shape` defaults to `"circle"`; `letters` defaults to
+`defaultInitials(name)` — one letter from each of the first two words, or
+the first two letters if there's only one word (`"Tumb Kamneshit"` →
+`"TK"`, `"Goblin"` → `"GO"`); `textColor`/`shapeColor` default to the
+live `--accent-contrast`/`--accent` theme colors (already hex, per
+`style.css`), so an uncustomized token keeps following light/dark mode —
+only a token with an explicit override breaks from the theme.
+
+**Unlike HP/temp-HP/initiative, appearance is *not* reset on
+`remove-token`** — it's deleted only by `delete-custom-object` (a
+permanent identity, not battle progress, going away with the object it
+belonged to). A character or custom object pulled off the field and
+placed again later keeps looking the way it was set up, the same way its
+name does.
+
+`renderAppearancePanel()` (the bottom-right box) renders four controls for
+whatever's selected — a shape button row (`TOKEN_SHAPES`, `.active` on the
+current one), a 2-character letters input, and two `<input type="color">`
+pickers — all funneled through one `updateAppearance(entityId, patch,
+label)` helper that does a single `dispatch("update-appearance", ...)`
+per change. Color/letter inputs listen for `change`, not `input` — `input`
+fires continuously while dragging a color wheel or typing, which would
+flood the undo log with one event per intermediate value; `change` fires
+once, on the committed result. Clearing the letters input back to empty
+calls `updateAppearance` with `letters: undefined`, which
+`updateAppearance` treats specially: `undefined` **deletes** that key from
+the stored override (reverting to the computed default) rather than being
+stored literally — a real `undefined` value would still work today
+(`??` treats `null`/`undefined` alike), but would silently vanish anyway
+the next time `persistBattleStore()` round-trips through `JSON.stringify`
+(which drops `undefined`-valued keys), so deleting explicitly keeps
+in-memory state consistent with what's actually persisted, rather than
+relying on that JSON quirk.
+
+The canvas drawing side is `traceTokenShape(shape, cx, cy, radius)` —
+traces one of the four shapes into the current path via `ctx.beginPath()`
++ moves/lines/`ctx.arc()`, but does **not** fill; the caller sets
+`ctx.fillStyle` to `appearance.shapeColor` first, then calls `ctx.fill()`,
+so the same tracing function works regardless of color. Keeping shape
+tracing and coloring as separate steps (rather than baking a color into
+`traceTokenShape` itself) is what let `drawGrid()`'s per-token loop stay a
+single small block instead of a shape/color cross-product of draw calls.
+
+## Moving a token by drag-and-drop
+
+The map is a single `<canvas>` — there's no per-square element to hang
+native `draggable="true"` on the way the initiative track does, so
+dragging here is hand-rolled from `mousedown`/`mousemove`/`mouseup`
+instead of the HTML5 DnD API. The actual move (`moveToken()`) is a
+`dispatch("move-token", ...)` like everything else in Rule 1; everything
+before the drop — arming, tracking the hovered square — is UI-only
+(`dragFromKey`, `dragHoverKey`, `dragStartPos`, `dragMoved`), the same
+split as `armedEntityId`/`selectedSquareKey`.
+
+**Distinguishing a drag from a plain click on the same element** is the
+subtle part, since canvas is one element for both gestures:
+`mousedown` only *arms* a potential drag (records the origin square and
+start position) if that square is occupied and no roster entity is
+currently armed for placement — it does not yet treat this as a drag.
+`mousemove` only flips `dragMoved` to `true` once the cursor has moved
+past `DRAG_THRESHOLD` (4px) from the start position; below that, it's
+still just a click in progress. The `click` handler checks `dragMoved`
+first and bails out (after resetting it) if a real drag just happened —
+otherwise a completed drag would *also* trigger the click handler's
+select/place logic right after, since `mouseup` and `click` both fire on
+the same target in sequence for a normal press-drag-release. Because
+`mouseup` is attached to `window`, not the canvas, a drag that ends
+outside the grid still resolves cleanly (cancels, since there's no valid
+square) instead of leaving `dragFromKey` stuck set — but that means
+`click` might never fire on canvas to do the `dragMoved` reset, so
+`mouseup` also schedules a `setTimeout(() => { dragMoved = false; }, 0)`
+as a backstop, timed to run after any same-target click already had its
+chance to see `dragMoved === true`.
+
+`moveToken(fromKey, toKey)` computes distance via `pf2eDistanceFeet()`
+(alternating-diagonal, not straight-line — see the pf2e-battle-grid
+skill) and logs it alongside both squares' coordinates in one line (e.g.
+`"Moved Grog 15 ft, from (3, 2) to (5, 3)"`, coordinates as `(col, row)`)
+so the log is useful for tracking actual movement spent, not just that
+*something* moved. A drop is only valid on a different, currently-empty
+square — `mouseup` checks this before calling `moveToken()` — and
+`selectedSquareKey` follows the moved token to its new square afterward
+(plain assignment, not `dispatch()`, same as any other selection change),
+so the stat/appearance panels keep showing the entity you just moved
+instead of an now-empty square.
+
+While a drag is in progress, `drawGrid()` reads the same `dragFromKey`/
+`dragHoverKey` — dims the origin square and tints the hovered square green
+(empty, valid drop) or red (occupied, invalid) — drawn *before* the token
+loop so the dragged token still visibly sits at its original square for
+the whole drag; it only actually jumps to the new square once the drop
+commits and a fresh `render()` runs. `mousemove` calls `drawGrid()`
+directly rather than the full `render()` on every pixel of movement —
+nothing but the drag-hover visuals changed, so re-rendering the roster,
+initiative track, stat panel, etc. on every mouse move would be wasted
+work.

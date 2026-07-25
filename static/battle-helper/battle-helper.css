@@ -214,6 +214,14 @@
   background: var(--accent-soft);
 }
 
+/* Mirrors the map's selected-square highlight — selection is shared both
+   ways between the grid and the initiative track, see renderInitiative()'s
+   comment. */
+.battle-initiative li.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .battle-initiative-name {
   min-width: 0;
   overflow: hidden;
@@ -651,4 +659,65 @@
 
 .hp-action.success:hover {
   filter: brightness(1.1);
+}
+
+/* --- Token appearance panel (bottom-right box) --- */
+
+.battle-appearance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.battle-appearance-label {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.battle-appearance-shapes {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.battle-shape-btn {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.battle-shape-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+/* Re-declares background/border-color on hover — without this the global
+   button:hover rule's accent-soft tint would replace this solid accent
+   fill, the same washed-out-swap bug .battle-remove-btn had (see
+   "Overriding the global button:hover" in the battle-helper-architecture
+   skill). */
+.battle-shape-btn.active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  filter: brightness(1.1);
+}
+
+.battle-appearance-row input[type="text"] {
+  width: 4rem;
+  text-align: center;
+  text-transform: uppercase;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+.battle-appearance-row input[type="color"] {
+  width: 2.2rem;
+  height: 2rem;
+  padding: 0.15rem;
+  cursor: pointer;
 }
