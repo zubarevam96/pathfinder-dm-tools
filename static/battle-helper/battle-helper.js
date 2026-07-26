@@ -216,6 +216,7 @@ let dragFromKey = null; // square a token drag started from, or null
 let dragHoverKey = null; // square currently under the cursor mid-drag
 let dragStartPos = null; // {x,y} client coords at mousedown — distinguishes a real drag from a simple click
 let dragMoved = false; // true once mouse movement crossed DRAG_THRESHOLD — suppresses the click handler that would otherwise also fire
+let dragPath = null; // shortest route from dragFromKey to dragHoverKey, or null if unreachable
 const DRAG_THRESHOLD = 4; // px
 
 // Panning: grabbing the map by an EMPTY square and dragging the view.
@@ -420,6 +421,211 @@ function pf2eDistanceFeet(rowDelta, colDelta) {
     feet += i % 2 === 0 ? 5 : 10;
   }
   return feet;
+}
+
+// ---------------------------------------------------------------------------
+// Pathfinding: the shortest walkable route between two squares, respecting
+// walls and PF2e's alternating diagonal cost.
+
+// The eight steps a token can take, clockwise from N. The index matters:
+// the opposite of direction i is (i + 4) % 8, which is how an arriving
+// step becomes "which side did we enter this cell by".
+const DIRECTIONS = [
+  { dr: -1, dc: 0 },  // 0 N
+  { dr: -1, dc: 1 },  // 1 NE
+  { dr: 0, dc: 1 },   // 2 E
+  { dr: 1, dc: 1 },   // 3 SE
+  { dr: 1, dc: 0 },   // 4 S
+  { dr: 1, dc: -1 },  // 5 SW
+  { dr: 0, dc: -1 },  // 6 W
+  { dr: -1, dc: -1 }, // 7 NW
+];
+const DIR_NONE = 8; // the starting square, entered from nowhere
+
+function inGrid(row, col, rows, cols) {
+  return row >= 0 && row < rows && col >= 0 && col < cols;
+}
+
+// The edge an orthogonal step crosses. Diagonal steps cross no single
+// edge — they pass through a corner — so they're handled separately.
+function edgeKeyBetween(row, col, dr, dc) {
+  if (dr === -1 && dc === 0) return wallKey("h", row, col);
+  if (dr === 1 && dc === 0) return wallKey("h", row + 1, col);
+  if (dr === 0 && dc === -1) return wallKey("v", row, col);
+  if (dr === 0 && dc === 1) return wallKey("v", row, col + 1);
+  return null;
+}
+
+// Doors are openings, so only a full wall blocks. If a closed-door state
+// is ever wanted, this is the one place that decides it.
+function edgeBlocks(walls, row, col, dr, dc) {
+  const key = edgeKeyBetween(row, col, dr, dc);
+  return key ? walls[key] === EDGE_WALL : false;
+}
+
+// Which side of a cell's diagonal wall a direction lies on. 0 means "on
+// the wall's own line" — its two end corners — which blocks nothing.
+// "b" is "\" from the NW corner to the SE corner, separating N/NE/E from
+// S/SW/W; "f" is "/" from NE to SW, separating N/NW/W from E/SE/S.
+function diagonalSide(type, dir) {
+  if (type === "b") {
+    if (dir === 0 || dir === 1 || dir === 2) return 1;
+    if (dir === 4 || dir === 5 || dir === 6) return 2;
+    return 0;
+  }
+  if (dir === 0 || dir === 7 || dir === 6) return 1;
+  if (dir === 2 || dir === 3 || dir === 4) return 2;
+  return 0;
+}
+
+// A diagonal wall inside a cell blocks passing THROUGH it from one side to
+// the other — entering from the north and leaving west, say. It never
+// blocks merely entering or leaving, so it can't be a property of the cell
+// alone: it needs the direction we arrived by, which is why that's carried
+// in the search state.
+function diagonalBlocksTransit(walls, row, col, entryDir, exitDir) {
+  if (entryDir === DIR_NONE) return false;
+  for (const type of ["b", "f"]) {
+    if (walls[wallKey(type, row, col)] !== EDGE_WALL) continue;
+    const from = diagonalSide(type, entryDir);
+    const to = diagonalSide(type, exitDir);
+    if (from !== 0 && to !== 0 && from !== to) return true;
+  }
+  return false;
+}
+
+// A diagonal step is allowed as long as at least one of the two
+// right-angle routes around the corner is open. That's the lenient rule:
+// a wall running alongside you doesn't stop you slipping past it
+// diagonally — only a wall on both ways round does.
+function diagonalStepOpen(walls, row, col, dr, dc, rows, cols) {
+  const viaCol = !edgeBlocks(walls, row, col, 0, dc)
+    && inGrid(row, col + dc, rows, cols)
+    && !edgeBlocks(walls, row, col + dc, dr, 0);
+  if (viaCol) return true;
+  return !edgeBlocks(walls, row, col, dr, 0)
+    && inGrid(row + dr, col, rows, cols)
+    && !edgeBlocks(walls, row + dr, col, 0, dc);
+}
+
+// Shortest walkable route from one square to another, as
+// [{ row, col, feet }] with feet cumulative from the start (0 on the first
+// entry), or null if the target can't be reached.
+//
+// Dijkstra rather than plain BFS because steps aren't equal cost, and the
+// state is (cell, diagonal parity, entry direction) rather than just the
+// cell: PF2e's diagonals alternate 5/10 ft so the cost of the next one
+// depends on how many the route has already spent, and a diagonal wall's
+// blocking depends on which side the route entered by. Tokens don't block
+// — you can move through allies in PF2e, and the drop target is checked
+// separately.
+function findPath(fromKey, toKey) {
+  const rows = gridRows();
+  const cols = gridCols();
+  const walls = battleState.walls ?? {};
+  const [fromRow, fromCol] = fromKey.split(",").map(Number);
+  const [toRow, toCol] = toKey.split(",").map(Number);
+  if (!inGrid(fromRow, fromCol, rows, cols) || !inGrid(toRow, toCol, rows, cols)) return null;
+  if (fromRow === toRow && fromCol === toCol) return [{ row: fromRow, col: fromCol, feet: 0 }];
+
+  const stateId = (row, col, parity, entryDir) => ((row * cols + col) * 2 + parity) * 9 + entryDir;
+  const dist = new Int32Array(rows * cols * 2 * 9).fill(-1);
+  const prev = new Int32Array(dist.length).fill(-1);
+
+  // Binary heap of [cost, stateId]; entries are never decreased in place,
+  // stale ones are skipped on pop.
+  const heap = [];
+  const push = (cost, id) => {
+    heap.push([cost, id]);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (heap[parent][0] <= heap[i][0]) break;
+      [heap[parent], heap[i]] = [heap[i], heap[parent]];
+      i = parent;
+    }
+  };
+  const pop = () => {
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      let i = 0;
+      for (;;) {
+        const left = i * 2 + 1;
+        const right = left + 1;
+        let smallest = i;
+        if (left < heap.length && heap[left][0] < heap[smallest][0]) smallest = left;
+        if (right < heap.length && heap[right][0] < heap[smallest][0]) smallest = right;
+        if (smallest === i) break;
+        [heap[smallest], heap[i]] = [heap[i], heap[smallest]];
+        i = smallest;
+      }
+    }
+    return top;
+  };
+
+  const start = stateId(fromRow, fromCol, 0, DIR_NONE);
+  dist[start] = 0;
+  push(0, start);
+
+  let goal = -1;
+  while (heap.length) {
+    const [cost, id] = pop();
+    if (cost > dist[id]) continue; // superseded by a cheaper route
+
+    const entryDir = id % 9;
+    const withoutDir = (id - entryDir) / 9;
+    const parity = withoutDir % 2;
+    const cell = (withoutDir - parity) / 2;
+    const row = Math.floor(cell / cols);
+    const col = cell % cols;
+
+    // Dijkstra pops in non-decreasing cost, so the first arrival is best.
+    if (row === toRow && col === toCol) {
+      goal = id;
+      break;
+    }
+
+    for (let d = 0; d < 8; d++) {
+      const { dr, dc } = DIRECTIONS[d];
+      const nextRow = row + dr;
+      const nextCol = col + dc;
+      if (!inGrid(nextRow, nextCol, rows, cols)) continue;
+      if (diagonalBlocksTransit(walls, row, col, entryDir, d)) continue;
+
+      const diagonal = dr !== 0 && dc !== 0;
+      if (diagonal) {
+        if (!diagonalStepOpen(walls, row, col, dr, dc, rows, cols)) continue;
+      } else if (edgeBlocks(walls, row, col, dr, dc)) {
+        continue;
+      }
+
+      // Every other diagonal costs 10 ft — the same alternation
+      // pf2eDistanceFeet() applies, tracked here as parity because the
+      // route's shape decides it.
+      const step = diagonal ? (parity === 0 ? 5 : 10) : 5;
+      const nextId = stateId(nextRow, nextCol, diagonal ? 1 - parity : parity, (d + 4) % 8);
+      const nextCost = cost + step;
+      if (dist[nextId] === -1 || nextCost < dist[nextId]) {
+        dist[nextId] = nextCost;
+        prev[nextId] = id;
+        push(nextCost, nextId);
+      }
+    }
+  }
+
+  if (goal === -1) return null;
+
+  const path = [];
+  for (let id = goal; id !== -1; id = prev[id]) {
+    const entryDir = id % 9;
+    const withoutDir = (id - entryDir) / 9;
+    const parity = withoutDir % 2;
+    const cell = (withoutDir - parity) / 2;
+    path.push({ row: Math.floor(cell / cols), col: cell % cols, feet: dist[id] });
+  }
+  return path.reverse();
 }
 
 // The initiative track's order is manual (drag-and-drop), not derived from
@@ -667,6 +873,44 @@ function drawGrid() {
     // don't inherit the wall/door stroke settings.
     ctx.lineCap = "butt";
     ctx.lineWidth = 1;
+  }
+
+  // The route a dragged token would take, drawn under the tokens so the
+  // one being dragged still reads clearly at its origin square. Each step
+  // is labelled with the distance spent getting there, so the DM can see
+  // the cost of the move before committing to it.
+  if (dragPath && dragPath.length > 1) {
+    ctx.strokeStyle = cssVar("--accent");
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    dragPath.forEach((step, i) => {
+      const x = step.col * SQUARE_SIZE + SQUARE_SIZE / 2;
+      const y = step.row * SQUARE_SIZE + SQUARE_SIZE / 2;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // Reset immediately: the dash pattern is context state and would
+    // otherwise leak into the token and selection strokes below.
+    ctx.setLineDash([]);
+
+    ctx.font = "bold 10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    for (let i = 1; i < dragPath.length; i++) {
+      const step = dragPath[i];
+      const x = step.col * SQUARE_SIZE + SQUARE_SIZE / 2;
+      const y = step.row * SQUARE_SIZE + SQUARE_SIZE / 2;
+      const text = `${step.feet}ft`;
+      // Knocked out of the dashed line behind it, or the two overlap into
+      // something unreadable at small zoom.
+      const textWidth = ctx.measureText(text).width;
+      ctx.fillStyle = cssVar("--surface");
+      ctx.fillRect(x - textWidth / 2 - 2, y - 7, textWidth + 4, 14);
+      ctx.fillStyle = cssVar("--danger");
+      ctx.fillText(text, x, y);
+    }
   }
 
   for (const [key, entityId] of Object.entries(battleState.placements)) {
@@ -1106,6 +1350,7 @@ function setActiveBattle(id) {
   raisedShieldIds = new Set();
   dragFromKey = null;
   dragHoverKey = null;
+  dragPath = null;
   dragMoved = false;
 }
 
@@ -1451,11 +1696,18 @@ function moveToken(fromKey, toKey) {
 
   const [fromRow, fromCol] = fromKey.split(",").map(Number);
   const [toRow, toCol] = toKey.split(",").map(Number);
-  const feet = pf2eDistanceFeet(toRow - fromRow, toCol - fromCol);
+  // The distance actually walked, routed around walls, rather than the
+  // straight-line figure — that's the number a DM is spending movement on.
+  // With no route at all (fully walled off) the move is still allowed, in
+  // case the DM is placing something that ignores walls, but the log says
+  // so rather than quietly reporting a distance nothing could travel.
+  const path = findPath(fromKey, toKey);
+  const feet = path ? path[path.length - 1].feet : pf2eDistanceFeet(toRow - fromRow, toCol - fromCol);
+  const note = path ? "" : " (no walkable route)";
 
   dispatch(
     "move-token",
-    `Moved ${entity.name} ${feet} ft, from (${fromCol}, ${fromRow}) to (${toCol}, ${toRow})`,
+    `Moved ${entity.name} ${feet} ft${note}, from (${fromCol}, ${fromRow}) to (${toCol}, ${toRow})`,
     (state) => {
       delete state.placements[fromKey];
       state.placements[toKey] = entityId;
@@ -1959,7 +2211,13 @@ canvas.addEventListener("mousemove", (event) => {
     canvas.style.cursor = "grabbing";
   }
   const square = squareFromEvent(event);
-  dragHoverKey = square ? squareKey(square.row, square.col) : null;
+  const nextHover = square ? squareKey(square.row, square.col) : null;
+  if (nextHover !== dragHoverKey) {
+    dragHoverKey = nextHover;
+    // Only on an actual square change — a full search on every mouse move
+    // would be wasted work, and the route can't change without it.
+    dragPath = dragHoverKey ? findPath(dragFromKey, dragHoverKey) : null;
+  }
   drawGrid();
 });
 
@@ -1974,6 +2232,7 @@ window.addEventListener("mouseup", (event) => {
   }
   dragFromKey = null;
   dragHoverKey = null;
+  dragPath = null;
   canvas.style.cursor = "";
   render();
   // Cleared a tick after mouseup, not immediately: the browser still
