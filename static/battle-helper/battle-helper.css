@@ -41,6 +41,135 @@
   padding-bottom: 0;
 }
 
+/* Browser-style tab strip: one tab per battle, each a fully independent
+   encounter with its own state and undo history. This is a new top-level
+   region rather than a .battle-box — the "boxing" layout below it is
+   per-battle, and this strip is what scopes all of it. flex-shrink: 0
+   keeps it at its natural height inside .battle-layout's fixed 100vh, so
+   the map area absorbs the space it takes rather than the page scrolling.
+   The active tab is filled with --bg (what .battle-body sits on) so it
+   reads as the one connected to the content below. It deliberately does
+   NOT use the usual -1px bottom margin to cover the strip's border: this
+   container scrolls horizontally when there are more tabs than fit, and
+   overflow-x clips anything hanging past the content box, so the overlap
+   would be cut off exactly where it matters. overflow-y is pinned to
+   hidden for the same reason in reverse — with only overflow-x set, the
+   y axis computes to auto and any sub-pixel overshoot raises a stray
+   vertical scrollbar on a strip that should never scroll vertically. */
+.battle-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  padding: 0.3rem 1.5rem 0;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.battle-tab-list {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.battle-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem 0.4rem 0.75rem;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.battle-tab:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.battle-tab.active {
+  background: var(--bg);
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.battle-tab-name {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.battle-tab-close,
+.battle-tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.battle-tab-close {
+  position: relative;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  /* Glyph hidden; the cross is drawn by the shared ::before/::after rule
+     further down, alongside .battle-remove-btn's. */
+  font-size: 0;
+  --cross-size: 0.44rem;
+  --cross-thickness: 1.5px;
+}
+
+/* Re-declares background AND border-color, not just the colors being
+   changed: style.css's global button:hover sets both, and the cascade
+   resolves per property — leaving either out lets the accent tint through
+   on top of this button's own look. See "Overriding the global
+   button:hover" in the battle-helper-architecture skill. */
+.battle-tab-close:hover {
+  background: var(--danger);
+  border-color: transparent;
+  color: white;
+}
+
+.battle-tab-add {
+  width: 1.6rem;
+  height: 1.6rem;
+  margin-bottom: 0.2rem;
+  border-radius: 6px;
+  font-size: 1.1rem;
+}
+
+.battle-tab-add:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--text);
+}
+
+.battle-rename-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.battle-rename-form input {
+  flex: 1;
+  min-width: 0;
+}
+
 .battle-body {
   flex: 1;
   min-height: 0;
@@ -185,11 +314,19 @@
 
 /* Reuses .battle-remove-btn's look (small red circle) but smaller, to fit
    a roster row rather than the stat panel header. Only rendered for
-   custom objects — see renderRoster()'s comment. */
-.battle-roster-delete {
+   custom objects — see renderRoster()'s comment.
+
+   Deliberately qualified with .battle-remove-btn rather than left as a
+   bare .battle-roster-delete: this element carries both classes, and
+   .battle-remove-btn re-declares width/height LATER in this file at the
+   same specificity (0,1,0), so plain source order made it win and these
+   overrides silently did nothing. Two classes (0,2,0) win regardless of
+   where either rule sits. */
+.battle-remove-btn.battle-roster-delete {
   width: 1.2rem;
   height: 1.2rem;
-  font-size: 0.8rem;
+  --cross-size: 0.46rem;
+  --cross-thickness: 1.5px;
   flex-shrink: 0;
 }
 
@@ -307,6 +444,15 @@
 .battle-log-actions {
   display: flex;
   gap: 0.35rem;
+}
+
+/* Icon-only buttons: the arrow is the entire control now that the "Undo"/
+   "Redo" words are gone, so it gets more size than .subtle's 0.8rem body
+   text would give it. The meaning lives in title + aria-label. */
+.battle-log-actions button {
+  padding: 0.2rem 0.4rem;
+  font-size: 1.05rem;
+  line-height: 1;
 }
 
 .battle-log-actions button[hidden] {
@@ -525,6 +671,7 @@
 }
 
 .battle-remove-btn {
+  position: relative;
   width: 1.5rem;
   height: 1.5rem;
   padding: 0;
@@ -535,9 +682,13 @@
   border-radius: 50%;
   background: var(--danger);
   color: white;
-  font-size: 1rem;
+  /* 0, not a real size: the &times; glyph is hidden and the cross is drawn
+     geometrically instead — see the shared ::before/::after rule below. */
+  font-size: 0;
   line-height: 1;
   cursor: pointer;
+  --cross-size: 0.58rem;
+  --cross-thickness: 2px;
 }
 
 /* Re-asserts the solid background: without it, the global button:hover
@@ -547,6 +698,43 @@
 .battle-remove-btn:hover {
   background: var(--danger);
   filter: brightness(1.1);
+}
+
+/* Draws the × from two rotated bars rather than rendering the &times;
+   character. U+00D7 is positioned on the font's math axis — vertically
+   centred on the digits/x-height, not on the line box — so flex-centring
+   the glyph still leaves it sitting visibly high in a circular button,
+   by an amount that varies with whichever font the UA picks. Two absolutely
+   positioned bars translated by exactly -50%/-50% are concentric with the
+   circle by construction, at any button size and in any font.
+
+   currentColor (not a literal) is what makes this work for both buttons
+   from one rule: the red remove button paints white bars, the tab close
+   button paints --muted bars that turn white on its danger-red hover,
+   with no extra hover rule needed. Size/thickness come from per-button
+   custom properties so the same geometry scales to each one. */
+.battle-remove-btn::before,
+.battle-remove-btn::after,
+.battle-tab-close::before,
+.battle-tab-close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--cross-size);
+  height: var(--cross-thickness);
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.battle-remove-btn::before,
+.battle-tab-close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.battle-remove-btn::after,
+.battle-tab-close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 .battle-stat-grid {

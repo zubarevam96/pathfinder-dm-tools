@@ -33,6 +33,17 @@ const addObjectForm = document.getElementById("battle-add-object-form");
 const addObjectNameInput = document.getElementById("battle-add-object-name");
 const logClearBtn = document.getElementById("battle-log-clear");
 
+const tabList = document.getElementById("battle-tab-list");
+const tabAddBtn = document.getElementById("battle-tab-add");
+const renameDialog = document.getElementById("battle-rename-dialog");
+const renameForm = document.getElementById("battle-rename-form");
+const renameInput = document.getElementById("battle-rename-input");
+const renameCloseBtn = document.getElementById("battle-rename-close");
+const deleteBattleDialog = document.getElementById("battle-delete-dialog");
+const deleteBattleMessage = document.getElementById("battle-delete-message");
+const deleteBattleCancelBtn = document.getElementById("battle-delete-cancel");
+const deleteBattleConfirmBtn = document.getElementById("battle-delete-confirm");
+
 const COLS = 24;
 const ROWS = 16;
 const SQUARE_SIZE = 40; // px — each square is 5 ft per PF2e's grid convention
@@ -45,7 +56,30 @@ canvas.height = ROWS * SQUARE_SIZE;
 // Everything else below (selectedSquareKey, armedEntityId) is UI-only —
 // see the battle-helper-architecture skill for why that split matters.
 
-let battleState = { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {} };
+function emptyBattleState() {
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {} };
+}
+
+// Multiple battles, browser-tab style. Each entry is a fully independent
+// encounter — its own placements/HP/custom objects AND its own event log
+// and undo cursor, so undoing in one battle can never reach into another.
+// battleState/eventLog/cursor below stay exactly what they always were:
+// the *active* battle's live values, which is why dispatch(), undo(),
+// redo() and every render function needed no changes for this feature.
+// persistBattleStore() is what syncs those live values back into the
+// active entry before writing.
+//
+// Creating, switching, renaming and closing a battle are deliberately NOT
+// dispatch()ed, even though they change what's on screen: dispatch()
+// snapshots battleState only, and undo/redo work by walking a single
+// battle's eventLog — a tab operation sits *above* that layer, so there's
+// no coherent way for a per-battle undo stack to undo it. This is the same
+// reasoning that keeps the log's own "Clear" button out of dispatch()
+// (see the battle-helper-architecture skill, Rule 2).
+let battles = []; // [{ id, name, state, eventLog, cursor }]
+let activeBattleId = null;
+
+let battleState = emptyBattleState();
 // hp/tempHp/initiative: entity id -> value; customObjects: id -> { name };
 // initiativeOrder: entity ids in the order the initiative track displays
 // them — manually reorderable by drag-and-drop, independent of the
@@ -79,21 +113,55 @@ const DRAG_THRESHOLD = 4; // px
 // every selection change.
 let raisedShieldIds = new Set();
 
-function loadBattleStore() {
-  try {
-    const raw = JSON.parse(localStorage.getItem(BATTLE_STORE_KEY)) ?? {};
-    return {
-      state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, ...raw.state },
-      eventLog: raw.eventLog ?? [],
-      cursor: raw.cursor ?? -1,
-    };
-  } catch {
-    return { state: { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {} }, eventLog: [], cursor: -1 };
-  }
+function createBattle(name) {
+  return { id: `battle-${crypto.randomUUID()}`, name, state: emptyBattleState(), eventLog: [], cursor: -1 };
 }
 
+// Reads the store into a { battles, activeBattleId } shape, normalizing
+// whatever's there. Saves written before this feature existed were a
+// single battle (`{ state, eventLog, cursor }` at the top level) — those
+// get wrapped into the first tab rather than discarded, so an in-progress
+// encounter survives the upgrade. There is always at least one battle.
+function loadBattleStore() {
+  let raw;
+  try {
+    raw = JSON.parse(localStorage.getItem(BATTLE_STORE_KEY)) ?? {};
+  } catch {
+    raw = {};
+  }
+
+  const rawBattles = Array.isArray(raw.battles)
+    ? raw.battles
+    : [{ name: "Battle 1", state: raw.state, eventLog: raw.eventLog, cursor: raw.cursor }];
+
+  const battles = rawBattles.filter(Boolean).map((b, i) => ({
+    id: b.id ?? `battle-${crypto.randomUUID()}`,
+    name: b.name ?? `Battle ${i + 1}`,
+    // Spread over a fresh empty state so a battle saved before a given
+    // field existed (e.g. appearance) still gets it — same defensive
+    // merge the single-battle version did.
+    state: { ...emptyBattleState(), ...b.state },
+    eventLog: b.eventLog ?? [],
+    cursor: b.cursor ?? -1,
+  }));
+
+  if (!battles.length) battles.push(createBattle("Battle 1"));
+
+  const active = battles.some((b) => b.id === raw.activeBattleId) ? raw.activeBattleId : battles[0].id;
+  return { battles, activeBattleId: active };
+}
+
+// Syncs the live active-battle values back into their entry before
+// writing, so every existing persistBattleStore() call site (dispatch,
+// undo, redo, clear log) keeps working untouched.
 function persistBattleStore() {
-  localStorage.setItem(BATTLE_STORE_KEY, JSON.stringify({ state: battleState, eventLog, cursor }));
+  const active = battles.find((b) => b.id === activeBattleId);
+  if (active) {
+    active.state = battleState;
+    active.eventLog = eventLog;
+    active.cursor = cursor;
+  }
+  localStorage.setItem(BATTLE_STORE_KEY, JSON.stringify({ battles, activeBattleId }));
 }
 
 // The main app's character store — read-only from here. Battle-helper
@@ -748,7 +816,153 @@ function renderUndoRedoButtons() {
   redoBtn.hidden = cursor >= eventLog.length - 1;
 }
 
+// ---------------------------------------------------------------------------
+// Battle tabs. None of these dispatch() — see the comment on `battles`
+// above for why a tab operation sits above the per-battle undo stack.
+
+// Points the live battleState/eventLog/cursor at another battle's entry.
+// UI-only state is reset rather than carried over: selectedSquareKey and
+// dragFromKey are square keys, and armedEntityId/raisedShieldIds are entity
+// ids, all of which mean something different (or nothing) in the battle
+// being opened.
+function setActiveBattle(id) {
+  const battle = battles.find((b) => b.id === id);
+  if (!battle) return;
+  activeBattleId = id;
+  battleState = battle.state;
+  eventLog = battle.eventLog;
+  cursor = battle.cursor;
+
+  selectedSquareKey = null;
+  armedEntityId = null;
+  raisedShieldIds = new Set();
+  dragFromKey = null;
+  dragHoverKey = null;
+  dragMoved = false;
+}
+
+function switchBattle(id) {
+  if (id === activeBattleId) return;
+  persistBattleStore(); // flush the outgoing battle's live values into its entry
+  setActiveBattle(id);
+  persistBattleStore();
+  render();
+}
+
+// Counts up from the current tab count rather than filling the lowest free
+// gap, so a new battle doesn't reuse the name of one just closed.
+function nextBattleName() {
+  const used = new Set(battles.map((b) => b.name));
+  let n = battles.length + 1;
+  while (used.has(`Battle ${n}`)) n++;
+  return `Battle ${n}`;
+}
+
+function addBattle() {
+  persistBattleStore();
+  const battle = createBattle(nextBattleName());
+  battles.push(battle);
+  setActiveBattle(battle.id);
+  persistBattleStore();
+  render();
+}
+
+function deleteBattle(id) {
+  const index = battles.findIndex((b) => b.id === id);
+  if (index === -1) return;
+  battles.splice(index, 1);
+  // Never leave the page with no battle open.
+  if (!battles.length) battles.push(createBattle("Battle 1"));
+  // Closing the active tab focuses whichever tab slid into its place (or
+  // the new last one), the way closing a browser tab does. Note this runs
+  // *after* the splice, so persistBattleStore() below can't resurrect the
+  // deleted entry by flushing live values into it.
+  if (id === activeBattleId) setActiveBattle(battles[Math.min(index, battles.length - 1)].id);
+  persistBattleStore();
+  render();
+}
+
+let renameBattleId = null;
+let pendingDeleteBattleId = null;
+
+function openRenameBattleDialog(id) {
+  const battle = battles.find((b) => b.id === id);
+  if (!battle) return;
+  renameBattleId = id;
+  renameInput.value = battle.name;
+  renameDialog.showModal();
+  renameInput.select();
+}
+
+function openDeleteBattleDialog(id) {
+  const battle = battles.find((b) => b.id === id);
+  if (!battle) return;
+  pendingDeleteBattleId = id;
+  deleteBattleMessage.textContent =
+    `Close "${battle.name}"? Its tokens, HP and event log are deleted with it, and this can't be undone.`;
+  deleteBattleDialog.showModal();
+}
+
+function renderTabs() {
+  tabList.innerHTML = battles.map((b) => `
+    <li class="battle-tab${b.id === activeBattleId ? " active" : ""}" data-battle-id="${escapeHtml(b.id)}" title="${escapeHtml(b.name)} — double-click to rename">
+      <span class="battle-tab-name">${escapeHtml(b.name)}</span>
+      <button type="button" class="battle-tab-close" data-battle-id="${escapeHtml(b.id)}" title="Close ${escapeHtml(b.name)}" aria-label="Close ${escapeHtml(b.name)}">&times;</button>
+    </li>
+  `).join("");
+}
+
+// Delegated to the <ul>, and attached once rather than per render — unlike
+// the roster and initiative track, this listener CAN'T live on the <li>s:
+// renderTabs() replaces them on every render, so on a double-click the
+// first click re-renders, the two clicks land on different nodes, and the
+// browser dispatches dblclick on their nearest common ancestor instead of
+// the tab. Delegating here makes that ancestor the thing listening, so
+// double-click-to-rename works on any tab, not just the active one.
+// Checking the close button first also replaces the stopPropagation() the
+// per-element version needed to avoid switching to a tab being closed.
+tabList.addEventListener("click", (event) => {
+  const closeBtn = event.target.closest(".battle-tab-close");
+  if (closeBtn) {
+    openDeleteBattleDialog(closeBtn.dataset.battleId);
+    return;
+  }
+  const tab = event.target.closest("li[data-battle-id]");
+  if (tab) switchBattle(tab.dataset.battleId);
+});
+
+tabList.addEventListener("dblclick", (event) => {
+  if (event.target.closest(".battle-tab-close")) return;
+  const tab = event.target.closest("li[data-battle-id]");
+  if (tab) openRenameBattleDialog(tab.dataset.battleId);
+});
+
+tabAddBtn.addEventListener("click", addBattle);
+
+renameForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const battle = battles.find((b) => b.id === renameBattleId);
+  const name = renameInput.value.trim();
+  if (battle && name) {
+    battle.name = name;
+    persistBattleStore();
+    render();
+  }
+  renameDialog.close();
+});
+renameCloseBtn.addEventListener("click", () => renameDialog.close());
+
+deleteBattleConfirmBtn.addEventListener("click", () => {
+  deleteBattle(pendingDeleteBattleId);
+  pendingDeleteBattleId = null;
+  deleteBattleDialog.close();
+});
+deleteBattleCancelBtn.addEventListener("click", () => deleteBattleDialog.close());
+
+// ---------------------------------------------------------------------------
+
 function render() {
+  renderTabs();
   drawGrid();
   renderRoster();
   renderInitiative();
@@ -1104,8 +1318,7 @@ document.addEventListener("keydown", (event) => {
 // ---------------------------------------------------------------------------
 
 const stored = loadBattleStore();
-battleState = stored.state;
-eventLog = stored.eventLog;
-cursor = stored.cursor;
+battles = stored.battles;
+setActiveBattle(stored.activeBattleId);
 
 render();

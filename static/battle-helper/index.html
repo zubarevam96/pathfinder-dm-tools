@@ -14,6 +14,11 @@
       <h1 class="app-title">Battle Helper</h1>
     </header>
 
+    <nav class="battle-tabs" aria-label="Battles">
+      <ul id="battle-tab-list" class="battle-tab-list"></ul>
+      <button type="button" id="battle-tab-add" class="battle-tab-add" title="New battle" aria-label="New battle">+</button>
+    </nav>
+
     <div class="battle-body">
       <section class="battle-box battle-box-left">
         <div class="battle-box-section">
@@ -30,8 +35,8 @@
             <button id="battle-log-clear" class="subtle" title="Clear event log">Clear</button>
             <h2>Event Log</h2>
             <div class="battle-log-actions">
-              <button id="battle-undo" class="subtle" title="Undo (Ctrl+Z)">&#8630; Undo</button>
-              <button id="battle-redo" class="subtle" title="Redo (Ctrl+Shift+Z)">&#8631; Redo</button>
+              <button id="battle-undo" class="subtle" title="Undo (Ctrl+Z)" aria-label="Undo">&#8630;</button>
+              <button id="battle-redo" class="subtle" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">&#8631;</button>
             </div>
           </div>
           <ul id="battle-log" class="event-log"></ul>
@@ -93,6 +98,26 @@
     </form>
     <div class="dialog-actions">
       <button type="button" id="battle-initiative-close">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="battle-rename-dialog">
+    <h2>Rename battle</h2>
+    <form id="battle-rename-form" class="battle-rename-form">
+      <input type="text" id="battle-rename-input" maxlength="40" required />
+      <button type="submit" class="subtle">Rename</button>
+    </form>
+    <div class="dialog-actions">
+      <button type="button" id="battle-rename-close">Cancel</button>
+    </div>
+  </dialog>
+
+  <dialog id="battle-delete-dialog">
+    <h2>Close battle</h2>
+    <p id="battle-delete-message"></p>
+    <div class="dialog-actions">
+      <button type="button" id="battle-delete-cancel">Cancel</button>
+      <button type="button" id="battle-delete-confirm" class="danger">Close battle</button>
     </div>
   </dialog>
 
