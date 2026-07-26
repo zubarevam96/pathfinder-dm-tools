@@ -10,6 +10,7 @@ const BATTLE_STORE_KEY = "pathfinder-dm-tools:battle";
 
 const canvas = document.getElementById("battle-grid");
 const ctx = canvas.getContext("2d");
+const mapViewport = document.getElementById("battle-map-viewport");
 const statPanel = document.getElementById("battle-stat-panel");
 const appearancePanel = document.getElementById("battle-appearance-panel");
 const rosterList = document.getElementById("battle-roster");
@@ -44,12 +45,37 @@ const deleteBattleMessage = document.getElementById("battle-delete-message");
 const deleteBattleCancelBtn = document.getElementById("battle-delete-cancel");
 const deleteBattleConfirmBtn = document.getElementById("battle-delete-confirm");
 
-const COLS = 24;
-const ROWS = 16;
 const SQUARE_SIZE = 40; // px — each square is 5 ft per PF2e's grid convention
 
-canvas.width = COLS * SQUARE_SIZE;
-canvas.height = ROWS * SQUARE_SIZE;
+// The grid is resizable per battle (battleState.cols/rows, driven by the
+// four +/- controls around the map), so its dimensions are state, not
+// constants. 5x5 is both the starting size and the floor. The ceiling
+// isn't a design limit — it's there so holding "+" can't allocate a canvas
+// big enough to hang the tab (60x60 is already 2400px square).
+const MIN_GRID = 5;
+const MAX_GRID = 60;
+
+function clampDimension(value) {
+  return Math.min(MAX_GRID, Math.max(MIN_GRID, Number(value) || MIN_GRID));
+}
+
+// Zoom is UI-only, like selection — it changes what you're looking at, not
+// the battle, so it never dispatches (undoing a zoom would be baffling).
+// It's also deliberately global rather than per-battle and not persisted:
+// it's a viewing preference, so switching tabs keeps whatever you set.
+const ZOOM_MIN = 0.4;
+const ZOOM_MAX = 3;
+const ZOOM_STEP = 0.2;
+let zoom = 1;
+
+function setZoom(value) {
+  // Rounded to whole percents so repeated +/- steps can't drift onto
+  // values like 0.9999999999 and miss the ZOOM_MIN/MAX comparisons.
+  const next = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value)) * 100) / 100;
+  if (next === zoom) return;
+  zoom = next;
+  render();
+}
 
 // ---------------------------------------------------------------------------
 // Battle state: the only things that live behind dispatch()/undo()/redo().
@@ -57,7 +83,7 @@ canvas.height = ROWS * SQUARE_SIZE;
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {} };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, cols: MIN_GRID, rows: MIN_GRID };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -106,6 +132,16 @@ let dragStartPos = null; // {x,y} client coords at mousedown — distinguishes a
 let dragMoved = false; // true once mouse movement crossed DRAG_THRESHOLD — suppresses the click handler that would otherwise also fire
 const DRAG_THRESHOLD = 4; // px
 
+// Panning: grabbing the map by an EMPTY square and dragging the view.
+// Distinct from the token drag above — that moves a piece, this moves the
+// camera — so it gets its own state and its own click-suppression flag,
+// but the same press/threshold/release shape. Implemented as scrolling
+// the viewport rather than an offset of our own, so it composes with the
+// scrollbars the overflow already provides.
+let panFromScroll = null; // { left, top } viewport scroll captured at mousedown
+let panStartPos = null; // {x,y} client coords at mousedown
+let panMoved = false; // true once movement crossed DRAG_THRESHOLD — suppresses the click that would otherwise select a square
+
 // Raise a Shield is situational, like the main app's AC toggle — it isn't
 // baked into the sheet and wouldn't surprise anyone by disappearing on
 // undo, so it's UI-only state, not battle state. Kept across renders (a
@@ -115,6 +151,36 @@ let raisedShieldIds = new Set();
 
 function createBattle(name) {
   return { id: `battle-${crypto.randomUUID()}`, name, state: emptyBattleState(), eventLog: [], cursor: -1 };
+}
+
+// Spreads a stored state over a fresh empty one so a battle saved before a
+// given field existed (e.g. appearance) still gets it.
+//
+// Grids saved before they were resizable have no cols/rows at all. Those
+// don't get the 5x5 default a new battle gets — the old fixed grid was
+// 24x16, so tokens can sit well outside 5x5 and would be stranded
+// off-canvas, unreachable and invisible. Instead the grid is sized to fit
+// whatever placements are actually there, with the same 5x5 floor: an
+// empty old battle still lands on 5x5, a populated one keeps everyone
+// on the field.
+function normalizeState(raw) {
+  const state = { ...emptyBattleState(), ...raw };
+
+  if (raw?.cols == null || raw?.rows == null) {
+    let maxRow = -1;
+    let maxCol = -1;
+    for (const key of Object.keys(state.placements)) {
+      const [row, col] = key.split(",").map(Number);
+      if (Number.isFinite(row)) maxRow = Math.max(maxRow, row);
+      if (Number.isFinite(col)) maxCol = Math.max(maxCol, col);
+    }
+    state.rows = maxRow + 1;
+    state.cols = maxCol + 1;
+  }
+
+  state.rows = clampDimension(state.rows);
+  state.cols = clampDimension(state.cols);
+  return state;
 }
 
 // Reads the store into a { battles, activeBattleId } shape, normalizing
@@ -137,10 +203,7 @@ function loadBattleStore() {
   const battles = rawBattles.filter(Boolean).map((b, i) => ({
     id: b.id ?? `battle-${crypto.randomUUID()}`,
     name: b.name ?? `Battle ${i + 1}`,
-    // Spread over a fresh empty state so a battle saved before a given
-    // field existed (e.g. appearance) still gets it — same defensive
-    // merge the single-battle version did.
-    state: { ...emptyBattleState(), ...b.state },
+    state: normalizeState(b.state),
     eventLog: b.eventLog ?? [],
     cursor: b.cursor ?? -1,
   }));
@@ -216,6 +279,17 @@ function getAppearance(entityId, name) {
     textColor: stored.textColor ?? cssVar("--accent-contrast"),
     shapeColor: stored.shapeColor ?? cssVar("--accent"),
   };
+}
+
+// Read through helpers rather than battleState.cols/rows directly, so a
+// state that predates resizable grids (or a malformed one) still yields a
+// usable size — the same "default unless tracked" pattern as currentHp().
+function gridCols() {
+  return clampDimension(battleState.cols);
+}
+
+function gridRows() {
+  return clampDimension(battleState.rows);
 }
 
 function squareKey(row, col) {
@@ -350,13 +424,38 @@ function traceTokenShape(shape, cx, cy, radius) {
 }
 
 function drawGrid() {
+  const cols = gridCols();
+  const rows = gridRows();
+  const width = cols * SQUARE_SIZE;
+  const height = rows * SQUARE_SIZE;
+
+  // The bitmap is allocated at zoom x devicePixelRatio and the context
+  // scaled to match, so everything below still draws in unscaled logical
+  // pixels (0..width, 0..height) while the result stays crisp when zoomed
+  // in — an upscaled 1x bitmap would just look blurry. The CSS size is what
+  // the zoom controls actually change; the canvas is free to overflow its
+  // viewport, which is what there is to pan around.
+  const scale = zoom * (window.devicePixelRatio || 1);
+  const bitmapWidth = Math.round(width * scale);
+  const bitmapHeight = Math.round(height * scale);
+  // Assigning canvas.width/height reallocates and clears the bitmap, so
+  // only touch it on an actual change — drawGrid() also runs on every
+  // mousemove while a token is being dragged.
+  if (canvas.width !== bitmapWidth) canvas.width = bitmapWidth;
+  if (canvas.height !== bitmapHeight) canvas.height = bitmapHeight;
+  canvas.style.width = `${width * zoom}px`;
+  canvas.style.height = `${height * zoom}px`;
+  // Re-applied every draw, not just on resize: assigning canvas.width
+  // resets the context, and the scale changes with zoom anyway.
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+
   const surface = cssVar("--surface");
   const border = cssVar("--border");
   const accent = cssVar("--accent");
   const accentSoft = cssVar("--accent-soft");
 
   ctx.fillStyle = surface;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, width, height);
 
   if (selectedSquareKey) {
     const [row, col] = selectedSquareKey.split(",").map(Number);
@@ -366,18 +465,24 @@ function drawGrid() {
 
   ctx.strokeStyle = border;
   ctx.lineWidth = 1;
-  for (let col = 0; col <= COLS; col++) {
-    const x = col * SQUARE_SIZE + 0.5;
+  // The +0.5 offset puts a 1px stroke on a whole pixel instead of
+  // straddling two and blurring. The closing line in each direction has to
+  // be pulled half a pixel back INSIDE instead of pushed out: the bitmap
+  // spans 0..width, so a line at width + 0.5 falls entirely outside it and
+  // gets clipped away — which is why the grid's right and bottom borders
+  // were invisible. Math.min only ever affects that last line.
+  for (let col = 0; col <= cols; col++) {
+    const x = Math.min(col * SQUARE_SIZE + 0.5, width - 0.5);
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, canvas.height);
+    ctx.lineTo(x, height);
     ctx.stroke();
   }
-  for (let row = 0; row <= ROWS; row++) {
-    const y = row * SQUARE_SIZE + 0.5;
+  for (let row = 0; row <= rows; row++) {
+    const y = Math.min(row * SQUARE_SIZE + 0.5, height - 0.5);
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(canvas.width, y);
+    ctx.lineTo(width, y);
     ctx.stroke();
   }
 
@@ -964,6 +1069,8 @@ deleteBattleCancelBtn.addEventListener("click", () => deleteBattleDialog.close()
 function render() {
   renderTabs();
   drawGrid();
+  renderGridControls();
+  renderZoomControls();
   renderRoster();
   renderInitiative();
   renderStatPanel();
@@ -1157,13 +1264,15 @@ initiativeCloseBtn.addEventListener("click", () => initiativeDialog.close());
 
 function squareFromEvent(event) {
   const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const x = (event.clientX - rect.left) * scaleX;
-  const y = (event.clientY - rect.top) * scaleY;
+  // Maps from the on-screen box to logical grid pixels. Deliberately NOT
+  // via canvas.width/height: the bitmap is oversampled by zoom x
+  // devicePixelRatio (see drawGrid()), so that ratio would land on device
+  // pixels rather than the SQUARE_SIZE-based coordinates below.
+  const x = (event.clientX - rect.left) * (gridCols() * SQUARE_SIZE / rect.width);
+  const y = (event.clientY - rect.top) * (gridRows() * SQUARE_SIZE / rect.height);
   const col = Math.floor(x / SQUARE_SIZE);
   const row = Math.floor(y / SQUARE_SIZE);
-  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return null;
+  if (col < 0 || col >= gridCols() || row < 0 || row >= gridRows()) return null;
   return { row, col };
 }
 
@@ -1191,6 +1300,120 @@ function moveToken(fromKey, toKey) {
   selectedSquareKey = toKey;
 }
 
+// The four +/- controls around the map. Resizing is a real battle-state
+// change (Rule 1), so it dispatches — and it dispatches ONCE, covering the
+// new size, the renumbering below, and any tokens evicted by a removed
+// row/column, so a single Ctrl+Z restores all three together rather than
+// leaving a half-undone board.
+function resizeGrid(side, delta) {
+  const horizontal = side === "left" || side === "right";
+  const current = horizontal ? gridCols() : gridRows();
+  const next = current + delta;
+  if (next < MIN_GRID || next > MAX_GRID) return;
+
+  // Editing the top/left edge renumbers every square, because placements
+  // are keyed "row,col" off the top-left origin — inserting a column at 0
+  // pushes everyone one index right. Bottom/right edits append or truncate
+  // past the existing keys, so those need no renumbering at all.
+  const leading = side === "left" || side === "top";
+  const shift = leading ? delta : 0;
+  const removedIndex = leading ? 0 : current - 1;
+
+  const nextPlacements = {};
+  const dropped = [];
+  for (const [key, entityId] of Object.entries(battleState.placements)) {
+    const [row, col] = key.split(",").map(Number);
+    const index = horizontal ? col : row;
+    if (delta < 0 && index === removedIndex) {
+      dropped.push(entityId);
+      continue;
+    }
+    const moved = index + shift;
+    nextPlacements[horizontal ? squareKey(row, moved) : squareKey(moved, col)] = entityId;
+  }
+
+  // Names read before dispatching, so the log line can say who left —
+  // same approach as applyHpDelta() reading temp HP up front. Safe because
+  // nothing can mutate state between here and the mutator (JS is
+  // single-threaded), and the label has to be a plain string by then.
+  const droppedNames = dropped.map((id) => findEntity(id)?.name).filter(Boolean);
+  const unit = horizontal ? "column" : "row";
+  let label = delta > 0 ? `Added a ${unit} on the ${side}` : `Removed the ${side} ${unit}`;
+  if (droppedNames.length) label += ` (${droppedNames.join(", ")} left the field)`;
+
+  // UI-only state, updated before the dispatch so its render() sees the
+  // final picture. Selection is a square key, so it has to follow the
+  // renumbering — or clear, if its square is the one that just went away.
+  for (const entityId of dropped) raisedShieldIds.delete(entityId);
+  if (selectedSquareKey) {
+    const [row, col] = selectedSquareKey.split(",").map(Number);
+    const index = horizontal ? col : row;
+    if (delta < 0 && index === removedIndex) {
+      selectedSquareKey = null;
+    } else {
+      const moved = index + shift;
+      selectedSquareKey = horizontal ? squareKey(row, moved) : squareKey(moved, col);
+    }
+  }
+
+  dispatch("resize-grid", label, (state) => {
+    state.placements = nextPlacements;
+    if (horizontal) state.cols = next;
+    else state.rows = next;
+    for (const entityId of dropped) {
+      delete state.hp[entityId];
+      delete state.tempHp[entityId];
+      delete state.initiative[entityId];
+      // Appearance deliberately survives, exactly as it does for a normal
+      // remove-token — it's the entity's visual identity, not battle
+      // progress (see the battle-helper-architecture skill).
+    }
+    if (dropped.length) {
+      state.initiativeOrder = state.initiativeOrder.filter((id) => !dropped.includes(id));
+    }
+  });
+}
+
+const gridControlButtons = [...document.querySelectorAll(".battle-grid-btn")];
+
+// Static markup, so these bind once rather than per render — unlike the
+// roster/initiative rows, nothing rebuilds these buttons.
+for (const btn of gridControlButtons) {
+  btn.addEventListener("click", () => resizeGrid(btn.dataset.side, Number(btn.dataset.delta)));
+}
+
+function renderGridControls() {
+  for (const btn of gridControlButtons) {
+    const delta = Number(btn.dataset.delta);
+    const horizontal = btn.dataset.side === "left" || btn.dataset.side === "right";
+    const next = (horizontal ? gridCols() : gridRows()) + delta;
+    btn.disabled = next < MIN_GRID || next > MAX_GRID;
+  }
+}
+
+const zoomButtons = [...document.querySelectorAll(".battle-zoom-btn")];
+const zoomResetBtn = document.getElementById("battle-zoom-reset");
+
+for (const btn of zoomButtons) {
+  btn.addEventListener("click", () => {
+    const action = btn.dataset.zoom;
+    if (action === "reset") setZoom(1);
+    else setZoom(zoom + (action === "in" ? ZOOM_STEP : -ZOOM_STEP));
+  });
+}
+
+function renderZoomControls() {
+  for (const btn of zoomButtons) {
+    const action = btn.dataset.zoom;
+    if (action === "in") btn.disabled = zoom >= ZOOM_MAX;
+    else if (action === "out") btn.disabled = zoom <= ZOOM_MIN;
+    else btn.disabled = zoom === 1;
+  }
+  // The reset button is a symbol, so the current level lives in its
+  // tooltip — otherwise nothing on screen says what zoom you're at.
+  zoomResetBtn.title = zoom === 1 ? "Zoom is 100%" : `Reset zoom to 100% (now ${Math.round(zoom * 100)}%)`;
+}
+
 // Map drag-and-drop is mouse-based, not native HTML5 DnD — canvas has no
 // per-square element to make draggable="true". mousedown only arms a
 // potential drag (an occupied square, and not while a roster entity is
@@ -1202,11 +1425,52 @@ function moveToken(fromKey, toKey) {
 canvas.addEventListener("mousedown", (event) => {
   const square = squareFromEvent(event);
   if (!square) return;
+  // A roster entity armed for placement suppresses both gestures — the
+  // next click is meant to drop it, not to move a token or the view.
+  if (armedEntityId) return;
+
   const key = squareKey(square.row, square.col);
-  if (!battleState.placements[key] || armedEntityId) return;
-  dragFromKey = key;
-  dragStartPos = { x: event.clientX, y: event.clientY };
-  dragMoved = false;
+  if (battleState.placements[key]) {
+    dragFromKey = key;
+    dragStartPos = { x: event.clientX, y: event.clientY };
+    dragMoved = false;
+    return;
+  }
+
+  // Empty square: grab the map itself.
+  panFromScroll = { left: mapViewport.scrollLeft, top: mapViewport.scrollTop };
+  panStartPos = { x: event.clientX, y: event.clientY };
+  panMoved = false;
+});
+
+// On window, not the canvas: a pan that wanders outside the grid (very
+// easy, since panning is how you reach off-screen parts of it) should keep
+// tracking rather than freezing at the edge.
+window.addEventListener("mousemove", (event) => {
+  if (!panFromScroll) return;
+  const dx = event.clientX - panStartPos.x;
+  const dy = event.clientY - panStartPos.y;
+  if (!panMoved) {
+    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    panMoved = true;
+    canvas.style.cursor = "grabbing";
+  }
+  // Scroll moves opposite the cursor, so the map follows the hand: drag
+  // right and the view travels left, revealing what was off the left edge.
+  mapViewport.scrollLeft = panFromScroll.left - dx;
+  mapViewport.scrollTop = panFromScroll.top - dy;
+});
+
+window.addEventListener("mouseup", () => {
+  if (!panFromScroll) return;
+  panFromScroll = null;
+  panStartPos = null;
+  canvas.style.cursor = "";
+  // Same one-tick backstop as the token drag: the click that follows this
+  // mouseup needs to still see panMoved === true to suppress itself, and
+  // if the release happened off-canvas no click fires at all, so this is
+  // what stops the flag sticking and swallowing the next real click.
+  setTimeout(() => { panMoved = false; }, 0);
 });
 
 canvas.addEventListener("mousemove", (event) => {
@@ -1246,8 +1510,12 @@ window.addEventListener("mouseup", (event) => {
 });
 
 canvas.addEventListener("click", (event) => {
-  if (dragMoved) {
+  // A completed token drag or map pan also fires click on the canvas —
+  // without this, releasing a pan would additionally select whatever
+  // square you happened to let go over.
+  if (dragMoved || panMoved) {
     dragMoved = false;
+    panMoved = false;
     return;
   }
 

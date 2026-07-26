@@ -45,7 +45,30 @@
 
       <div class="battle-center-col">
         <section class="battle-box battle-box-map">
-          <canvas id="battle-grid" class="battle-grid"></canvas>
+          <div id="battle-map-viewport" class="battle-map-viewport">
+            <canvas id="battle-grid" class="battle-grid"></canvas>
+          </div>
+          <div class="battle-zoom-palette">
+            <button type="button" class="battle-zoom-btn" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
+            <button type="button" id="battle-zoom-reset" class="battle-zoom-btn" data-zoom="reset" title="Reset zoom to 100%" aria-label="Reset zoom to 100%">&#9678;</button>
+            <button type="button" class="battle-zoom-btn" data-zoom="out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+          </div>
+          <div class="battle-grid-control battle-grid-control-top">
+            <button type="button" class="battle-grid-btn" data-side="top" data-delta="1" title="Add a row at the top" aria-label="Add a row at the top">+</button>
+            <button type="button" class="battle-grid-btn" data-side="top" data-delta="-1" title="Remove the top row" aria-label="Remove the top row">&minus;</button>
+          </div>
+          <div class="battle-grid-control battle-grid-control-bottom">
+            <button type="button" class="battle-grid-btn" data-side="bottom" data-delta="1" title="Add a row at the bottom" aria-label="Add a row at the bottom">+</button>
+            <button type="button" class="battle-grid-btn" data-side="bottom" data-delta="-1" title="Remove the bottom row" aria-label="Remove the bottom row">&minus;</button>
+          </div>
+          <div class="battle-grid-control battle-grid-control-left">
+            <button type="button" class="battle-grid-btn" data-side="left" data-delta="1" title="Add a column on the left" aria-label="Add a column on the left">+</button>
+            <button type="button" class="battle-grid-btn" data-side="left" data-delta="-1" title="Remove the left column" aria-label="Remove the left column">&minus;</button>
+          </div>
+          <div class="battle-grid-control battle-grid-control-right">
+            <button type="button" class="battle-grid-btn" data-side="right" data-delta="1" title="Add a column on the right" aria-label="Add a column on the right">+</button>
+            <button type="button" class="battle-grid-btn" data-side="right" data-delta="-1" title="Remove the right column" aria-label="Remove the right column">&minus;</button>
+          </div>
         </section>
 
         <div class="battle-row-bottom">

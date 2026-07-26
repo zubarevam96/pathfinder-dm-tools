@@ -234,18 +234,174 @@
   min-width: 0;
 }
 
+/* position: relative anchors the four resize controls; the generous
+   padding is the gutter they sit in, so they never cover grid squares.
+   overflow: hidden (with the scrolling moved to .battle-map-viewport
+   inside) is what keeps them pinned to the BOX rather than scrolling away
+   with the map — an absolutely positioned child of a scrolling container
+   scrolls along with its content. */
 .battle-box-map {
+  position: relative;
   flex: 1;
-  align-items: center;
-  justify-content: center;
+  padding: 2.1rem;
+  overflow: hidden;
+}
+
+.battle-map-viewport {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 
+/* margin: auto (not the parent's justify/align-content) centres the canvas
+   in the viewport — the flexbox way that still lets an oversized item
+   overflow scrollably in both directions instead of being clipped at the
+   start edge.
+
+   The centring is load-bearing, not cosmetic: because the canvas grows
+   from its centre, adding a column on the LEFT pushes the existing map
+   half a square right while the pinned +/- button stays put, which is what
+   produces the "the map slides away from the side I clicked" feel. Anchor
+   the canvas to a corner instead and the effect disappears on two of the
+   four sides. */
+/* No max-width/max-height: the canvas is sized explicitly in px by
+   drawGrid() from the current zoom, so it must be free to exceed the
+   viewport and scroll (that overflow is what panning drags around).
+   Auto-shrinking it to fit would silently override the zoom level. */
+/* No border-radius: it clips canvas content, and the grid's outermost
+   lines run right along the edge, so rounding shaved the corners off them.
+   A battlefield grid wants square corners anyway. */
 .battle-grid {
-  max-width: 100%;
-  height: auto;
-  border-radius: 4px;
+  margin: auto;
   cursor: pointer;
+}
+
+/* Zoom palette, top-left corner of the map box. Deliberately NOT vertically
+   centred on the left edge — that spot belongs to the add/remove-column
+   control, and two stacked palettes on the same edge would collide on a
+   short map box. */
+.battle-zoom-palette {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  z-index: 1;
+}
+
+.battle-zoom-btn {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.battle-zoom-btn:not(:disabled):hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Same reasoning as .battle-grid-btn:disabled:hover — :not(:disabled) only
+   guards this file's own rule, it can't stop style.css's global
+   button:hover from lighting up a control that's already at the zoom limit. */
+.battle-zoom-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.battle-zoom-btn:disabled:hover {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+.battle-grid-control {
+  position: absolute;
+  display: flex;
+  gap: 0.25rem;
+  z-index: 1;
+}
+
+.battle-grid-control-top,
+.battle-grid-control-bottom {
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: row;
+}
+
+.battle-grid-control-top {
+  top: 0.35rem;
+}
+
+.battle-grid-control-bottom {
+  bottom: 0.35rem;
+}
+
+.battle-grid-control-left,
+.battle-grid-control-right {
+  top: 50%;
+  transform: translateY(-50%);
+  flex-direction: column;
+}
+
+.battle-grid-control-left {
+  left: 0.35rem;
+}
+
+.battle-grid-control-right {
+  right: 0.35rem;
+}
+
+.battle-grid-btn {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.battle-grid-btn:not(:disabled):hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Needed even though the rule above is guarded: :not(:disabled) only stops
+   THIS rule matching a disabled button, it doesn't cancel style.css's
+   global button:hover, which has no such guard and would otherwise light
+   up a control that can't do anything (at the 5x5 floor or the ceiling).
+   See "Overriding the global button:hover" in the battle-helper-
+   architecture skill. */
+.battle-grid-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.battle-grid-btn:disabled:hover {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--muted);
 }
 
 /* The bottom-left box sits directly under the left sidebar's right edge —
