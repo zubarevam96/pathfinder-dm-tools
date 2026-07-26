@@ -66,10 +66,41 @@ function clampDimension(value) {
 //   wall   — click near a cell edge to toggle a wall on that edge
 const TOOL_SELECT = "select";
 const TOOL_WALL = "wall";
+const TOOL_DOOR = "door";
 let activeTool = TOOL_SELECT;
+
+// Both the wall and door tools edit edges and want the same crosshair and
+// hover preview; only their click cycles differ.
+function isEdgeTool() {
+  return activeTool === TOOL_WALL || activeTool === TOOL_DOOR;
+}
+
+// What occupies an edge. Mutually exclusive states of one edge, so
+// battleState.walls maps a key to ONE of these rather than to `true`.
+//
+// There is deliberately no "double door" state: a double door is TWO
+// doors, on the adjacent edges of two neighbouring cells, and it emerges
+// from that adjacency at draw time (see drawEdgeShape) rather than being
+// a thing you place. One cell can only ever hold one door.
+const EDGE_WALL = "wall";
+const EDGE_DOOR = "door";
 
 // How thick a wall is drawn, in logical (unzoomed) px.
 const WALL_THICKNESS = 5;
+
+// A door spans 80% of its cell edge. On its own it sits centred, leaving a
+// 10% wall stub at each end. When the neighbouring cell's matching edge
+// also has a door, the two slide together ("magnet") to meet on the shared
+// cell boundary, which puts all 20% of that cell's wall on the outer side
+// and reads as one double door across two cells. The door itself is always
+// 80% — only its offset within the cell changes.
+//
+// Panels are drawn as thin rectangles outlined with a noticeably thinner
+// stroke than a wall, so a doorway reads as an opening with a panel in it
+// rather than as more wall.
+const DOOR_LENGTH = 0.8;
+const DOOR_THICKNESS = 7;
+const DOOR_BORDER = 1.5;
 
 // How far from an edge still counts as "the centre" (fraction of a
 // square), i.e. the zone that places a diagonal rather than an edge wall.
@@ -235,6 +266,22 @@ function normalizeState(raw) {
 
   state.rows = clampDimension(state.rows);
   state.cols = clampDimension(state.cols);
+
+  // Walls were once a plain { key: true } set; an edge now carries a state
+  // so doors can share the same map. Anything non-string is a wall from
+  // before doors existed. "double" was a short-lived one-cell double-door
+  // state, since replaced by two adjacent doors — it collapses to a single
+  // door rather than being dropped, so a map built with it keeps its
+  // doorways.
+  const walls = {};
+  for (const [key, value] of Object.entries(state.walls ?? {})) {
+    if (!value) continue;
+    if (typeof value !== "string") walls[key] = EDGE_WALL;
+    else if (value === "double") walls[key] = EDGE_DOOR;
+    else walls[key] = value;
+  }
+  state.walls = walls;
+
   return state;
 }
 
@@ -566,53 +613,58 @@ function drawGrid() {
   // Outer-boundary walls are nudged half a thickness inward so they render
   // fully instead of having half the stroke fall outside the bitmap, the
   // same clipping problem the closing grid lines had.
-  const wallKeys = Object.keys(battleState.walls ?? {});
+  const walls = battleState.walls ?? {};
+  const wallEntries = Object.entries(walls);
   // Recomputed from the stored cursor position rather than cached, so it
   // always reflects current state — see wallHoverPos.
-  const hover = wallHoverPos && activeTool === TOOL_WALL ? wallActionFromEvent(wallHoverPos) : null;
+  const hover = wallHoverPos && isEdgeTool() ? wallActionFromEvent(wallHoverPos) : null;
 
-  if (wallKeys.length || hover) {
-    ctx.lineWidth = WALL_THICKNESS;
-    ctx.lineCap = "round";
+  if (wallEntries.length || hover) {
+    // Any edge the preview is about to repaint is skipped here and drawn
+    // only in the preview pass. Drawing it solid and tinting over it
+    // cannot work: overlaying paint makes a stroke MORE prominent, never
+    // less. Covers an edge being removed, and also one being CHANGED in
+    // place (a wall becoming a door), which would otherwise leave the old
+    // state at full opacity under a ghosted new one.
+    const previewed = new Set();
+    if (hover?.remove) previewed.add(hover.remove);
+    if (hover?.add) previewed.add(hover.add);
 
-    // A wall the hover is about to remove is deliberately skipped here and
-    // redrawn in the preview pass instead. Drawing it solid and tinting
-    // over it cannot work: overlaying paint makes a stroke MORE prominent,
-    // never less. That's what made a diagonal being turned keep its old
-    // direction looking solid while the incoming one was a faint ghost —
-    // the preview appeared stuck at one angle.
-    const pendingRemoval = hover?.remove ?? null;
-    ctx.strokeStyle = cssVar("--text");
-    for (const key of wallKeys) {
-      if (key === pendingRemoval) continue;
-      traceWall(key, width, height);
-      ctx.stroke();
+    // Walls as they WOULD be after the hovered click. Door geometry depends
+    // on the neighbouring cell's edge, so this is what lets an existing
+    // door visibly slide over to meet the one being previewed beside it,
+    // instead of the ghost magneting toward a neighbour that hasn't moved.
+    const effective = { ...walls };
+    if (hover?.remove) delete effective[hover.remove];
+    if (hover?.add) effective[hover.add] = hover.state;
+
+    for (const [key, state] of wallEntries) {
+      if (previewed.has(key)) continue;
+      drawEdgeShape(key, state, width, height, cssVar("--text"), effective);
     }
 
     if (hover) {
-      // Outgoing first, incoming over it, so the wall you're about to get
-      // wins where the two cross.
+      // Outgoing first, incoming over it, so what you're about to get wins
+      // where the two overlap.
       if (hover.remove) {
         // Turning a diagonal is a change, not a deletion — fade the old
         // direction so attention lands on the new one. A removal with
         // nothing replacing it really is a deletion, so that stays red.
+        // Drawn against the CURRENT walls: it's showing what is there now,
+        // about to go, not where it would sit afterwards.
         const turning = Boolean(hover.add);
         ctx.globalAlpha = turning ? 0.22 : 0.6;
-        ctx.strokeStyle = cssVar(turning ? "--muted" : "--danger");
-        traceWall(hover.remove, width, height);
-        ctx.stroke();
+        drawEdgeShape(hover.remove, walls[hover.remove], width, height, cssVar(turning ? "--muted" : "--danger"), walls);
       }
       if (hover.add) {
         ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = cssVar("--text");
-        traceWall(hover.add, width, height);
-        ctx.stroke();
+        drawEdgeShape(hover.add, hover.state, width, height, cssVar("--text"), effective);
       }
       ctx.globalAlpha = 1;
     }
 
     // Restored so the token loop below and the selection outline after it
-    // don't inherit the wall stroke settings.
+    // don't inherit the wall/door stroke settings.
     ctx.lineCap = "butt";
     ctx.lineWidth = 1;
   }
@@ -1442,11 +1494,15 @@ function wallActionFromEvent(event) {
   // also clears it — otherwise a diagonal could be placed but never
   // removed without a separate control.
   if (nearest > SQUARE_SIZE * WALL_CENTRE_ZONE) {
+    // Doors go on cell edges only — there's no sensible doorway through a
+    // corner-to-corner diagonal, so the door tool simply has no action in
+    // the centre zone (and previews nothing there).
+    if (activeTool !== TOOL_WALL) return null;
     const back = wallKey("b", row, col);
     const forward = wallKey("f", row, col);
-    if (walls[back]) return { remove: back, add: forward };
-    if (walls[forward]) return { remove: forward, add: null };
-    return { remove: null, add: back };
+    if (walls[back]) return { remove: back, add: forward, state: EDGE_WALL };
+    if (walls[forward]) return { remove: forward, add: null, state: null };
+    return { remove: null, add: back, state: EDGE_WALL };
   }
 
   let key;
@@ -1455,27 +1511,56 @@ function wallActionFromEvent(event) {
   else if (nearest === fromTop) key = wallKey("h", row, col);
   else key = wallKey("h", row + 1, col);
 
-  return walls[key] ? { remove: key, add: null } : { remove: null, add: key };
+  if (activeTool === TOOL_DOOR) {
+    // A plain toggle: one cell holds at most one door, and a double door
+    // is made by putting a second door on the neighbouring cell rather
+    // than by clicking the same edge twice. Starting from a plain wall
+    // goes straight to a door — cutting a doorway into an existing wall
+    // is the common intent, and the wall tool is right there to clear it.
+    return walls[key] === EDGE_DOOR
+      ? { remove: key, add: null, state: null }
+      : { remove: null, add: key, state: EDGE_DOOR };
+  }
+
+  return walls[key]
+    ? { remove: key, add: null, state: null }
+    : { remove: null, add: key, state: EDGE_WALL };
 }
 
-const WALL_LABELS = { h: "horizontal", v: "vertical", b: "diagonal", f: "diagonal" };
+function edgeName(key, state) {
+  const type = key[0];
+  if (type === "b" || type === "f") return "diagonal wall";
+  if (state === EDGE_DOOR) return "door";
+  return type === "h" ? "horizontal wall" : "vertical wall";
+}
 
-function wallActionLabel({ remove, add }) {
+function wallActionLabel({ remove, add, state }, previousState) {
   // Both set means the diagonal cycled from one direction to the other.
   if (remove && add) {
     const [, row, col] = add.split(",");
     return `Turned the diagonal wall at (${col}, ${row})`;
   }
-  const [type, row, col] = (add ?? remove).split(",");
-  return `${add ? "Placed" : "Removed"} a ${WALL_LABELS[type]} wall at (${col}, ${row})`;
+  if (add) {
+    const [, row, col] = add.split(",");
+    const name = edgeName(add, state);
+    return previousState
+      ? `Changed the ${edgeName(add, previousState)} at (${col}, ${row}) to a ${name}`
+      : `Placed a ${name} at (${col}, ${row})`;
+  }
+  const [, row, col] = remove.split(",");
+  return `Removed the ${edgeName(remove, previousState)} at (${col}, ${row})`;
 }
 
 function applyWallAction(action) {
-  const { remove, add } = action;
-  dispatch("toggle-wall", wallActionLabel(action), (state) => {
-    if (!state.walls) state.walls = {};
-    if (remove) delete state.walls[remove];
-    if (add) state.walls[add] = true;
+  const { remove, add, state } = action;
+  // Read before dispatching so the label can name what was there — same
+  // approach as applyHpDelta(), and safe for the same reason.
+  const previousState = battleState.walls?.[add ?? remove] ?? null;
+
+  dispatch("toggle-wall", wallActionLabel(action, previousState), (next) => {
+    if (!next.walls) next.walls = {};
+    if (remove) delete next.walls[remove];
+    if (add) next.walls[add] = state;
   });
 }
 
@@ -1512,6 +1597,96 @@ function traceWall(key, width, height) {
   }
 }
 
+// Strokes a run along an edge — `from`/`to` are positions along the edge,
+// `axis` the fixed perpendicular coordinate. Keeps the horizontal and
+// vertical cases from being written out twice for every piece of door.
+function strokeAlong(horizontal, axis, from, to) {
+  ctx.beginPath();
+  if (horizontal) {
+    ctx.moveTo(from, axis);
+    ctx.lineTo(to, axis);
+  } else {
+    ctx.moveTo(axis, from);
+    ctx.lineTo(axis, to);
+  }
+  ctx.stroke();
+}
+
+// A door panel: a thin rectangle centred on the edge, running from `from`
+// to `to` along it.
+function panelRect(horizontal, axis, from, to, thickness) {
+  const half = thickness / 2;
+  return horizontal
+    ? [from, axis - half, to - from, thickness]
+    : [axis - half, from, thickness, to - from];
+}
+
+// Draws whatever occupies one edge — a plain wall, a diagonal, or a
+// doorway. Colour and globalAlpha are the caller's, so solid rendering and
+// the translucent hover preview share one definition of what each state
+// looks like and can't drift apart.
+function drawEdgeShape(key, state, width, height, color, walls) {
+  const type = key[0];
+  if (type === "b" || type === "f" || state === EDGE_WALL) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = WALL_THICKNESS;
+    ctx.lineCap = "round";
+    traceWall(key, width, height);
+    ctx.stroke();
+    return;
+  }
+
+  const [, rowStr, colStr] = key.split(",");
+  const row = Number(rowStr);
+  const col = Number(colStr);
+  const horizontal = type === "h";
+  // Clamped by the thicker of the two so a doorway on the outer boundary
+  // isn't half-clipped, same as walls.
+  const clampHalf = Math.max(WALL_THICKNESS, DOOR_THICKNESS) / 2;
+  const axis = horizontal
+    ? Math.min(Math.max(row * SQUARE_SIZE, clampHalf), height - clampHalf)
+    : Math.min(Math.max(col * SQUARE_SIZE, clampHalf), width - clampHalf);
+  const start = (horizontal ? col : row) * SQUARE_SIZE;
+  const end = start + SQUARE_SIZE;
+
+  // A door magnets toward a door on the neighbouring cell's matching edge,
+  // so the two meet on the shared boundary and read as one double door
+  // across two cells. The neighbours are the collinear edges either side:
+  // for "h" that's the same row line one column over, for "v" the same
+  // column line one row over.
+  const before = horizontal ? wallKey("h", row, col - 1) : wallKey("v", row - 1, col);
+  const after = horizontal ? wallKey("h", row, col + 1) : wallKey("v", row + 1, col);
+  const pairedBefore = walls?.[before] === EDGE_DOOR;
+  const pairedAfter = walls?.[after] === EDGE_DOOR;
+
+  const length = SQUARE_SIZE * DOOR_LENGTH;
+  const slack = SQUARE_SIZE - length;
+  // Doors on BOTH sides can't be met at once, so a door in the middle of a
+  // run stays centred rather than arbitrarily favouring one neighbour.
+  let offset = slack / 2;
+  if (pairedBefore && !pairedAfter) offset = 0;
+  else if (pairedAfter && !pairedBefore) offset = slack;
+
+  const doorStart = start + offset;
+  const doorEnd = doorStart + length;
+
+  // Whatever edge the door doesn't cover is wall. One of these is empty
+  // when the door has magneted flush to that end.
+  ctx.strokeStyle = color;
+  ctx.lineWidth = WALL_THICKNESS;
+  ctx.lineCap = "butt";
+  if (doorStart > start) strokeAlong(horizontal, axis, start, doorStart);
+  if (doorEnd < end) strokeAlong(horizontal, axis, doorEnd, end);
+
+  ctx.lineWidth = DOOR_BORDER;
+  ctx.fillStyle = cssVar("--surface");
+  const [x, y, w, h] = panelRect(horizontal, axis, doorStart, doorEnd, DOOR_THICKNESS);
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.fill();
+  ctx.stroke();
+}
+
 // Walls sit on edges, so their indices don't shift in lockstep with
 // placements when the grid is resized. For a "v" wall the COLUMN is an
 // edge index (0..cols, one more value than there are cells) while its row
@@ -1526,7 +1701,10 @@ function traceWall(key, width, height) {
 // them on either axis, which is already the cell-index behaviour.
 function remapWalls(walls, horizontal, delta, leading, current) {
   const next = {};
-  for (const key of Object.keys(walls ?? {})) {
+  // Iterated as entries, not keys: the value is the edge's state, and
+  // rebuilding with `true` would quietly demote every door to a wall on
+  // the next resize.
+  for (const [key, state] of Object.entries(walls ?? {})) {
     const [type, rowStr, colStr] = key.split(",");
     let row = Number(rowStr);
     let col = Number(colStr);
@@ -1541,7 +1719,7 @@ function remapWalls(walls, horizontal, delta, leading, current) {
     const moved = value + (leading ? delta : 0);
     if (horizontal) col = moved;
     else row = moved;
-    next[wallKey(type, row, col)] = true;
+    next[wallKey(type, row, col)] = state;
   }
   return next;
 }
@@ -1662,10 +1840,10 @@ function renderToolControls() {
   for (const btn of toolButtons) {
     btn.classList.toggle("active", btn.dataset.tool === activeTool);
   }
-  // Drives the canvas cursor (crosshair while placing walls) from CSS
+  // Drives the canvas cursor (crosshair while editing edges) from CSS
   // rather than an inline style, so it doesn't fight the "grabbing" that
   // panning sets and clears inline mid-drag.
-  canvas.classList.toggle("tool-wall", activeTool === TOOL_WALL);
+  canvas.classList.toggle("tool-wall", isEdgeTool());
 }
 
 const zoomButtons = [...document.querySelectorAll(".battle-zoom-btn")];
@@ -1728,7 +1906,7 @@ canvas.addEventListener("mousedown", (event) => {
 // Redraws only when the previewed action actually changes, not on every
 // pixel of movement.
 canvas.addEventListener("mousemove", (event) => {
-  if (activeTool !== TOOL_WALL || panFromScroll) {
+  if (!isEdgeTool() || panFromScroll) {
     clearWallHover();
     return;
   }
@@ -1817,9 +1995,9 @@ canvas.addEventListener("click", (event) => {
     return;
   }
 
-  // The wall tool takes the click before any placement/selection logic —
-  // with it active, the map edits terrain and nothing else.
-  if (activeTool === TOOL_WALL) {
+  // The edge tools take the click before any placement/selection logic —
+  // with one active, the map edits terrain and nothing else.
+  if (isEdgeTool()) {
     const action = wallActionFromEvent(event);
     if (action) {
       wallHoverPos = { clientX: event.clientX, clientY: event.clientY };
