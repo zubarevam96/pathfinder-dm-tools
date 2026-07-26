@@ -48,6 +48,10 @@
           <div id="battle-map-viewport" class="battle-map-viewport">
             <canvas id="battle-grid" class="battle-grid"></canvas>
           </div>
+          <div class="battle-tool-palette">
+            <button type="button" class="battle-tool-btn" data-tool="select" title="Select and move (drag tokens, drag empty space to pan)" aria-label="Select and move tool">&#8598;</button>
+            <button type="button" class="battle-tool-btn" data-tool="wall" title="Place walls (click near a cell edge to add or remove)" aria-label="Wall placer tool">&#9473;</button>
+          </div>
           <div class="battle-zoom-palette">
             <button type="button" class="battle-zoom-btn" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
             <button type="button" id="battle-zoom-reset" class="battle-zoom-btn" data-zoom="reset" title="Reset zoom to 100%" aria-label="Reset zoom to 100%">&#9678;</button>

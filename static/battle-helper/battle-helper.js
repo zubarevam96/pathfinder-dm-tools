@@ -59,6 +59,61 @@ function clampDimension(value) {
   return Math.min(MAX_GRID, Math.max(MIN_GRID, Number(value) || MIN_GRID));
 }
 
+// Which instrument clicks on the map act with. UI-only, like zoom and
+// selection — the chosen tool isn't part of the battle, so it never
+// dispatches and undo doesn't cycle back through it.
+//   select — click to inspect a square, drag a token to move it (default)
+//   wall   — click near a cell edge to toggle a wall on that edge
+const TOOL_SELECT = "select";
+const TOOL_WALL = "wall";
+let activeTool = TOOL_SELECT;
+
+// How thick a wall is drawn, in logical (unzoomed) px.
+const WALL_THICKNESS = 5;
+
+// How far from an edge still counts as "the centre" (fraction of a
+// square), i.e. the zone that places a diagonal rather than an edge wall.
+// 0.3 leaves the middle ~40% of the cell as the diagonal target, which is
+// a comfortable click area without crowding the four edge zones.
+const WALL_CENTRE_ZONE = 0.3;
+
+// Last cursor position over the map while the wall tool is active, used to
+// recompute the hover preview. Stored as a position rather than a resolved
+// action so the preview re-derives itself from current state on every
+// draw — after a click changes the walls, the preview under a stationary
+// cursor updates to show what the NEXT click would do, with no extra
+// bookkeeping.
+let wallHoverPos = null;
+let wallHoverSig = null; // signature of the previewed action, to skip no-op redraws on mousemove
+
+function wallActionSignature(action) {
+  return action ? `${action.remove}|${action.add}` : null;
+}
+
+function clearWallHover() {
+  if (!wallHoverPos && wallHoverSig === null) return;
+  wallHoverPos = null;
+  wallHoverSig = null;
+  drawGrid();
+}
+
+// Walls sit on the LINES BETWEEN cells, not in cells, so they're keyed by
+// edge rather than by square:
+//   "h,row,col" — horizontal wall along the TOP edge of cell (row, col),
+//                 i.e. between cells (row-1, col) and (row, col)
+//   "v,row,col" — vertical wall along the LEFT edge of cell (row, col),
+//                 i.e. between cells (row, col-1) and (row, col)
+// Canonicalising to top/left only is what stops one wall being storable
+// under two names (the top of (3,4) is the bottom of (2,4)).
+//
+// The consequence that matters everywhere below: for an "h" wall the ROW
+// is an edge index running 0..rows (one more value than there are cells),
+// while its col is an ordinary cell index 0..cols-1 — and "v" is the
+// mirror image. See remapWalls() for why that asymmetry needs care.
+function wallKey(type, row, col) {
+  return `${type},${row},${col}`;
+}
+
 // Zoom is UI-only, like selection — it changes what you're looking at, not
 // the battle, so it never dispatches (undoing a zoom would be baffling).
 // It's also deliberately global rather than per-battle and not persisted:
@@ -83,7 +138,7 @@ function setZoom(value) {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, cols: MIN_GRID, rows: MIN_GRID };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, walls: {}, cols: MIN_GRID, rows: MIN_GRID };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -504,6 +559,62 @@ function drawGrid() {
     ctx.globalAlpha = 0.3;
     ctx.fillRect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
     ctx.globalAlpha = 1;
+  }
+
+  // Walls, drawn over the grid lines but under the tokens — they're
+  // terrain, and a token standing beside one shouldn't be painted over.
+  // Outer-boundary walls are nudged half a thickness inward so they render
+  // fully instead of having half the stroke fall outside the bitmap, the
+  // same clipping problem the closing grid lines had.
+  const wallKeys = Object.keys(battleState.walls ?? {});
+  // Recomputed from the stored cursor position rather than cached, so it
+  // always reflects current state — see wallHoverPos.
+  const hover = wallHoverPos && activeTool === TOOL_WALL ? wallActionFromEvent(wallHoverPos) : null;
+
+  if (wallKeys.length || hover) {
+    ctx.lineWidth = WALL_THICKNESS;
+    ctx.lineCap = "round";
+
+    // A wall the hover is about to remove is deliberately skipped here and
+    // redrawn in the preview pass instead. Drawing it solid and tinting
+    // over it cannot work: overlaying paint makes a stroke MORE prominent,
+    // never less. That's what made a diagonal being turned keep its old
+    // direction looking solid while the incoming one was a faint ghost —
+    // the preview appeared stuck at one angle.
+    const pendingRemoval = hover?.remove ?? null;
+    ctx.strokeStyle = cssVar("--text");
+    for (const key of wallKeys) {
+      if (key === pendingRemoval) continue;
+      traceWall(key, width, height);
+      ctx.stroke();
+    }
+
+    if (hover) {
+      // Outgoing first, incoming over it, so the wall you're about to get
+      // wins where the two cross.
+      if (hover.remove) {
+        // Turning a diagonal is a change, not a deletion — fade the old
+        // direction so attention lands on the new one. A removal with
+        // nothing replacing it really is a deletion, so that stays red.
+        const turning = Boolean(hover.add);
+        ctx.globalAlpha = turning ? 0.22 : 0.6;
+        ctx.strokeStyle = cssVar(turning ? "--muted" : "--danger");
+        traceWall(hover.remove, width, height);
+        ctx.stroke();
+      }
+      if (hover.add) {
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = cssVar("--text");
+        traceWall(hover.add, width, height);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Restored so the token loop below and the selection outline after it
+    // don't inherit the wall stroke settings.
+    ctx.lineCap = "butt";
+    ctx.lineWidth = 1;
   }
 
   for (const [key, entityId] of Object.entries(battleState.placements)) {
@@ -1071,6 +1182,7 @@ function render() {
   drawGrid();
   renderGridControls();
   renderZoomControls();
+  renderToolControls();
   renderRoster();
   renderInitiative();
   renderStatPanel();
@@ -1300,6 +1412,140 @@ function moveToken(fromKey, toKey) {
   selectedSquareKey = toKey;
 }
 
+// Decides what a click at a given position WOULD do, without doing it.
+// Both the click handler and the hover preview go through this, so the
+// preview is incapable of disagreeing with what actually happens — the
+// usual failure mode for "show me where this will land" affordances.
+// Returns { remove, add } (either may be null), or null if off-grid.
+//
+// Anywhere inside a cell counts: the square is split into four edge zones
+// plus a centre zone, rather than demanding a hit on a few pixels of line.
+// Right/bottom resolve to the NEXT cell's left/top edge, which is what
+// keeps the canonical "top/left only" keying honest.
+function wallActionFromEvent(event) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) * (gridCols() * SQUARE_SIZE / rect.width);
+  const y = (event.clientY - rect.top) * (gridRows() * SQUARE_SIZE / rect.height);
+  const col = Math.floor(x / SQUARE_SIZE);
+  const row = Math.floor(y / SQUARE_SIZE);
+  if (col < 0 || col >= gridCols() || row < 0 || row >= gridRows()) return null;
+
+  const walls = battleState.walls ?? {};
+  const fromLeft = x - col * SQUARE_SIZE;
+  const fromTop = y - row * SQUARE_SIZE;
+  const fromRight = SQUARE_SIZE - fromLeft;
+  const fromBottom = SQUARE_SIZE - fromTop;
+  const nearest = Math.min(fromLeft, fromRight, fromTop, fromBottom);
+
+  // Centre of the cell cycles the diagonal: none -> "\" -> "/" -> none.
+  // Three states rather than two so the same spot that changes direction
+  // also clears it — otherwise a diagonal could be placed but never
+  // removed without a separate control.
+  if (nearest > SQUARE_SIZE * WALL_CENTRE_ZONE) {
+    const back = wallKey("b", row, col);
+    const forward = wallKey("f", row, col);
+    if (walls[back]) return { remove: back, add: forward };
+    if (walls[forward]) return { remove: forward, add: null };
+    return { remove: null, add: back };
+  }
+
+  let key;
+  if (nearest === fromLeft) key = wallKey("v", row, col);
+  else if (nearest === fromRight) key = wallKey("v", row, col + 1);
+  else if (nearest === fromTop) key = wallKey("h", row, col);
+  else key = wallKey("h", row + 1, col);
+
+  return walls[key] ? { remove: key, add: null } : { remove: null, add: key };
+}
+
+const WALL_LABELS = { h: "horizontal", v: "vertical", b: "diagonal", f: "diagonal" };
+
+function wallActionLabel({ remove, add }) {
+  // Both set means the diagonal cycled from one direction to the other.
+  if (remove && add) {
+    const [, row, col] = add.split(",");
+    return `Turned the diagonal wall at (${col}, ${row})`;
+  }
+  const [type, row, col] = (add ?? remove).split(",");
+  return `${add ? "Placed" : "Removed"} a ${WALL_LABELS[type]} wall at (${col}, ${row})`;
+}
+
+function applyWallAction(action) {
+  const { remove, add } = action;
+  dispatch("toggle-wall", wallActionLabel(action), (state) => {
+    if (!state.walls) state.walls = {};
+    if (remove) delete state.walls[remove];
+    if (add) state.walls[add] = true;
+  });
+}
+
+// Traces a wall into the current path without stroking it, mirroring
+// traceTokenShape()'s split — the caller sets colour/alpha, so the solid
+// walls and the translucent hover preview share one definition of where a
+// wall of each type actually sits.
+function traceWall(key, width, height) {
+  const [type, rowStr, colStr] = key.split(",");
+  const row = Number(rowStr);
+  const col = Number(colStr);
+  const x0 = col * SQUARE_SIZE;
+  const y0 = row * SQUARE_SIZE;
+  const half = WALL_THICKNESS / 2;
+
+  ctx.beginPath();
+  if (type === "h") {
+    // Outer-boundary walls are nudged half a thickness inward so the whole
+    // stroke renders instead of half of it falling outside the bitmap —
+    // the same clipping trap the closing grid lines had.
+    const y = Math.min(Math.max(y0, half), height - half);
+    ctx.moveTo(x0, y);
+    ctx.lineTo(x0 + SQUARE_SIZE, y);
+  } else if (type === "v") {
+    const x = Math.min(Math.max(x0, half), width - half);
+    ctx.moveTo(x, y0);
+    ctx.lineTo(x, y0 + SQUARE_SIZE);
+  } else if (type === "b") {
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + SQUARE_SIZE, y0 + SQUARE_SIZE);
+  } else {
+    ctx.moveTo(x0 + SQUARE_SIZE, y0);
+    ctx.lineTo(x0, y0 + SQUARE_SIZE);
+  }
+}
+
+// Walls sit on edges, so their indices don't shift in lockstep with
+// placements when the grid is resized. For a "v" wall the COLUMN is an
+// edge index (0..cols, one more value than there are cells) while its row
+// is a cell index — and "h" is the mirror image. That asymmetry only bites
+// on a TRAILING removal: dropping the right-hand column removes cell index
+// cols-1, but edge index cols (the old outer boundary), leaving the edge
+// that was between the last two cells to become the new outer boundary.
+// Leading edits are uniform: drop index 0, shift the rest.
+//
+// Diagonals ("b"/"f") live inside a cell, so BOTH their components are
+// cell indices. They need no special case: edgeSpace below is false for
+// them on either axis, which is already the cell-index behaviour.
+function remapWalls(walls, horizontal, delta, leading, current) {
+  const next = {};
+  for (const key of Object.keys(walls ?? {})) {
+    const [type, rowStr, colStr] = key.split(",");
+    let row = Number(rowStr);
+    let col = Number(colStr);
+
+    const value = horizontal ? col : row;
+    const edgeSpace = horizontal ? type === "v" : type === "h";
+    if (delta < 0) {
+      const dropIndex = leading ? 0 : (edgeSpace ? current : current - 1);
+      if (value === dropIndex) continue;
+    }
+
+    const moved = value + (leading ? delta : 0);
+    if (horizontal) col = moved;
+    else row = moved;
+    next[wallKey(type, row, col)] = true;
+  }
+  return next;
+}
+
 // The four +/- controls around the map. Resizing is a real battle-state
 // change (Rule 1), so it dispatches — and it dispatches ONCE, covering the
 // new size, the renumbering below, and any tokens evicted by a removed
@@ -1332,6 +1578,8 @@ function resizeGrid(side, delta) {
     nextPlacements[horizontal ? squareKey(row, moved) : squareKey(moved, col)] = entityId;
   }
 
+  const nextWalls = remapWalls(battleState.walls, horizontal, delta, leading, current);
+
   // Names read before dispatching, so the log line can say who left —
   // same approach as applyHpDelta() reading temp HP up front. Safe because
   // nothing can mutate state between here and the mutator (JS is
@@ -1358,6 +1606,7 @@ function resizeGrid(side, delta) {
 
   dispatch("resize-grid", label, (state) => {
     state.placements = nextPlacements;
+    state.walls = nextWalls;
     if (horizontal) state.cols = next;
     else state.rows = next;
     for (const entityId of dropped) {
@@ -1389,6 +1638,34 @@ function renderGridControls() {
     const next = (horizontal ? gridCols() : gridRows()) + delta;
     btn.disabled = next < MIN_GRID || next > MAX_GRID;
   }
+}
+
+const toolButtons = [...document.querySelectorAll(".battle-tool-btn")];
+
+for (const btn of toolButtons) {
+  btn.addEventListener("click", () => {
+    if (activeTool === btn.dataset.tool) return;
+    activeTool = btn.dataset.tool;
+    // A roster entity armed for placement is meaningless once the map
+    // stops placing tokens, and would silently fire on the first click
+    // after switching back. Disarm on any tool change.
+    armedEntityId = null;
+    // The preview belongs to the wall tool; leaving it up after switching
+    // to select would advertise an edit that clicking no longer performs.
+    wallHoverPos = null;
+    wallHoverSig = null;
+    render();
+  });
+}
+
+function renderToolControls() {
+  for (const btn of toolButtons) {
+    btn.classList.toggle("active", btn.dataset.tool === activeTool);
+  }
+  // Drives the canvas cursor (crosshair while placing walls) from CSS
+  // rather than an inline style, so it doesn't fight the "grabbing" that
+  // panning sets and clears inline mid-drag.
+  canvas.classList.toggle("tool-wall", activeTool === TOOL_WALL);
 }
 
 const zoomButtons = [...document.querySelectorAll(".battle-zoom-btn")];
@@ -1429,19 +1706,40 @@ canvas.addEventListener("mousedown", (event) => {
   // next click is meant to drop it, not to move a token or the view.
   if (armedEntityId) return;
 
+  // The wall tool never drags tokens — a press is either a wall placement
+  // (on release, if it didn't move) or a pan, so fall through to the pan
+  // arming below regardless of what's on the square.
   const key = squareKey(square.row, square.col);
-  if (battleState.placements[key]) {
+  if (activeTool === TOOL_SELECT && battleState.placements[key]) {
     dragFromKey = key;
     dragStartPos = { x: event.clientX, y: event.clientY };
     dragMoved = false;
     return;
   }
 
-  // Empty square: grab the map itself.
+  // Empty square (or any square, with the wall tool): grab the map itself.
   panFromScroll = { left: mapViewport.scrollLeft, top: mapViewport.scrollTop };
   panStartPos = { x: event.clientX, y: event.clientY };
   panMoved = false;
 });
+
+// Hover preview for the wall tool. Suppressed mid-pan — the map is moving
+// under the cursor, so a preview pinned to a square would just flicker.
+// Redraws only when the previewed action actually changes, not on every
+// pixel of movement.
+canvas.addEventListener("mousemove", (event) => {
+  if (activeTool !== TOOL_WALL || panFromScroll) {
+    clearWallHover();
+    return;
+  }
+  wallHoverPos = { clientX: event.clientX, clientY: event.clientY };
+  const sig = wallActionSignature(wallActionFromEvent(event));
+  if (sig === wallHoverSig) return;
+  wallHoverSig = sig;
+  drawGrid();
+});
+
+canvas.addEventListener("mouseleave", clearWallHover);
 
 // On window, not the canvas: a pan that wanders outside the grid (very
 // easy, since panning is how you reach off-screen parts of it) should keep
@@ -1516,6 +1814,20 @@ canvas.addEventListener("click", (event) => {
   if (dragMoved || panMoved) {
     dragMoved = false;
     panMoved = false;
+    return;
+  }
+
+  // The wall tool takes the click before any placement/selection logic —
+  // with it active, the map edits terrain and nothing else.
+  if (activeTool === TOOL_WALL) {
+    const action = wallActionFromEvent(event);
+    if (action) {
+      wallHoverPos = { clientX: event.clientX, clientY: event.clientY };
+      // Dropped so the next mousemove is guaranteed to re-evaluate: the
+      // action under a stationary cursor changes as a result of this click.
+      wallHoverSig = null;
+      applyWallAction(action);
+    }
     return;
   }
 

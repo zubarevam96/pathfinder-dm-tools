@@ -292,7 +292,20 @@
   z-index: 1;
 }
 
-.battle-zoom-btn {
+/* Tool palette, top-right corner — the opposite corner from zoom, and
+   clear of the vertically centred add/remove-row control on that edge. */
+.battle-tool-palette {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  z-index: 1;
+}
+
+.battle-zoom-btn,
+.battle-tool-btn {
   width: 1.4rem;
   height: 1.4rem;
   padding: 0;
@@ -308,10 +321,35 @@
   cursor: pointer;
 }
 
-.battle-zoom-btn:not(:disabled):hover {
+.battle-zoom-btn:not(:disabled):hover,
+.battle-tool-btn:not(.active):hover {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--text);
+}
+
+/* The selected instrument. Re-declares background and border-color in the
+   hover rule too: style.css's global button:hover sets both, and the
+   cascade resolves per property, so omitting them would let the accent
+   tint wash out this solid fill on hover. */
+.battle-tool-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.battle-tool-btn.active:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+  filter: brightness(1.1);
+}
+
+/* Set by renderToolControls() — signals that a click edits terrain rather
+   than selecting. Panning still overrides this inline with "grabbing"
+   while a drag is actually in progress. */
+.battle-grid.tool-wall {
+  cursor: crosshair;
 }
 
 /* Same reasoning as .battle-grid-btn:disabled:hover — :not(:disabled) only
