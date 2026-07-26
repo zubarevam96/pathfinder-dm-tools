@@ -55,6 +55,11 @@ const SQUARE_SIZE = 40; // px — each square is 5 ft per PF2e's grid convention
 const MIN_GRID = 5;
 const MAX_GRID = 60;
 
+// Every nth grid line is drawn heavier, so squares can be counted in
+// blocks rather than one at a time. 5 squares is 25 ft, which is also
+// roughly a Speed's worth of movement.
+const GRID_MAJOR_EVERY = 5;
+
 function clampDimension(value) {
   return Math.min(MAX_GRID, Math.max(MIN_GRID, Number(value) || MIN_GRID));
 }
@@ -140,7 +145,7 @@ function clearWallHover() {
 // The consequence that matters everywhere below: for an "h" wall the ROW
 // is an edge index running 0..rows (one more value than there are cells),
 // while its col is an ordinary cell index 0..cols-1 — and "v" is the
-// mirror image. See remapWalls() for why that asymmetry needs care.
+// mirror image. See pruneWalls() for why that asymmetry needs care.
 function wallKey(type, row, col) {
   return `${type},${row},${col}`;
 }
@@ -169,7 +174,7 @@ function setZoom(value) {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, walls: {}, cols: MIN_GRID, rows: MIN_GRID };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, walls: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -267,6 +272,11 @@ function normalizeState(raw) {
 
   state.rows = clampDimension(state.rows);
   state.cols = clampDimension(state.cols);
+  // Boards saved before coordinates were anchored started at (0, 0) with
+  // no origin recorded, which is exactly an origin of zero — so they need
+  // no conversion, only the defaults.
+  state.originRow = Number.isFinite(state.originRow) ? Math.trunc(state.originRow) : 0;
+  state.originCol = Number.isFinite(state.originCol) ? Math.trunc(state.originCol) : 0;
 
   // Walls were once a plain { key: true } set; an edge now carries a state
   // so doors can share the same map. Anything non-string is a wall from
@@ -395,6 +405,41 @@ function gridRows() {
   return clampDimension(battleState.rows);
 }
 
+// Square coordinates are ABSOLUTE and fixed to the board, not to the
+// canvas: the square that starts life as (0, 0) keeps those numbers
+// forever, so growing the map leftward or upward moves the ORIGIN
+// negative rather than renumbering everything that was already placed.
+// Coordinates below the origin are therefore negative, which is the point
+// — a token's square doesn't change because the DM added room beside it.
+//
+// The grid covers rows originRow .. originRow + rows - 1 and columns
+// originCol .. originCol + cols - 1.
+function gridOriginRow() {
+  return Number.isFinite(battleState.originRow) ? battleState.originRow : 0;
+}
+
+function gridOriginCol() {
+  return Number.isFinite(battleState.originCol) ? battleState.originCol : 0;
+}
+
+// Absolute coordinate -> canvas pixel. Every bit of drawing goes through
+// these two, so the origin offset can never be applied in one place and
+// forgotten in another.
+function pixelX(col) {
+  return (col - gridOriginCol()) * SQUARE_SIZE;
+}
+
+function pixelY(row) {
+  return (row - gridOriginRow()) * SQUARE_SIZE;
+}
+
+function inGridBounds(row, col) {
+  const originRow = gridOriginRow();
+  const originCol = gridOriginCol();
+  return row >= originRow && row < originRow + gridRows()
+    && col >= originCol && col < originCol + gridCols();
+}
+
 function squareKey(row, col) {
   return `${row},${col}`;
 }
@@ -442,8 +487,12 @@ const DIRECTIONS = [
 ];
 const DIR_NONE = 8; // the starting square, entered from nowhere
 
-function inGrid(row, col, rows, cols) {
-  return row >= 0 && row < rows && col >= 0 && col < cols;
+// Bounds check in absolute coordinates. Pathfinding takes the origin as
+// arguments rather than reading it, so the search is a pure function of
+// the board it was handed.
+function inGrid(row, col, originRow, originCol, rows, cols) {
+  return row >= originRow && row < originRow + rows
+    && col >= originCol && col < originCol + cols;
 }
 
 // The edge an orthogonal step crosses. Diagonal steps cross no single
@@ -498,13 +547,13 @@ function diagonalBlocksTransit(walls, row, col, entryDir, exitDir) {
 // right-angle routes around the corner is open. That's the lenient rule:
 // a wall running alongside you doesn't stop you slipping past it
 // diagonally — only a wall on both ways round does.
-function diagonalStepOpen(walls, row, col, dr, dc, rows, cols) {
+function diagonalStepOpen(walls, row, col, dr, dc, bounds) {
   const viaCol = !edgeBlocks(walls, row, col, 0, dc)
-    && inGrid(row, col + dc, rows, cols)
+    && inGrid(row, col + dc, ...bounds)
     && !edgeBlocks(walls, row, col + dc, dr, 0);
   if (viaCol) return true;
   return !edgeBlocks(walls, row, col, dr, 0)
-    && inGrid(row + dr, col, rows, cols)
+    && inGrid(row + dr, col, ...bounds)
     && !edgeBlocks(walls, row + dr, col, 0, dc);
 }
 
@@ -522,13 +571,19 @@ function diagonalStepOpen(walls, row, col, dr, dc, rows, cols) {
 function findPath(fromKey, toKey) {
   const rows = gridRows();
   const cols = gridCols();
+  const originRow = gridOriginRow();
+  const originCol = gridOriginCol();
+  const bounds = [originRow, originCol, rows, cols];
   const walls = battleState.walls ?? {};
   const [fromRow, fromCol] = fromKey.split(",").map(Number);
   const [toRow, toCol] = toKey.split(",").map(Number);
-  if (!inGrid(fromRow, fromCol, rows, cols) || !inGrid(toRow, toCol, rows, cols)) return null;
+  if (!inGrid(fromRow, fromCol, ...bounds) || !inGrid(toRow, toCol, ...bounds)) return null;
   if (fromRow === toRow && fromCol === toCol) return [{ row: fromRow, col: fromCol, feet: 0 }];
 
-  const stateId = (row, col, parity, entryDir) => ((row * cols + col) * 2 + parity) * 9 + entryDir;
+  // State ids are packed from ZERO-BASED indices; absolute coordinates can
+  // be negative and would index outside the arrays.
+  const stateId = (row, col, parity, entryDir) =>
+    (((row - originRow) * cols + (col - originCol)) * 2 + parity) * 9 + entryDir;
   const dist = new Int32Array(rows * cols * 2 * 9).fill(-1);
   const prev = new Int32Array(dist.length).fill(-1);
 
@@ -578,8 +633,8 @@ function findPath(fromKey, toKey) {
     const withoutDir = (id - entryDir) / 9;
     const parity = withoutDir % 2;
     const cell = (withoutDir - parity) / 2;
-    const row = Math.floor(cell / cols);
-    const col = cell % cols;
+    const row = originRow + Math.floor(cell / cols);
+    const col = originCol + (cell % cols);
 
     // Dijkstra pops in non-decreasing cost, so the first arrival is best.
     if (row === toRow && col === toCol) {
@@ -591,12 +646,12 @@ function findPath(fromKey, toKey) {
       const { dr, dc } = DIRECTIONS[d];
       const nextRow = row + dr;
       const nextCol = col + dc;
-      if (!inGrid(nextRow, nextCol, rows, cols)) continue;
+      if (!inGrid(nextRow, nextCol, ...bounds)) continue;
       if (diagonalBlocksTransit(walls, row, col, entryDir, d)) continue;
 
       const diagonal = dr !== 0 && dc !== 0;
       if (diagonal) {
-        if (!diagonalStepOpen(walls, row, col, dr, dc, rows, cols)) continue;
+        if (!diagonalStepOpen(walls, row, col, dr, dc, bounds)) continue;
       } else if (edgeBlocks(walls, row, col, dr, dc)) {
         continue;
       }
@@ -623,7 +678,7 @@ function findPath(fromKey, toKey) {
     const withoutDir = (id - entryDir) / 9;
     const parity = withoutDir % 2;
     const cell = (withoutDir - parity) / 2;
-    path.push({ row: Math.floor(cell / cols), col: cell % cols, feet: dist[id] });
+    path.push({ row: originRow + Math.floor(cell / cols), col: originCol + (cell % cols), feet: dist[id] });
   }
   return path.reverse();
 }
@@ -734,6 +789,8 @@ function traceTokenShape(shape, cx, cy, radius) {
 function drawGrid() {
   const cols = gridCols();
   const rows = gridRows();
+  const originRow = gridOriginRow();
+  const originCol = gridOriginCol();
   const width = cols * SQUARE_SIZE;
   const height = rows * SQUARE_SIZE;
 
@@ -768,31 +825,55 @@ function drawGrid() {
   if (selectedSquareKey) {
     const [row, col] = selectedSquareKey.split(",").map(Number);
     ctx.fillStyle = accentSoft;
-    ctx.fillRect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+    ctx.fillRect(pixelX(col), pixelY(row), SQUARE_SIZE, SQUARE_SIZE);
   }
 
+  // Every fifth line is drawn heavier, breaking the grid into 5x5 blocks so
+  // a large map stays countable at a glance. The two outer lines are always
+  // heavy as well, which frames the map — without that a grid whose size
+  // isn't a multiple of five (7 wide, say) would get a heavy left border
+  // and a hairline right one, which just reads as a mistake.
+  //
+  // The half-pixel offset puts a 1px stroke on a whole pixel instead of
+  // straddling two and blurring; a 2px stroke is crisp centred on a whole
+  // pixel instead, hence the offset depending on weight. Either way the
+  // line is clamped to keep its full width inside the bitmap: the bitmap
+  // spans 0..width, so a line pushed past that edge is clipped away
+  // entirely — which is what used to make the right and bottom borders
+  // invisible.
+  // Heaviness is keyed off the ABSOLUTE coordinate, not the line's index
+  // from the edge, so the 5x5 blocks stay pinned to the board. Growing the
+  // map leftward slides the heavy lines along with everything else and can
+  // leave a partial block at the edge, which is correct: the blocks belong
+  // to the board, not to the current viewport. (JS modulo keeps the sign of
+  // the dividend, but only === 0 is tested here and -0 === 0, so negative
+  // coordinates need no special handling.)
   ctx.strokeStyle = border;
-  ctx.lineWidth = 1;
-  // The +0.5 offset puts a 1px stroke on a whole pixel instead of
-  // straddling two and blurring. The closing line in each direction has to
-  // be pulled half a pixel back INSIDE instead of pushed out: the bitmap
-  // spans 0..width, so a line at width + 0.5 falls entirely outside it and
-  // gets clipped away — which is why the grid's right and bottom borders
-  // were invisible. Math.min only ever affects that last line.
+  const gridLinePos = (index, coordinate, count, extent) => {
+    const major = coordinate % GRID_MAJOR_EVERY === 0 || index === 0 || index === count;
+    const lineWidth = major ? 2 : 1;
+    const half = lineWidth / 2;
+    const raw = index * SQUARE_SIZE + (major ? 0 : 0.5);
+    return { lineWidth, pos: Math.min(Math.max(raw, half), extent - half) };
+  };
+
   for (let col = 0; col <= cols; col++) {
-    const x = Math.min(col * SQUARE_SIZE + 0.5, width - 0.5);
+    const { lineWidth, pos } = gridLinePos(col, originCol + col, cols, width);
+    ctx.lineWidth = lineWidth;
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
+    ctx.moveTo(pos, 0);
+    ctx.lineTo(pos, height);
     ctx.stroke();
   }
   for (let row = 0; row <= rows; row++) {
-    const y = Math.min(row * SQUARE_SIZE + 0.5, height - 0.5);
+    const { lineWidth, pos } = gridLinePos(row, originRow + row, rows, height);
+    ctx.lineWidth = lineWidth;
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
+    ctx.moveTo(0, pos);
+    ctx.lineTo(width, pos);
     ctx.stroke();
   }
+  ctx.lineWidth = 1;
 
   // Mid-drag feedback: dim the origin square, tint the hovered square
   // green (valid drop — empty) or red (invalid — occupied). Drawn under
@@ -802,7 +883,7 @@ function drawGrid() {
     const [row, col] = dragFromKey.split(",").map(Number);
     ctx.fillStyle = border;
     ctx.globalAlpha = 0.5;
-    ctx.fillRect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+    ctx.fillRect(pixelX(col), pixelY(row), SQUARE_SIZE, SQUARE_SIZE);
     ctx.globalAlpha = 1;
   }
   if (dragHoverKey && dragHoverKey !== dragFromKey) {
@@ -810,7 +891,7 @@ function drawGrid() {
     const valid = !battleState.placements[dragHoverKey];
     ctx.fillStyle = cssVar(valid ? "--success" : "--danger");
     ctx.globalAlpha = 0.3;
-    ctx.fillRect(col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+    ctx.fillRect(pixelX(col), pixelY(row), SQUARE_SIZE, SQUARE_SIZE);
     ctx.globalAlpha = 1;
   }
 
@@ -885,8 +966,8 @@ function drawGrid() {
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
     dragPath.forEach((step, i) => {
-      const x = step.col * SQUARE_SIZE + SQUARE_SIZE / 2;
-      const y = step.row * SQUARE_SIZE + SQUARE_SIZE / 2;
+      const x = pixelX(step.col) + SQUARE_SIZE / 2;
+      const y = pixelY(step.row) + SQUARE_SIZE / 2;
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
@@ -900,8 +981,8 @@ function drawGrid() {
     ctx.textBaseline = "middle";
     for (let i = 1; i < dragPath.length; i++) {
       const step = dragPath[i];
-      const x = step.col * SQUARE_SIZE + SQUARE_SIZE / 2;
-      const y = step.row * SQUARE_SIZE + SQUARE_SIZE / 2;
+      const x = pixelX(step.col) + SQUARE_SIZE / 2;
+      const y = pixelY(step.row) + SQUARE_SIZE / 2;
       const text = `${step.feet}ft`;
       // Knocked out of the dashed line behind it, or the two overlap into
       // something unreadable at small zoom.
@@ -917,8 +998,8 @@ function drawGrid() {
     const entity = findEntity(entityId);
     if (!entity) continue;
     const [row, col] = key.split(",").map(Number);
-    const cx = col * SQUARE_SIZE + SQUARE_SIZE / 2;
-    const cy = row * SQUARE_SIZE + SQUARE_SIZE / 2;
+    const cx = pixelX(col) + SQUARE_SIZE / 2;
+    const cy = pixelY(row) + SQUARE_SIZE / 2;
     const radius = SQUARE_SIZE / 2 - 4;
     const appearance = getAppearance(entityId, entity.name);
 
@@ -937,7 +1018,7 @@ function drawGrid() {
     const [row, col] = selectedSquareKey.split(",").map(Number);
     ctx.strokeStyle = accent;
     ctx.lineWidth = 2;
-    ctx.strokeRect(col * SQUARE_SIZE + 1, row * SQUARE_SIZE + 1, SQUARE_SIZE - 2, SQUARE_SIZE - 2);
+    ctx.strokeRect(pixelX(col) + 1, pixelY(row) + 1, SQUARE_SIZE - 2, SQUARE_SIZE - 2);
   }
 }
 
@@ -1679,9 +1760,11 @@ function squareFromEvent(event) {
   // pixels rather than the SQUARE_SIZE-based coordinates below.
   const x = (event.clientX - rect.left) * (gridCols() * SQUARE_SIZE / rect.width);
   const y = (event.clientY - rect.top) * (gridRows() * SQUARE_SIZE / rect.height);
-  const col = Math.floor(x / SQUARE_SIZE);
-  const row = Math.floor(y / SQUARE_SIZE);
-  if (col < 0 || col >= gridCols() || row < 0 || row >= gridRows()) return null;
+  // Offset back into absolute board coordinates, which is what placements
+  // and walls are keyed by.
+  const col = gridOriginCol() + Math.floor(x / SQUARE_SIZE);
+  const row = gridOriginRow() + Math.floor(y / SQUARE_SIZE);
+  if (!inGridBounds(row, col)) return null;
   return { row, col };
 }
 
@@ -1730,13 +1813,15 @@ function wallActionFromEvent(event) {
   const rect = canvas.getBoundingClientRect();
   const x = (event.clientX - rect.left) * (gridCols() * SQUARE_SIZE / rect.width);
   const y = (event.clientY - rect.top) * (gridRows() * SQUARE_SIZE / rect.height);
-  const col = Math.floor(x / SQUARE_SIZE);
-  const row = Math.floor(y / SQUARE_SIZE);
-  if (col < 0 || col >= gridCols() || row < 0 || row >= gridRows()) return null;
+  const col = gridOriginCol() + Math.floor(x / SQUARE_SIZE);
+  const row = gridOriginRow() + Math.floor(y / SQUARE_SIZE);
+  if (!inGridBounds(row, col)) return null;
 
   const walls = battleState.walls ?? {};
-  const fromLeft = x - col * SQUARE_SIZE;
-  const fromTop = y - row * SQUARE_SIZE;
+  // Offsets within the cell, so these use the cell's pixel position rather
+  // than its (now possibly negative) coordinate.
+  const fromLeft = x - pixelX(col);
+  const fromTop = y - pixelY(row);
   const fromRight = SQUARE_SIZE - fromLeft;
   const fromBottom = SQUARE_SIZE - fromTop;
   const nearest = Math.min(fromLeft, fromRight, fromTop, fromBottom);
@@ -1824,8 +1909,8 @@ function traceWall(key, width, height) {
   const [type, rowStr, colStr] = key.split(",");
   const row = Number(rowStr);
   const col = Number(colStr);
-  const x0 = col * SQUARE_SIZE;
-  const y0 = row * SQUARE_SIZE;
+  const x0 = pixelX(col);
+  const y0 = pixelY(row);
   const half = WALL_THICKNESS / 2;
 
   ctx.beginPath();
@@ -1896,9 +1981,9 @@ function drawEdgeShape(key, state, width, height, color, walls) {
   // isn't half-clipped, same as walls.
   const clampHalf = Math.max(WALL_THICKNESS, DOOR_THICKNESS) / 2;
   const axis = horizontal
-    ? Math.min(Math.max(row * SQUARE_SIZE, clampHalf), height - clampHalf)
-    : Math.min(Math.max(col * SQUARE_SIZE, clampHalf), width - clampHalf);
-  const start = (horizontal ? col : row) * SQUARE_SIZE;
+    ? Math.min(Math.max(pixelY(row), clampHalf), height - clampHalf)
+    : Math.min(Math.max(pixelX(col), clampHalf), width - clampHalf);
+  const start = horizontal ? pixelX(col) : pixelY(row);
   const end = start + SQUARE_SIZE;
 
   // A door magnets toward a door on the neighbouring cell's matching edge,
@@ -1939,47 +2024,40 @@ function drawEdgeShape(key, state, width, height, color, walls) {
   ctx.stroke();
 }
 
-// Walls sit on edges, so their indices don't shift in lockstep with
-// placements when the grid is resized. For a "v" wall the COLUMN is an
-// edge index (0..cols, one more value than there are cells) while its row
-// is a cell index — and "h" is the mirror image. That asymmetry only bites
-// on a TRAILING removal: dropping the right-hand column removes cell index
-// cols-1, but edge index cols (the old outer boundary), leaving the edge
-// that was between the last two cells to become the new outer boundary.
-// Leading edits are uniform: drop index 0, shift the rest.
+function cellInside(row, col, originRow, originCol, rows, cols) {
+  return row >= originRow && row < originRow + rows
+    && col >= originCol && col < originCol + cols;
+}
+
+// Drops walls that a resize left off the board. Their valid ranges differ
+// by type, which is the one subtlety: an "h" wall's ROW is an edge index
+// running originRow..originRow+rows inclusive — one more value than there
+// are cells, since a row of cells has a line above and below — while its
+// column is an ordinary cell index. "v" is the mirror image. Diagonals
+// ("b"/"f") sit inside a cell, so both of their components are cell
+// indices.
 //
-// Diagonals ("b"/"f") live inside a cell, so BOTH their components are
-// cell indices. They need no special case: edgeSpace below is false for
-// them on either axis, which is already the cell-index behaviour.
-function remapWalls(walls, horizontal, delta, leading, current) {
-  const next = {};
-  // Iterated as entries, not keys: the value is the edge's state, and
-  // rebuilding with `true` would quietly demote every door to a wall on
-  // the next resize.
+// Iterated as entries, not keys: the value is the edge's state, and
+// rebuilding with `true` would quietly demote every door to a wall.
+function pruneWalls(walls, originRow, originCol, rows, cols) {
+  const kept = {};
   for (const [key, state] of Object.entries(walls ?? {})) {
     const [type, rowStr, colStr] = key.split(",");
-    let row = Number(rowStr);
-    let col = Number(colStr);
-
-    const value = horizontal ? col : row;
-    const edgeSpace = horizontal ? type === "v" : type === "h";
-    if (delta < 0) {
-      const dropIndex = leading ? 0 : (edgeSpace ? current : current - 1);
-      if (value === dropIndex) continue;
+    const row = Number(rowStr);
+    const col = Number(colStr);
+    const rowLimit = originRow + rows + (type === "h" ? 1 : 0);
+    const colLimit = originCol + cols + (type === "v" ? 1 : 0);
+    if (row >= originRow && row < rowLimit && col >= originCol && col < colLimit) {
+      kept[key] = state;
     }
-
-    const moved = value + (leading ? delta : 0);
-    if (horizontal) col = moved;
-    else row = moved;
-    next[wallKey(type, row, col)] = state;
   }
-  return next;
+  return kept;
 }
 
 // The four +/- controls around the map. Resizing is a real battle-state
 // change (Rule 1), so it dispatches — and it dispatches ONCE, covering the
-// new size, the renumbering below, and any tokens evicted by a removed
-// row/column, so a single Ctrl+Z restores all three together rather than
+// new size, the new origin, and any tokens evicted by a removed row or
+// column, so a single Ctrl+Z restores all of it together rather than
 // leaving a half-undone board.
 function resizeGrid(side, delta) {
   const horizontal = side === "left" || side === "right";
@@ -1987,28 +2065,30 @@ function resizeGrid(side, delta) {
   const next = current + delta;
   if (next < MIN_GRID || next > MAX_GRID) return;
 
-  // Editing the top/left edge renumbers every square, because placements
-  // are keyed "row,col" off the top-left origin — inserting a column at 0
-  // pushes everyone one index right. Bottom/right edits append or truncate
-  // past the existing keys, so those need no renumbering at all.
+  // Editing the top/left edge moves the ORIGIN instead of renumbering
+  // anything: the square that was (0, 0) stays (0, 0), and squares added
+  // beyond it simply take negative coordinates. Bottom/right edits leave
+  // the origin alone. Nothing on the board is ever renumbered, so a token's
+  // coordinates never change because the DM added room beside it.
   const leading = side === "left" || side === "top";
-  const shift = leading ? delta : 0;
-  const removedIndex = leading ? 0 : current - 1;
+  const nextOriginRow = !horizontal && leading ? gridOriginRow() - delta : gridOriginRow();
+  const nextOriginCol = horizontal && leading ? gridOriginCol() - delta : gridOriginCol();
+  const nextRows = horizontal ? gridRows() : next;
+  const nextCols = horizontal ? next : gridCols();
 
+  // Shrinking can leave placements and walls off the board; those are
+  // dropped. This is the whole payoff of anchoring coordinates — the old
+  // version had to renumber every key on a top/left edit while getting the
+  // edge-index vs cell-index asymmetry right, and now nothing moves at all.
   const nextPlacements = {};
   const dropped = [];
   for (const [key, entityId] of Object.entries(battleState.placements)) {
     const [row, col] = key.split(",").map(Number);
-    const index = horizontal ? col : row;
-    if (delta < 0 && index === removedIndex) {
-      dropped.push(entityId);
-      continue;
-    }
-    const moved = index + shift;
-    nextPlacements[horizontal ? squareKey(row, moved) : squareKey(moved, col)] = entityId;
+    if (cellInside(row, col, nextOriginRow, nextOriginCol, nextRows, nextCols)) nextPlacements[key] = entityId;
+    else dropped.push(entityId);
   }
 
-  const nextWalls = remapWalls(battleState.walls, horizontal, delta, leading, current);
+  const nextWalls = pruneWalls(battleState.walls, nextOriginRow, nextOriginCol, nextRows, nextCols);
 
   // Names read before dispatching, so the log line can say who left —
   // same approach as applyHpDelta() reading temp HP up front. Safe because
@@ -2020,23 +2100,19 @@ function resizeGrid(side, delta) {
   if (droppedNames.length) label += ` (${droppedNames.join(", ")} left the field)`;
 
   // UI-only state, updated before the dispatch so its render() sees the
-  // final picture. Selection is a square key, so it has to follow the
-  // renumbering — or clear, if its square is the one that just went away.
+  // final picture. The selected square keeps its coordinates now that
+  // nothing is renumbered — it only clears if it fell off the board.
   for (const entityId of dropped) raisedShieldIds.delete(entityId);
   if (selectedSquareKey) {
     const [row, col] = selectedSquareKey.split(",").map(Number);
-    const index = horizontal ? col : row;
-    if (delta < 0 && index === removedIndex) {
-      selectedSquareKey = null;
-    } else {
-      const moved = index + shift;
-      selectedSquareKey = horizontal ? squareKey(row, moved) : squareKey(moved, col);
-    }
+    if (!cellInside(row, col, nextOriginRow, nextOriginCol, nextRows, nextCols)) selectedSquareKey = null;
   }
 
   dispatch("resize-grid", label, (state) => {
     state.placements = nextPlacements;
     state.walls = nextWalls;
+    state.originRow = nextOriginRow;
+    state.originCol = nextOriginCol;
     if (horizontal) state.cols = next;
     else state.rows = next;
     for (const entityId of dropped) {
