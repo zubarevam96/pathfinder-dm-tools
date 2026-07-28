@@ -129,6 +129,15 @@
     </div>
   </dialog>
 
+  <dialog id="battle-condition-dialog" class="battle-condition-dialog">
+    <h2>Add condition — <span id="battle-condition-dialog-name"></span></h2>
+    <input type="search" id="battle-condition-filter" placeholder="Filter conditions…" autocomplete="off" />
+    <ul id="battle-condition-options" class="battle-condition-options"></ul>
+    <div class="dialog-actions">
+      <button type="button" id="battle-condition-close">Close</button>
+    </div>
+  </dialog>
+
   <dialog id="battle-rename-dialog">
     <h2>Rename battle</h2>
     <form id="battle-rename-form" class="battle-rename-form">
@@ -150,6 +159,9 @@
   </dialog>
 
   <script src="../pf2e-math.js"></script>
+  <!-- Condition list plus the effect math the stat panel applies. Must load
+       before battle-helper.js, same as pf2e-math.js. -->
+  <script src="../pf2e-conditions.js"></script>
   <script src="battle-helper.js"></script>
 </body>
 </html>

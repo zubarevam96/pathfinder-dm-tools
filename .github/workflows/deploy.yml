@@ -27,6 +27,7 @@ jobs:
       - name: Check frontend JS syntax
         run: |
           node --check static/pf2e-math.js
+          node --check static/pf2e-conditions.js
           node --check static/app.js
           node --check static/battle-helper/battle-helper.js
 

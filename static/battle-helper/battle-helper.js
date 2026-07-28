@@ -30,6 +30,12 @@ const initiativeForm = document.getElementById("battle-initiative-form");
 const initiativeInput = document.getElementById("battle-initiative-input");
 const initiativeCloseBtn = document.getElementById("battle-initiative-close");
 
+const conditionDialog = document.getElementById("battle-condition-dialog");
+const conditionDialogTitle = document.getElementById("battle-condition-dialog-name");
+const conditionFilter = document.getElementById("battle-condition-filter");
+const conditionOptions = document.getElementById("battle-condition-options");
+const conditionCloseBtn = document.getElementById("battle-condition-close");
+
 const addObjectForm = document.getElementById("battle-add-object-form");
 const addObjectNameInput = document.getElementById("battle-add-object-name");
 const logClearBtn = document.getElementById("battle-log-clear");
@@ -174,7 +180,7 @@ function setZoom(value) {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, walls: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, walls: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -703,8 +709,11 @@ function initiativeOrderIds() {
 // freshly placed character, or battle state persisted before HP tracking
 // existed) — never stored redundantly, so it always reflects the
 // character's current sheet if their build changes.
-function currentHp(characterId, build) {
-  const maxHp = computeMaxHp(build);
+// maxHp is a parameter (defaulting to the sheet's) rather than always
+// recomputed here because drained lowers it — see effectiveMaxHp(). The
+// clamp is what makes a drained character's HP drop on screen without
+// touching the stored value, so it climbs back when drained ends.
+function currentHp(characterId, build, maxHp = computeMaxHp(build)) {
   const tracked = battleState.hp[characterId];
   return tracked == null ? maxHp : Math.min(tracked, maxHp);
 }
@@ -1058,6 +1067,7 @@ function renderRoster() {
         delete state.customObjects[id];
         delete state.initiative[id];
         delete state.appearance[id];
+        delete state.conditions[id];
       });
       if (armedEntityId === id) armedEntityId = null;
     });
@@ -1163,6 +1173,7 @@ function bindRemoveButton(entityId, name) {
       delete state.placements[key];
       delete state.hp[entityId];
       delete state.tempHp[entityId];
+      delete state.conditions[entityId];
       delete state.initiative[entityId];
       state.initiativeOrder = state.initiativeOrder.filter((id) => id !== entityId);
     });
@@ -1204,8 +1215,15 @@ function renderStatPanel() {
         </div>
       </div>
       <p class="placeholder">${entity.isCustom ? "Custom object — no additional stats." : "No sheet data for this character."}</p>
+      <div class="battle-stat-body">
+        ${conditionsSectionHtml(entityId)}
+      </div>
     `;
     bindRemoveButton(entityId, entity.name);
+    // Custom objects get conditions too: a hazard can be broken or take
+    // persistent damage, and conditions aren't sheet data — they're battle
+    // state that applies to anything on the field, like initiative.
+    bindConditionsSection(entityId, entity.name);
     return;
   }
 
@@ -1217,8 +1235,12 @@ function renderStatPanel() {
   const build = entity.build;
   const prof = build.proficiencies ?? {};
   const attrs = build.attributes ?? {};
-  const maxHp = computeMaxHp(build);
-  const hp = currentHp(characterId, build);
+  // Conditions are resolved once for the whole panel — every stat below
+  // reads its own entry out of this, rather than each recomputing the
+  // grant graph.
+  const mods = entityModifiers(characterId, build.level ?? 1);
+  const { base: baseMaxHp, max: maxHp } = effectiveMaxHp(characterId, build);
+  const hp = currentHp(characterId, build, maxHp);
   const tempHp = currentTempHp(characterId);
   // The bar's whole is max HP + temp HP, not just max HP, so adding temp
   // HP visibly shrinks the HP/absent portions to make room for it rather
@@ -1231,15 +1253,51 @@ function renderStatPanel() {
   const hpFillPct = hpPool > 0 ? Math.max(0, Math.min(100, (hp / hpPool) * 100)) : 0;
   const tempFillPct = hpPool > 0 ? Math.max(0, Math.min(100, (tempHp / hpPool) * 100)) : 0;
   const hpLow = maxHp > 0 && hp / maxHp <= 0.25;
-  const baseAc = Number(build.acTotal?.acTotal) || 0;
   const { hasShield, shieldBonus } = getAcBonuses(build);
   const shieldRaised = raisedShieldIds.has(characterId);
-  const ac = baseAc + (shieldRaised ? shieldBonus : 0);
-  const fort = checkTotal(build, prof.fortitude ?? 0, "con");
-  const reflex = checkTotal(build, prof.reflex ?? 0, "dex");
-  const will = checkTotal(build, prof.will ?? 0, "wis");
-  const perception = checkTotal(build, prof.perception ?? 0, "wis");
-  const speed = (attrs.speed ?? 0) + (attrs.speedBonus ?? 0);
+  // Conditions apply on top of the raised-shield bonus, not instead of it:
+  // the shield is a circumstance bonus, so it and a status penalty from
+  // e.g. frightened both count. baseAc here is "AC before conditions".
+  const baseAc = (Number(build.acTotal?.acTotal) || 0) + (shieldRaised ? shieldBonus : 0);
+  const ac = baseAc + mods.ac.total;
+  const baseFort = checkTotal(build, prof.fortitude ?? 0, "con");
+  const baseReflex = checkTotal(build, prof.reflex ?? 0, "dex");
+  const baseWill = checkTotal(build, prof.will ?? 0, "wis");
+  const basePerception = checkTotal(build, prof.perception ?? 0, "wis");
+  const baseSpeed = (attrs.speed ?? 0) + (attrs.speedBonus ?? 0);
+  // Speed can't go below 0 however much is stacked on it, and it's shown
+  // as a plain number of feet rather than a signed modifier.
+  const speed = Math.max(0, baseSpeed + mods.speed.total);
+
+  // Each save/Perception tile is the same shape, so build them from one
+  // list instead of four near-identical lines of template literal.
+  const checks = [
+    { label: "Fortitude", base: baseFort, modifier: mods.fortitude },
+    { label: "Reflex", base: baseReflex, modifier: mods.reflex },
+    { label: "Will", base: baseWill, modifier: mods.will },
+    { label: "Perception", base: basePerception, modifier: mods.perception },
+  ].map(({ label, base, modifier }) => {
+    const hint = modifierHint(label, base, modifier);
+    return `<div class="battle-stat"><span class="stat-label">${label}</span><span class="stat-value ${modifierClass(modifier)}"${hint ? ` title="${escapeHtml(hint)}"` : ""}>${formatMod(base + modifier.total)}</span></div>`;
+  }).join("");
+
+  const acHint = modifierHint("AC", baseAc, mods.ac, String);
+  const speedHint = modifierHint("Speed", baseSpeed, mods.speed, String);
+  const maxHpHint = modifierHint("Max HP", baseMaxHp, mods.maxHp, String);
+  // The AC panel's tooltip already explains the shield toggle; the
+  // condition breakdown is appended below it rather than replacing it.
+  const acTitle = [hasShield ? `Raise a Shield (+${shieldBonus} AC)` : "AC", acHint].filter(Boolean).join("\n\n");
+  const hpTitle = ["Click to adjust HP", maxHpHint].filter(Boolean).join("\n\n");
+  // Speed and max HP sit in running text rather than in a .stat-value slot
+  // of their own, so they're only wrapped when a condition actually moved
+  // them — otherwise they keep exactly the bare-number markup they had
+  // before conditions existed, with no empty class attribute.
+  const speedText = mods.speed.total
+    ? `<span class="${modifierClass(mods.speed)}" title="${escapeHtml(speedHint)}">${speed}</span>`
+    : `${speed}`;
+  const maxHpText = mods.maxHp.total
+    ? `<span class="${modifierClass(mods.maxHp)} on-fill">${maxHp}</span>`
+    : `${maxHp}`;
 
   // Two clusters pinned to opposite edges (identity on the left, HP/AC on
   // the right) rather than one row that stretches the HP bar to fill the
@@ -1252,31 +1310,32 @@ function renderStatPanel() {
         <div class="battle-stat-identity">
           <span class="battle-stat-name">${escapeHtml(character.name)}</span>
           <span class="battle-stat-level">Lvl ${build.level ?? 1}</span>
+          <span class="battle-stat-speed">Speed ${speedText} ft</span>
         </div>
       </div>
       <div class="battle-stat-right">
-        <button type="button" id="battle-hp-bar" class="battle-hp-bar" title="Click to adjust HP">
+        <button type="button" id="battle-hp-bar" class="battle-hp-bar" title="${escapeHtml(hpTitle)}">
           <span class="battle-hp-bar-fill${hpLow ? " low" : ""}" style="width:${hpFillPct}%"></span>
           ${tempHp > 0 ? `<span class="battle-hp-bar-temp-fill" style="left:${hpFillPct}%; width:${tempFillPct}%"></span>` : ""}
-          <span class="battle-hp-bar-text">${hp} / ${maxHp}${tempHp > 0 ? ` (+${tempHp})` : ""}</span>
+          <span class="battle-hp-bar-text">${hp} / ${maxHpText}${tempHp > 0 ? ` (+${tempHp})` : ""}</span>
         </button>
-        <button type="button" id="battle-toggle-shield" class="battle-stat-ac${shieldRaised ? " active" : ""}" title="${hasShield ? `Raise a Shield (+${shieldBonus} AC)` : "AC"}" ${hasShield ? "" : "disabled"}>
+        <button type="button" id="battle-toggle-shield" class="battle-stat-ac${shieldRaised ? " active" : ""}" title="${escapeHtml(acTitle)}" ${hasShield ? "" : "disabled"}>
           <span class="stat-label">AC</span>
-          <span class="stat-value">${ac}</span>
+          <span class="stat-value ${modifierClass(mods.ac)}">${ac}</span>
           ${hasShield ? `<span class="battle-stat-ac-shield-icon" aria-hidden="true">&#128737;</span>` : ""}
         </button>
       </div>
     </div>
-    <div class="battle-stat-grid">
-      <div class="battle-stat"><span class="stat-label">Fortitude</span><span class="stat-value">${formatMod(fort)}</span></div>
-      <div class="battle-stat"><span class="stat-label">Reflex</span><span class="stat-value">${formatMod(reflex)}</span></div>
-      <div class="battle-stat"><span class="stat-label">Will</span><span class="stat-value">${formatMod(will)}</span></div>
-      <div class="battle-stat"><span class="stat-label">Perception</span><span class="stat-value">${formatMod(perception)}</span></div>
-      <div class="battle-stat"><span class="stat-label">Speed</span><span class="stat-value">${speed} ft</span></div>
+    <div class="battle-stat-body">
+      <div class="battle-stat-grid">
+        ${checks}
+      </div>
+      ${conditionsSectionHtml(characterId)}
     </div>
   `;
 
   bindRemoveButton(characterId, character.name);
+  bindConditionsSection(characterId, character.name);
 
   document.getElementById("battle-hp-bar").addEventListener("click", () => {
     openHpDialog(characterId, character.name);
@@ -1287,6 +1346,226 @@ function renderStatPanel() {
       if (raisedShieldIds.has(characterId)) raisedShieldIds.delete(characterId);
       else raisedShieldIds.add(characterId);
       render();
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Conditions. Battle progress, not identity: cleared when a token leaves
+// the field or is placed fresh, exactly like HP — unlike appearance, which
+// survives. Stored per entity id (never per square) so they'd survive a
+// future move, same reasoning as hp/tempHp.
+//
+// Shape: conditions[entityId][conditionId] = { active, value }
+//   active — the checkbox. A condition can be applied but suppressed,
+//            which is how a DM parks something that's temporarily not
+//            biting without losing its tier.
+//   value  — only for PF2E_CONDITIONS[id].valued; absent otherwise.
+
+const CONDITION_MIN = 1;
+const CONDITION_MAX = 10;
+
+function entityConditions(entityId) {
+  return battleState.conditions?.[entityId] ?? {};
+}
+
+// What's actually in effect, grants expanded — see resolveConditions() in
+// pf2e-conditions.js. Derived on every read rather than stored: a granted
+// condition has no independent life of its own (removing Encumbered must
+// take its clumsy 1 with it, and must not disturb a clumsy the DM applied
+// separately), and deriving it is the only way that stays true without a
+// bookkeeping pass on every add/remove.
+function effectiveConditions(entityId) {
+  return resolveConditions(entityConditions(entityId));
+}
+
+// { stat: { total, terms } } for AC/saves/Perception/Speed/max HP.
+// `level` only matters to drained, whose max-HP hit scales with it.
+function entityModifiers(entityId, level) {
+  return conditionModifiers(effectiveConditions(entityId), level);
+}
+
+// Drained is the one condition that changes max HP, so max HP is no longer
+// a pure function of the sheet. Everything that clamps HP goes through
+// here so the cap is the same in the panel and in the damage/heal dialog.
+// Floored at 1: enough drained on a low-level character would otherwise
+// produce a zero-or-negative maximum, which the HP bar can't divide by.
+function effectiveMaxHp(entityId, build) {
+  const base = computeMaxHp(build);
+  const modifier = entityModifiers(entityId, build.level ?? 1).maxHp;
+  return { base, max: Math.max(1, base + modifier.total), modifier };
+}
+
+// A stat the conditions moved renders in red (or green, if something ever
+// grants a bonus) with the arithmetic in its tooltip; a stat nothing
+// touched renders exactly as it did before this existed — no class, no
+// title — so the coloring only ever means "a condition is biting here".
+//
+// Returns a bare class string (no leading space) meant to be interpolated
+// after a space: `class="stat-value ${modifierClass(m)}"`. The trailing
+// space when nothing applies is harmless.
+function modifierClass(modifier) {
+  if (!modifier?.total) return "";
+  return modifier.total < 0 ? "modified penalized" : "modified buffed";
+}
+
+// Multi-line tooltip text: the before/after on the first line, then one
+// line per contributing condition. Terms that lost the stacking contest
+// are listed too, marked as such — "clumsy 1 is on, frightened 2 is what's
+// actually costing you" is exactly the question this hint exists to answer.
+function modifierHint(label, base, modifier, format = formatMod) {
+  if (!modifier?.total) return "";
+  const lines = [`${label} ${format(base)} → ${format(base + modifier.total)}`];
+  for (const term of modifier.terms) {
+    const type = term.type === "untyped" ? "" : ` ${term.type}`;
+    lines.push(`${formatMod(term.amount)}${type} — ${term.source}${term.applied ? "" : " (doesn't stack)"}`);
+  }
+  return lines.join("\n");
+}
+
+// One place that writes the map, so every caller gets the same defensive
+// creation of the per-entity object and the same single dispatch.
+function updateEntityConditions(entityId, label, mutate) {
+  dispatch("update-conditions", label, (state) => {
+    if (!state.conditions) state.conditions = {};
+    const current = { ...state.conditions[entityId] };
+    mutate(current);
+    state.conditions[entityId] = current;
+  });
+}
+
+function addCondition(entityId, conditionId, name) {
+  const definition = PF2E_CONDITIONS[conditionId];
+  if (!definition) return;
+  updateEntityConditions(entityId, `${name} gained ${definition.name}${definition.valued ? ` ${CONDITION_MIN}` : ""}`, (current) => {
+    current[conditionId] = definition.valued
+      ? { active: true, value: CONDITION_MIN }
+      : { active: true };
+  });
+}
+
+function removeCondition(entityId, conditionId, name) {
+  const definition = PF2E_CONDITIONS[conditionId];
+  if (!definition) return;
+  updateEntityConditions(entityId, `${name} lost ${definition.name}`, (current) => {
+    delete current[conditionId];
+  });
+}
+
+function toggleCondition(entityId, conditionId, name) {
+  const definition = PF2E_CONDITIONS[conditionId];
+  const existing = entityConditions(entityId)[conditionId];
+  if (!definition || !existing) return;
+  const nextActive = !existing.active;
+  updateEntityConditions(entityId, `${name}'s ${definition.name} ${nextActive ? "reapplied" : "suppressed"}`, (current) => {
+    current[conditionId] = { ...current[conditionId], active: nextActive };
+  });
+}
+
+function adjustCondition(entityId, conditionId, name, delta) {
+  const definition = PF2E_CONDITIONS[conditionId];
+  const existing = entityConditions(entityId)[conditionId];
+  if (!definition?.valued || !existing) return;
+  // Clamped at 1 rather than removing at 0: the checkbox is how a
+  // condition is switched off, and stepping past the floor shouldn't
+  // silently delete a row the DM is still pointing at.
+  const nextValue = Math.min(CONDITION_MAX, Math.max(CONDITION_MIN, (existing.value ?? CONDITION_MIN) + delta));
+  if (nextValue === existing.value) return;
+  updateEntityConditions(entityId, `${name}'s ${definition.name} set to ${nextValue}`, (current) => {
+    current[conditionId] = { ...current[conditionId], value: nextValue };
+  });
+}
+
+// Every condition to list: applied by hand, or imposed by one that was —
+// in the dictionary's (alphabetical) order rather than the order they
+// happened to arrive, so a row doesn't move under the cursor when an
+// unrelated condition is applied, and a granted row lands in the same
+// place it would have if the DM had added it themselves.
+function sortedConditionIds(applied, effective) {
+  return Object.keys(PF2E_CONDITIONS).filter((id) => applied[id] || effective[id]);
+}
+
+function conditionsSectionHtml(entityId) {
+  const applied = entityConditions(entityId);
+  const effective = effectiveConditions(entityId);
+  const ids = sortedConditionIds(applied, effective);
+
+  const rows = ids.map((id) => {
+    const definition = PF2E_CONDITIONS[id];
+    const entry = applied[id];      // undefined => imposed, not applied by hand
+    const state = effective[id];    // undefined => switched off and not imposed
+    const value = state?.value ?? entry?.value ?? CONDITION_MIN;
+    const grantedBy = (state?.grantedBy ?? []).map((from) => PF2E_CONDITIONS[from]?.name ?? from);
+
+    const classes = ["battle-condition-row"];
+    if (!state) classes.push("suppressed");
+    if (!entry) classes.push("derived");
+    if (state?.overriddenBy) classes.push("overridden");
+
+    const notes = [definition.summary];
+    if (entry && !entry.active) {
+      notes.push(state
+        ? `Switched off by hand, but still imposed by ${grantedBy.join(", ")}.`
+        : "Switched off — not in effect.");
+    } else if (grantedBy.length) {
+      notes.push(entry
+        ? `Also imposed by ${grantedBy.join(", ")}.`
+        : `Imposed by ${grantedBy.join(", ")} — remove that to clear it.`);
+    }
+    if (state?.overriddenBy) {
+      notes.push(`Overridden by ${PF2E_CONDITIONS[state.overriddenBy].name}, so its effects don't apply right now.`);
+    }
+
+    // Only a hand-applied condition gets a stepper: an imposed one's value
+    // belongs to whatever imposed it (encumbered's clumsy is always 1), so
+    // there's nothing here to step. The tier slot is rendered either way,
+    // empty if need be, so names and checkboxes stay column-aligned down
+    // the list regardless of which kinds are applied.
+    let tier = '<div class="battle-condition-tier"></div>';
+    if (definition.valued && entry) {
+      tier = `
+        <div class="battle-condition-tier">
+          <button type="button" class="battle-condition-step" data-condition="${id}" data-delta="-1" title="Decrease" aria-label="Decrease ${escapeHtml(definition.name)}"${value <= CONDITION_MIN ? " disabled" : ""}>&minus;</button>
+          <span class="battle-condition-value">${value}</span>
+          <button type="button" class="battle-condition-step" data-condition="${id}" data-delta="1" title="Increase" aria-label="Increase ${escapeHtml(definition.name)}"${value >= CONDITION_MAX ? " disabled" : ""}>+</button>
+        </div>`;
+    } else if (definition.valued) {
+      tier = `<div class="battle-condition-tier"><span class="battle-condition-value">${value}</span></div>`;
+    }
+
+    // An imposed row's checkbox is checked and disabled: it *is* in
+    // effect, and the way to clear it is to clear whatever imposed it.
+    return `
+      <li class="${classes.join(" ")}" title="${escapeHtml(notes.join("\n\n"))}">
+        <input type="checkbox" class="battle-condition-toggle" data-condition="${id}"${entry ? (entry.active ? " checked" : "") : " checked disabled"} aria-label="${escapeHtml(definition.name)} active" />
+        <span class="battle-condition-name">${escapeHtml(definition.name)}</span>
+        ${tier}
+      </li>`;
+  }).join("");
+
+  return `
+    <div class="battle-conditions">
+      <div class="battle-conditions-header">
+        <h3>Conditions</h3>
+        <button type="button" id="battle-condition-add" class="battle-condition-add" title="Add condition" aria-label="Add condition">+</button>
+      </div>
+      <ul class="battle-condition-list">
+        ${rows || '<li class="placeholder">None.</li>'}
+      </ul>
+    </div>`;
+}
+
+function bindConditionsSection(entityId, name) {
+  document.getElementById("battle-condition-add").addEventListener("click", () => {
+    openConditionDialog(entityId, name);
+  });
+
+  for (const box of statPanel.querySelectorAll(".battle-condition-toggle")) {
+    box.addEventListener("change", () => toggleCondition(entityId, box.dataset.condition, name));
+  }
+  for (const btn of statPanel.querySelectorAll(".battle-condition-step")) {
+    btn.addEventListener("click", () => {
+      adjustCondition(entityId, btn.dataset.condition, name, Number(btn.dataset.delta));
     });
   }
 }
@@ -1621,7 +1900,9 @@ function applyHpDelta(delta, kind) {
     return;
   }
 
-  const maxHp = computeMaxHp(character.data.build);
+  // The drained-reduced maximum, not the sheet's — healing can't push a
+  // drained character back above the cap the condition imposes.
+  const { max: maxHp } = effectiveMaxHp(characterId, character.data.build);
   const suffix = kind ? ` (${kind})` : "";
   let label;
   if (delta < 0) {
@@ -1706,6 +1987,78 @@ hpTempBtn.addEventListener("click", () => {
 });
 
 hpCloseBtn.addEventListener("click", () => hpDialog.close());
+
+// ---------------------------------------------------------------------------
+// Condition picker. Lists every PF2e condition; clicking one TOGGLES it on
+// the entity, so the same list both applies and removes. That's why there's
+// no per-row delete button in the stat panel — the checkbox there suppresses
+// a condition without forgetting its tier, and removal lives here.
+//
+// The dialog stays open after a click: applying several conditions at once
+// is the normal case (a creature that's frightened, sickened and prone),
+// and reopening the picker for each would be tedious.
+
+let conditionDialogEntityId = null;
+let conditionDialogName = "";
+
+function openConditionDialog(entityId, name) {
+  conditionDialogEntityId = entityId;
+  conditionDialogName = name;
+  conditionDialogTitle.textContent = name;
+  conditionFilter.value = "";
+  renderConditionOptions();
+  conditionDialog.showModal();
+  conditionFilter.focus();
+}
+
+function renderConditionOptions() {
+  const applied = entityConditions(conditionDialogEntityId);
+  const effective = effectiveConditions(conditionDialogEntityId);
+  const needle = conditionFilter.value.trim().toLowerCase();
+
+  const matches = Object.entries(PF2E_CONDITIONS).filter(([id, definition]) =>
+    !needle
+    || definition.name.toLowerCase().includes(needle)
+    || definition.summary.toLowerCase().includes(needle));
+
+  conditionOptions.innerHTML = matches.length
+    ? matches.map(([id, definition]) => {
+        // Already in effect but not applied by hand (encumbered's clumsy):
+        // say where it came from, so the list doesn't read as "not applied"
+        // for something the panel behind the dialog is clearly showing.
+        // Clicking it still applies it directly, which is what a DM
+        // stacking a real clumsy on top of an encumbered one wants.
+        const grantedBy = !applied[id] ? (effective[id]?.grantedBy ?? []) : [];
+        const note = grantedBy.length
+          ? ` <em>(from ${escapeHtml(grantedBy.map((from) => PF2E_CONDITIONS[from]?.name ?? from).join(", "))})</em>`
+          : "";
+        return `
+        <li>
+          <button type="button" class="battle-condition-option${applied[id] ? " applied" : ""}${grantedBy.length ? " granted" : ""}" data-condition="${id}">
+            <span class="battle-condition-option-name">${escapeHtml(definition.name)}${definition.valued ? " <em>(has tier)</em>" : ""}${note}</span>
+            <span class="battle-condition-option-summary">${escapeHtml(definition.summary)}</span>
+          </button>
+        </li>`;
+      }).join("")
+    : '<li class="placeholder">No condition matches that.</li>';
+
+  for (const btn of conditionOptions.querySelectorAll(".battle-condition-option")) {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.condition;
+      if (entityConditions(conditionDialogEntityId)[id]) {
+        removeCondition(conditionDialogEntityId, id, conditionDialogName);
+      } else {
+        addCondition(conditionDialogEntityId, id, conditionDialogName);
+      }
+      // dispatch() re-rendered the stat panel behind the dialog; this
+      // refreshes the "applied" ticks in the still-open list.
+      renderConditionOptions();
+    });
+  }
+}
+
+conditionFilter.addEventListener("input", renderConditionOptions);
+conditionCloseBtn.addEventListener("click", () => conditionDialog.close());
 
 // ---------------------------------------------------------------------------
 // Initiative dialog. Opened from the small clickable value box on an
@@ -2118,6 +2471,7 @@ function resizeGrid(side, delta) {
     for (const entityId of dropped) {
       delete state.hp[entityId];
       delete state.tempHp[entityId];
+      delete state.conditions[entityId];
       delete state.initiative[entityId];
       // Appearance deliberately survives, exactly as it does for a normal
       // remove-token — it's the entity's visual identity, not battle
@@ -2359,6 +2713,7 @@ canvas.addEventListener("click", (event) => {
           // per the battle-helper-architecture skill, they're name-only.
           if (entity.build) state.hp[armedEntityId] = computeMaxHp(entity.build);
           delete state.tempHp[armedEntityId];
+          delete state.conditions[armedEntityId];
           state.initiativeOrder.push(armedEntityId);
         });
       }
