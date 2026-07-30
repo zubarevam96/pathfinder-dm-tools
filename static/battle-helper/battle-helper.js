@@ -11,8 +11,8 @@ const BATTLE_STORE_KEY = "pathfinder-dm-tools:battle";
 const canvas = document.getElementById("battle-grid");
 const ctx = canvas.getContext("2d");
 const mapViewport = document.getElementById("battle-map-viewport");
-const statPanel = document.getElementById("battle-stat-panel");
-const appearancePanel = document.getElementById("battle-appearance-panel");
+const objectPanel = document.getElementById("battle-object-panel");
+const squarePanel = document.getElementById("battle-square-panel");
 const rosterList = document.getElementById("battle-roster");
 const initiativeList = document.getElementById("battle-initiative");
 const logList = document.getElementById("battle-log");
@@ -73,17 +73,28 @@ function clampDimension(value) {
 // Which instrument clicks on the map act with. UI-only, like zoom and
 // selection — the chosen tool isn't part of the battle, so it never
 // dispatches and undo doesn't cycle back through it.
-//   select — click to inspect a square, drag a token to move it (default)
-//   wall   — click near a cell edge to toggle a wall on that edge
+//   select  — click to inspect a square, drag a token to move it (default)
+//   wall    — click near a cell edge to toggle a wall on that edge
+//   door    — the same, placing a door instead
+//   terrain — click a square to toggle difficult terrain on it
 const TOOL_SELECT = "select";
 const TOOL_WALL = "wall";
 const TOOL_DOOR = "door";
+const TOOL_TERRAIN = "terrain";
 let activeTool = TOOL_SELECT;
 
 // Both the wall and door tools edit edges and want the same crosshair and
 // hover preview; only their click cycles differ.
 function isEdgeTool() {
   return activeTool === TOOL_WALL || activeTool === TOOL_DOOR;
+}
+
+// Every tool whose click edits the map instead of selecting or dragging.
+// The terrain tool isn't an edge tool — it targets a whole square, so it
+// needs no hover preview to disambiguate which edge is meant — but it does
+// want the same "a click here changes the map" crosshair.
+function isMapEditTool() {
+  return isEdgeTool() || activeTool === TOOL_TERRAIN;
 }
 
 // What occupies an edge. Mutually exclusive states of one edge, so
@@ -112,6 +123,25 @@ const WALL_THICKNESS = 5;
 const DOOR_LENGTH = 0.8;
 const DOOR_THICKNESS = 7;
 const DOOR_BORDER = 1.5;
+
+// Terrain sits IN squares, not on the lines between them, so it's keyed by
+// the same "row,col" square key as placements — not by wallKey(). Like
+// walls, a square maps to a terrain *kind* rather than to `true`, so
+// adding greater difficult terrain later is a data change rather than a
+// second parallel map.
+const TERRAIN_DIFFICULT = "difficult";
+
+// PF2e: entering a square of difficult terrain costs 5 extra feet. It's the
+// square being ENTERED that charges — leaving one is free — which is why
+// this is added to the step cost in findPath() rather than to the square's
+// own arrival total.
+const DIFFICULT_TERRAIN_FEET = 5;
+
+// Drawn as a low-contrast scatter of small triangles ("rubble") rather
+// than a flat tint: whole-square tints are already spoken for by the
+// selection highlight and the drag-drop feedback, and a shape still reads
+// underneath both of those where another wash of colour would not.
+const TERRAIN_ALPHA = 0.35;
 
 // How far from an edge still counts as "the centre" (fraction of a
 // square), i.e. the zone that places a diagonal rather than an edge wall.
@@ -180,7 +210,7 @@ function setZoom(value) {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, walls: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -243,7 +273,7 @@ let panMoved = false; // true once movement crossed DRAG_THRESHOLD — suppresse
 // Raise a Shield is situational, like the main app's AC toggle — it isn't
 // baked into the sheet and wouldn't surprise anyone by disappearing on
 // undo, so it's UI-only state, not battle state. Kept across renders (a
-// plain Set, not rebuilt from HTML) since renderStatPanel() re-renders on
+// plain Set, not rebuilt from HTML) since renderObjectPanel() re-renders on
 // every selection change.
 let raisedShieldIds = new Set();
 
@@ -457,6 +487,27 @@ function squareKeyForEntity(entityId) {
   return Object.entries(battleState.placements).find(([, id]) => id === entityId)?.[0] ?? null;
 }
 
+// Terrain is a property of the ground, not of whoever is standing on it —
+// so it's keyed by square and untouched by tokens arriving, leaving or
+// being deleted. Only a grid shrink can clear it (see pruneTerrain).
+function isDifficultTerrain(key) {
+  return (battleState.terrain?.[key] ?? null) === TERRAIN_DIFFICULT;
+}
+
+function toggleDifficultTerrain(key) {
+  const [row, col] = key.split(",").map(Number);
+  const on = !isDifficultTerrain(key);
+  dispatch(
+    "set-terrain",
+    `${on ? "Marked" : "Cleared"} difficult terrain at (${col}, ${row})`,
+    (state) => {
+      if (!state.terrain) state.terrain = {};
+      if (on) state.terrain[key] = TERRAIN_DIFFICULT;
+      else delete state.terrain[key];
+    },
+  );
+}
+
 // PF2e's actual diagonal-movement rule (see the pf2e-battle-grid skill):
 // diagonal steps alternate 5/10 ft, not a flat 5 ft each — the first
 // diagonal costs 5, the second 10, then it repeats. Straight (non-
@@ -664,8 +715,13 @@ function findPath(fromKey, toKey) {
 
       // Every other diagonal costs 10 ft — the same alternation
       // pf2eDistanceFeet() applies, tracked here as parity because the
-      // route's shape decides it.
-      const step = diagonal ? (parity === 0 ? 5 : 10) : 5;
+      // route's shape decides it. Difficult terrain adds its 5 ft on top,
+      // charged by the square being ENTERED (so the square you start on
+      // never costs anything, and a diagonal into rough ground is 10 or
+      // 15, not 5+5). Terrain doesn't change the parity — it's extra cost,
+      // not an extra diagonal.
+      const step = (diagonal ? (parity === 0 ? 5 : 10) : 5)
+        + (isDifficultTerrain(squareKey(nextRow, nextCol)) ? DIFFICULT_TERRAIN_FEET : 0);
       const nextId = stateId(nextRow, nextCol, diagonal ? 1 - parity : parity, (d + 4) % 8);
       const nextCost = cost + step;
       if (dist[nextId] === -1 || nextCost < dist[nextId]) {
@@ -835,6 +891,28 @@ function drawGrid() {
     const [row, col] = selectedSquareKey.split(",").map(Number);
     ctx.fillStyle = accentSoft;
     ctx.fillRect(pixelX(col), pixelY(row), SQUARE_SIZE, SQUARE_SIZE);
+  }
+
+  // Terrain goes over the selection tint so a selected square still shows
+  // what it's made of, but under the grid lines and everything after them —
+  // it's the ground, and a wall or a token standing on it should read as
+  // being on top.
+  const terrain = battleState.terrain ?? {};
+  const terrainKeys = Object.keys(terrain);
+  if (terrainKeys.length) {
+    ctx.fillStyle = cssVar("--text");
+    ctx.globalAlpha = TERRAIN_ALPHA;
+    for (const key of terrainKeys) {
+      if (terrain[key] !== TERRAIN_DIFFICULT) continue;
+      const [row, col] = key.split(",").map(Number);
+      // Terrain outside the board can exist between a shrink and its
+      // prune (and in battle state saved before pruning existed), so this
+      // skips rather than trusting the map.
+      if (!inGridBounds(row, col)) continue;
+      traceDifficultTerrain(row, col);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
 
   // Every fifth line is drawn heavier, breaking the grid into 5x5 blocks so
@@ -1163,9 +1241,11 @@ function renderInitiative() {
   }
 }
 
-// Shared by both renderStatPanel() branches below (full character panel,
+// Shared by both renderCharacterTab() branches below (full character panel,
 // name-only custom-object panel) so "remove from field" behaves
-// identically either way — same event type, same state cleanup.
+// identically either way — same event type, same state cleanup. The id it
+// binds, battle-remove-token, is correctly named: it takes the occupant's
+// token off the map, leaving them in the roster.
 function bindRemoveButton(entityId, name) {
   document.getElementById("battle-remove-token").addEventListener("click", () => {
     const key = selectedSquareKey;
@@ -1183,21 +1263,103 @@ function bindRemoveButton(entityId, name) {
   });
 }
 
-function renderStatPanel() {
+// The bottom-left box is about the object standing on the selected square,
+// from two angles: the character it is (stats, HP, conditions) and the
+// token it's drawn as on the map. Which tab is showing is UI-only, like
+// selection and zoom — it changes what you're looking at, not the battle,
+// so it never dispatches.
+//
+// The two really are different things, which is why they're tabs and not
+// one long panel: a token's shape and letters say nothing about the
+// creature's Fortitude save, and vice versa.
+//
+// Sticky across selections rather than resetting per square, so working
+// through several characters in a row keeps whichever view you chose.
+// Defaults to the character tab, which is what this box showed before it
+// had tabs.
+const OBJECT_TAB_CHARACTER = "character";
+const OBJECT_TAB_TOKEN = "token";
+let selectedObjectTab = OBJECT_TAB_CHARACTER;
+
+const OBJECT_TABS = [
+  { id: OBJECT_TAB_CHARACTER, label: "Character" },
+  { id: OBJECT_TAB_TOKEN, label: "Token" },
+];
+
+function renderObjectPanel() {
   if (!selectedSquareKey) {
-    statPanel.innerHTML = '<p class="placeholder">Click a square to select it.</p>';
+    objectPanel.innerHTML = '<p class="placeholder">Click a square to select it.</p>';
     return;
   }
 
+  objectPanel.innerHTML = `
+    <div class="battle-object-tabs" role="tablist">
+      ${OBJECT_TABS.map(({ id, label }) => `
+        <button type="button" class="battle-object-tab${selectedObjectTab === id ? " active" : ""}" data-object-tab="${id}" role="tab" aria-selected="${selectedObjectTab === id}">${label}</button>`).join("")}
+    </div>
+    <div id="battle-object-body" class="battle-object-body"></div>
+  `;
+
+  for (const btn of objectPanel.querySelectorAll(".battle-object-tab")) {
+    btn.addEventListener("click", () => {
+      if (selectedObjectTab === btn.dataset.objectTab) return;
+      selectedObjectTab = btn.dataset.objectTab;
+      render();
+    });
+  }
+
+  const body = document.getElementById("battle-object-body");
+  if (selectedObjectTab === OBJECT_TAB_TOKEN) renderTokenTab(body);
+  else renderCharacterTab(body);
+}
+
+// Bottom-right box: the ground itself, independent of who's on it. Terrain
+// is keyed by square, so there's no "empty square" case here the way there
+// is for the object panel — an empty square is still a square with terrain.
+function renderSquarePanel() {
+  if (!selectedSquareKey) {
+    squarePanel.innerHTML = '<p class="placeholder">Click a square to select it.</p>';
+    return;
+  }
+
+  const key = selectedSquareKey;
+  const [row, col] = key.split(",").map(Number);
+  const difficult = isDifficultTerrain(key);
+
+  squarePanel.innerHTML = `
+    <h2>Square (${col}, ${row})</h2>
+    <div class="battle-square-info">
+      <label class="battle-square-toggle">
+        <input type="checkbox" id="battle-square-difficult"${difficult ? " checked" : ""} />
+        <span class="battle-square-toggle-text">
+          <span class="battle-square-toggle-name">Difficult terrain</span>
+          <span class="battle-square-toggle-hint">Entering this square costs ${DIFFICULT_TERRAIN_FEET} extra feet.</span>
+        </span>
+      </label>
+    </div>
+  `;
+
+  // Reads the key captured above, not selectedSquareKey at click time —
+  // they're the same today, but the panel is rebuilt on every render() and
+  // this makes the handler's target unambiguous.
+  document.getElementById("battle-square-difficult").addEventListener("change", () => {
+    toggleDifficultTerrain(key);
+  });
+}
+
+// The character or custom object standing on the selected square — sheet
+// numbers and conditions. Not the marker drawn for them; that's
+// renderTokenTab() below.
+function renderCharacterTab(objectBody) {
   const entityId = battleState.placements[selectedSquareKey];
   if (!entityId) {
-    statPanel.innerHTML = '<p class="placeholder">Empty square.</p>';
+    objectBody.innerHTML = '<p class="placeholder">Empty square.</p>';
     return;
   }
 
   const entity = findEntity(entityId);
   if (!entity) {
-    statPanel.innerHTML = '<p class="placeholder">Empty square.</p>';
+    objectBody.innerHTML = '<p class="placeholder">Empty square.</p>';
     return;
   }
 
@@ -1205,7 +1367,7 @@ function renderStatPanel() {
   // any real character missing sheet data get the same minimal panel:
   // just a name and a way to remove them from the field.
   if (!entity.build) {
-    statPanel.innerHTML = `
+    objectBody.innerHTML = `
       <div class="battle-stat-header">
         <div class="battle-stat-left">
           <button id="battle-remove-token" class="battle-remove-btn" title="Remove from field" aria-label="Remove from field">&times;</button>
@@ -1303,7 +1465,7 @@ function renderStatPanel() {
   // the right) rather than one row that stretches the HP bar to fill the
   // gap — an empty center is intentional, not a layout bug. See "Page
   // layout: boxing" in the battle-helper-architecture skill.
-  statPanel.innerHTML = `
+  objectBody.innerHTML = `
     <div class="battle-stat-header">
       <div class="battle-stat-left">
         <button id="battle-remove-token" class="battle-remove-btn" title="Remove from field" aria-label="Remove from field">&times;</button>
@@ -1560,10 +1722,10 @@ function bindConditionsSection(entityId, name) {
     openConditionDialog(entityId, name);
   });
 
-  for (const box of statPanel.querySelectorAll(".battle-condition-toggle")) {
+  for (const box of objectPanel.querySelectorAll(".battle-condition-toggle")) {
     box.addEventListener("change", () => toggleCondition(entityId, box.dataset.condition, name));
   }
-  for (const btn of statPanel.querySelectorAll(".battle-condition-step")) {
+  for (const btn of objectPanel.querySelectorAll(".battle-condition-step")) {
     btn.addEventListener("click", () => {
       adjustCondition(entityId, btn.dataset.condition, name, Number(btn.dataset.delta));
     });
@@ -1591,33 +1753,30 @@ function updateAppearance(entityId, patch, label) {
   });
 }
 
-// Bottom-right box: how the selected entity's token looks on the map —
-// shape, letters, text color, shape color. Mirrors the same
-// selectedSquareKey as renderStatPanel() (selecting a square drives both
-// panels together), and — like the initiative dialog — works for any
+// The marker drawn on the map for whatever is on the selected square —
+// shape, letters, text color, shape color. This is the tab that's actually
+// about the *token*; the Character tab beside it is about the creature or
+// object it stands for. Like the initiative dialog, it works for any
 // placed entity, custom objects included.
-function renderAppearancePanel() {
-  if (!selectedSquareKey) {
-    appearancePanel.innerHTML = '<p class="placeholder">Click a square to select it.</p>';
-    return;
-  }
-
+//
+// No <h2> of its own: the tab label already names it, where the old
+// standalone box needed a heading like every other box on the page.
+function renderTokenTab(objectBody) {
   const entityId = battleState.placements[selectedSquareKey];
   if (!entityId) {
-    appearancePanel.innerHTML = '<p class="placeholder">Empty square.</p>';
+    objectBody.innerHTML = '<p class="placeholder">Empty square.</p>';
     return;
   }
 
   const entity = findEntity(entityId);
   if (!entity) {
-    appearancePanel.innerHTML = '<p class="placeholder">Empty square.</p>';
+    objectBody.innerHTML = '<p class="placeholder">Empty square.</p>';
     return;
   }
 
   const appearance = getAppearance(entityId, entity.name);
 
-  appearancePanel.innerHTML = `
-    <h2>Token Appearance</h2>
+  objectBody.innerHTML = `
     <div class="battle-appearance-row">
       <span class="battle-appearance-label">Shape</span>
       <div class="battle-appearance-shapes">
@@ -1640,7 +1799,7 @@ function renderAppearancePanel() {
     </div>
   `;
 
-  for (const btn of appearancePanel.querySelectorAll(".battle-shape-btn")) {
+  for (const btn of objectBody.querySelectorAll(".battle-shape-btn")) {
     btn.addEventListener("click", () => {
       const shape = btn.dataset.shape;
       updateAppearance(entityId, { shape }, `Set ${entity.name}'s token shape to ${shape}`);
@@ -1842,8 +2001,8 @@ function render() {
   renderToolControls();
   renderRoster();
   renderInitiative();
-  renderStatPanel();
-  renderAppearancePanel();
+  renderObjectPanel();
+  renderSquarePanel();
   renderLog();
   renderUndoRedoButtons();
 }
@@ -2287,6 +2446,33 @@ function traceWall(key, width, height) {
   }
 }
 
+// Three uneven "rocks" scattered across the square, as one path the caller
+// fills — same trace-without-painting split as traceWall(). Deliberately
+// asymmetric and off-centre: a neat centred symbol would read as a token
+// or a marker placed ON the square, where scattered rubble reads as what
+// the square is made of. All geometry is in fractions of SQUARE_SIZE, so
+// the icon scales with the grid instead of needing per-zoom sizes.
+const TERRAIN_ROCKS = [
+  { cx: 0.31, base: 0.66, width: 0.30, height: 0.26 },
+  { cx: 0.66, base: 0.57, width: 0.22, height: 0.19 },
+  { cx: 0.52, base: 0.85, width: 0.27, height: 0.22 },
+];
+
+function traceDifficultTerrain(row, col) {
+  const x = pixelX(col);
+  const y = pixelY(row);
+  ctx.beginPath();
+  for (const { cx, base, width, height } of TERRAIN_ROCKS) {
+    const half = (width / 2) * SQUARE_SIZE;
+    const centreX = x + cx * SQUARE_SIZE;
+    const baseY = y + base * SQUARE_SIZE;
+    ctx.moveTo(centreX - half, baseY);
+    ctx.lineTo(centreX, baseY - height * SQUARE_SIZE);
+    ctx.lineTo(centreX + half, baseY);
+    ctx.closePath();
+  }
+}
+
 // Strokes a run along an edge — `from`/`to` are positions along the edge,
 // `axis` the fixed perpendicular coordinate. Keeps the horizontal and
 // vertical cases from being written out twice for every piece of door.
@@ -2442,6 +2628,13 @@ function resizeGrid(side, delta) {
   }
 
   const nextWalls = pruneWalls(battleState.walls, nextOriginRow, nextOriginCol, nextRows, nextCols);
+  // Terrain is keyed by square, so unlike walls it needs no edge-index vs
+  // cell-index care — the same cellInside() test the placements above use.
+  const nextTerrain = {};
+  for (const [key, kind] of Object.entries(battleState.terrain ?? {})) {
+    const [row, col] = key.split(",").map(Number);
+    if (cellInside(row, col, nextOriginRow, nextOriginCol, nextRows, nextCols)) nextTerrain[key] = kind;
+  }
 
   // Names read before dispatching, so the log line can say who left —
   // same approach as applyHpDelta() reading temp HP up front. Safe because
@@ -2464,6 +2657,7 @@ function resizeGrid(side, delta) {
   dispatch("resize-grid", label, (state) => {
     state.placements = nextPlacements;
     state.walls = nextWalls;
+    state.terrain = nextTerrain;
     state.originRow = nextOriginRow;
     state.originCol = nextOriginCol;
     if (horizontal) state.cols = next;
@@ -2525,7 +2719,7 @@ function renderToolControls() {
   // Drives the canvas cursor (crosshair while editing edges) from CSS
   // rather than an inline style, so it doesn't fight the "grabbing" that
   // panning sets and clears inline mid-drag.
-  canvas.classList.toggle("tool-wall", isEdgeTool());
+  canvas.classList.toggle("tool-edit", isMapEditTool());
 }
 
 const zoomButtons = [...document.querySelectorAll(".battle-zoom-btn")];
@@ -2681,6 +2875,14 @@ canvas.addEventListener("click", (event) => {
   if (dragMoved || panMoved) {
     dragMoved = false;
     panMoved = false;
+    return;
+  }
+
+  // The terrain tool targets a whole square, so it needs none of the
+  // edge-proximity work below — just the square under the cursor.
+  if (activeTool === TOOL_TERRAIN) {
+    const square = squareFromEvent(event);
+    if (square) toggleDifficultTerrain(squareKey(square.row, square.col));
     return;
   }
 

@@ -348,7 +348,7 @@
 /* Set by renderToolControls() — signals that a click edits terrain rather
    than selecting. Panning still overrides this inline with "grabbing"
    while a drag is actually in progress. */
-.battle-grid.tool-wall {
+.battle-grid.tool-edit {
   cursor: crosshair;
 }
 
@@ -675,10 +675,113 @@
   text-decoration: line-through;
 }
 
-/* --- Selected-object info box --- */
+/* --- Selected-object info box (bottom-left) --- */
+
+/* Two views of whatever stands on the selected square: the character it is
+   and the token it's drawn as on the map. The strip is rendered whenever a
+   square is selected, regardless of which view is showing and of whether
+   the square is occupied, so switching views never resizes the box. */
+.battle-object-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.battle-object-tab {
+  padding: 0.25rem 0.7rem;
+  border: 1px solid transparent;
+  border-bottom: 2px solid transparent;
+  border-radius: 4px 4px 0 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+
+/* Re-declares background and border-color, not just colour: style.css's
+   global button:hover sets both, and the cascade resolves per property, so
+   a rule that only changed the text colour would still get the accent-soft
+   wash and an accent box outline around a borderless tab. The
+   border-bottom-color line has to come after the border-color shorthand,
+   which would otherwise reset it. */
+.battle-object-tab:hover {
+  background: none;
+  border-color: transparent;
+  border-bottom-color: var(--border);
+  color: var(--text);
+}
+
+.battle-object-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.battle-object-tab.active:hover {
+  background: none;
+  border-color: transparent;
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+.battle-object-body {
+  min-width: 0;
+}
+
+/* --- Selected-square info box (bottom-right) ---
+   The ground itself. A column rather than a single control because square
+   properties beyond difficult terrain belong here as they arrive; the
+   coordinates live in the box's <h2>. */
+.battle-square-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+/* The whole row is the <label>, so the name and the hint are click targets
+   too — a bare checkbox is a small thing to hit, and there's room here. */
+.battle-square-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.4rem 0.55rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.battle-square-toggle:hover {
+  border-color: var(--accent);
+}
+
+.battle-square-toggle input {
+  flex-shrink: 0;
+  margin: 0.15rem 0 0;
+  cursor: pointer;
+}
+
+.battle-square-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.battle-square-toggle-name {
+  font-size: 0.85rem;
+}
+
+.battle-square-toggle-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
 
 /* Two clusters pinned to opposite edges, not one row where the HP bar
-   stretches to fill the gap — see renderStatPanel()'s comment. The empty
+   stretches to fill the gap — see renderCharacterTab()'s comment. The empty
    space between them when both clusters are narrower than the row is
    intentional. */
 .battle-stat-header {
@@ -822,7 +925,7 @@
 }
 
 /* Temp HP renders as its own blue segment immediately to the right of the
-   HP fill (positioned via inline `left`, set in renderStatPanel()), not a
+   HP fill (positioned via inline `left`, set in renderCharacterTab()), not a
    separate badge — both segments' widths are percentages of maxHp+tempHp
    together, so adding temp HP visibly shrinks the HP/absent portions to
    make room for it rather than changing the bar's own size. */
@@ -1223,7 +1326,7 @@
 }
 
 /* --- Values conditions have moved ---
-   Applied by renderStatPanel() to AC, the saves, Perception, Speed and max
+   Applied by renderCharacterTab() to AC, the saves, Perception, Speed and max
    HP whenever the resolved conditions add up to a non-zero modifier. The
    number shown is already the adjusted one; the color is what says "this
    isn't the sheet's value", and the element's title carries the
