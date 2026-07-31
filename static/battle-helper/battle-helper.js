@@ -2955,14 +2955,36 @@ logClearBtn.addEventListener("click", () => {
   render();
 });
 
+// Controls that keep their own edit history, where Ctrl+Z means "undo my
+// typing" and has nothing to do with the battle. Checkboxes, colour
+// swatches and range sliders are deliberately NOT in this set: they hold
+// no text, have no history for the browser to step back through, and
+// swallowing the shortcut there would just make it dead while a token's
+// colour picker happens to have focus.
+function isTextEntry(target) {
+  if (!target) return false;
+  if (target.isContentEditable) return true;
+  if (target.tagName === "TEXTAREA") return true;
+  if (target.tagName !== "INPUT") return false;
+  return !["checkbox", "radio", "color", "range", "button", "submit", "reset"].includes(target.type);
+}
+
 document.addEventListener("keydown", (event) => {
-  if (!event.ctrlKey || event.key.toLowerCase() !== "z" && event.key.toLowerCase() !== "y") return;
+  if (!event.ctrlKey) return;
+  const key = event.key.toLowerCase();
+  if (key !== "z" && key !== "y") return;
+
+  // Returns BEFORE preventDefault, which is the whole point: the browser's
+  // native undo has to still fire so half-typed text can be taken back.
+  // Battle undo would otherwise reach past the field and revert the last
+  // real action instead — the typing isn't in eventLog (staging a value
+  // isn't a battle change, per Rule 1), so there'd be nothing on screen to
+  // connect the keystroke to what it did.
+  if (isTextEntry(event.target)) return;
+
   event.preventDefault();
-  if (event.key.toLowerCase() === "y" || (event.key.toLowerCase() === "z" && event.shiftKey)) {
-    redo();
-  } else {
-    undo();
-  }
+  if (key === "y" || event.shiftKey) redo();
+  else undo();
 });
 
 // ---------------------------------------------------------------------------

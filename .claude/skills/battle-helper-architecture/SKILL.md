@@ -1,6 +1,6 @@
 ---
 name: battle-helper-architecture
-description: The event-driven state/undo-redo architecture for static/battle-helper/ code. Load this before writing or reviewing any code that changes battle-helper state (placing tokens, future moves/damage/conditions), or that touches its event log, undo/redo, or keyboard shortcuts.
+description: The event-driven state/undo-redo architecture for static/battle-helper/ code. Load this before writing or reviewing any code that changes battle-helper state (placing tokens, moves, damage, conditions, terrain), or that touches its event log, undo/redo, page layout, or keyboard shortcuts.
 ---
 
 # Battle Helper Architecture
@@ -10,12 +10,15 @@ because the page needs undo/redo (Ctrl+Z / Ctrl+Shift+Z or Ctrl+Y) over an
 arbitrary, growing set of battle actions, without hand-writing an inverse
 function for every action type.
 
+**Canvas work** — `drawGrid()`, coordinates, the tool palette, walls,
+doors, terrain, pathfinding, token drawing, drag-and-drop — lives in
+`references/map.md`. Read that too before touching any of it.
+
 ## Rule 1: Everything is an event, or part of one
 
-Any code that changes battle **state** — placing a token, removing one,
-reordering the initiative track, and every future action (move, damage,
-condition, whatever comes next) — must go through the one `dispatch()`
-function. Never mutate `battleState` directly from an event handler.
+Any code that changes battle **state** must go through the one
+`dispatch()` function. Never mutate `battleState` directly from an event
+handler.
 
 ```js
 dispatch("place-token", `Placed ${character.name}`, (state) => {
@@ -25,545 +28,427 @@ dispatch("place-token", `Placed ${character.name}`, (state) => {
 
 `dispatch()` snapshots state before and after running the mutator, and
 appends `{ type, label, before, after, at }` to `eventLog`. This is
-**snapshot-based undo**, not command-pattern (no per-type `undo()` to
-maintain) — deliberately, because battle state is small (a placements map
-and per-character HP/temp-HP maps, currently) and cloning it is cheap. If
-battle state ever grows to include something expensive (e.g. embedding
-full character sheets instead of ids), revisit this — snapshotting stops
-being free at that point.
+**snapshot-based undo**, not command-pattern — no per-type `undo()` to
+maintain. That trade holds because battle state is small and holds only
+ids and primitives (see below); if it ever grows to embed something
+expensive, like full character sheets instead of ids, revisit this.
+Snapshotting stops being free at that point.
 
-Damage/heal (`hp-action-*` buttons in the HP dialog) is the second real
-example of this pattern: the buttons compute a delta and call one shared
-`applyHpDelta(delta, kind)`, which does one `dispatch("adjust-hp", ...)` —
-not one event type per button. `kind` (`"half"`/`"double"`, omitted for
-full damage/heal) only affects the log label text (`"... damage (half)"`),
-not the mutation itself. Temporary HP absorbs damage before real HP does
-(PF2e's actual rule) — that reduction happens *inside* the same
-`adjust-hp` mutator, touching both `state.hp` and `state.tempHp` in one
-event, so undo/redo reverts both pools together rather than needing two
-paired events kept in sync. The log line reflects that split too (e.g.
-`"... took 12 damage (6 to temp HP, 6 to HP)"`), computed in
-`applyHpDelta()` by reading `battleState.tempHp[characterId]` *before*
-calling `dispatch()` — safe because nothing else can mutate state between
-that read and the mutator seeing the same value, JS being single-threaded;
-the label has to be a plain string handed to `dispatch()`, not something
-computed from inside the mutator, since the mutator only touches the live
-`battleState` and doesn't return anything back out. Granting temp HP itself
-is a separate
-`dispatch("adjust-temp-hp", ...)` from `applyTempHp()` — it replaces
-`state.tempHp[characterId]` outright (temp HP doesn't stack with itself)
-rather than adding, unlike damage/heal which are additive deltas. The
-dialog's stepper buttons (+1/+5/-1/-5) and the number input only stage the
-value those buttons will use; staging isn't a battle change, so — like
-selection — it doesn't dispatch.
+### What's in `battleState`
 
-Raise a Shield (the shield toggle next to AC) is UI-only, the same way
-selection is: it's situational and would be expected to reset, not survive
-undo, so it's a plain `raisedShieldIds` Set keyed by character id — never
-`dispatch()`ed. It has to be module-level state rather than local to
-`renderStatPanel()` because that function's `innerHTML` gets rebuilt on
-every `render()`, including ones triggered by unrelated dispatches.
+Everything `emptyBattleState()` returns, and nothing else:
 
-Adding a custom object (see "Custom objects" below) is a `dispatch(
-"add-custom-object", ...)` too — it's a real, undoable battle-state
-change (`state.customObjects[id] = { name }`), not UI staging, even
-though the only "action" is typing a name and hitting Add. Deleting one
-(the roster's small red × next to a custom object, never shown for real
-characters) is `dispatch("delete-custom-object", ...)`, distinct from
-`remove-token`: removing from the field un-places an entity but keeps it
-in the roster; deleting removes the custom object's *definition* entirely.
-Setting initiative and drag-reordering the initiative track (see
-"Initiative track" below) are `dispatch("set-initiative", ...)` and
-`dispatch("reorder-initiative", ...)` respectively — both real,
-undoable battle-state changes, not UI staging, even though dragging feels
-like a UI interaction. Changing a token's shape, letters, or colors (see
-"Token appearance" below) is `dispatch("update-appearance", ...)` via the
-shared `updateAppearance()` helper — one dispatch per committed change,
-not one per pixel of a dragged color-wheel value (see that section for why
-`change`, not `input`, is what triggers it).
+| key | shape | notes |
+|---|---|---|
+| `placements` | `squareKey -> entityId` | one entity per square |
+| `hp`, `tempHp` | `entityId -> number` | never max HP — see "State separation" |
+| `conditions` | `entityId -> { conditionId: { active, value } }` | |
+| `customObjects` | `id -> { name }` | |
+| `initiative` | `entityId -> number` | the *number* |
+| `initiativeOrder` | `entityId[]` | the *display order*, independent |
+| `appearance` | `entityId -> { shape, letters, textColor, shapeColor }` | survives removal |
+| `walls` | `edgeKey -> "wall" \| "door"` | keyed by edge, not square |
+| `terrain` | `squareKey -> "difficult"` | keyed by square |
+| `cols`, `rows`, `originRow`, `originCol` | numbers | the board's size and anchor |
 
-**What does *not* go through `dispatch()`:** anything that only changes
-*what the UI is showing*, not the actual battle — selecting a square to
-inspect it, hovering, opening/closing a panel. These set a plain local
-variable (e.g. `selectedSquare`) and call `render()` directly. If it
-wouldn't surprise a player to see it silently reappear after an undo, it's
-not an event. Clearing the event log itself (the sidebar's "Clear" button)
-is a related but distinct case — see Rule 2.
+`normalizeState()` spreads a stored state over a fresh empty one, so a
+battle saved before a field existed still gets it. New fields therefore
+need no migration — just a sensible empty value in `emptyBattleState()`.
 
-## Rule 2: The event log drives undo/redo, and is shown like Roll History
+### Labels are computed before dispatching, not inside the mutator
 
-`eventLog` + a `cursor` index (pointing at the last *applied* event, -1 if
-none) is the only state needed for undo/redo:
+The mutator only touches the live `battleState` and returns nothing, so
+anything the log line needs to say about the *old* state has to be read
+first — `applyHpDelta()` reads `battleState.tempHp[characterId]` up front
+to write `"took 12 damage (6 to temp HP, 6 to HP)"`. That's safe because
+nothing can mutate state between the read and the mutator seeing the same
+value; JS is single-threaded.
 
-- **Undo** (Ctrl+Z): if `cursor >= 0`, restore `eventLog[cursor].before`,
-  decrement `cursor`.
-- **Redo** (Ctrl+Shift+Z or Ctrl+Y): if `cursor < eventLog.length - 1`,
-  increment `cursor`, restore `eventLog[cursor].after`.
-- **New event while not at the end of the log** (i.e. the player undid,
-  then did something new): truncate everything after `cursor` before
-  pushing — the old redo branch is gone, same as any standard undo stack.
+### One action, one dispatch
 
-Both keyboard shortcuts are wired at `document` level with
-`event.preventDefault()` (there's no text input on this page to conflict
-with). The undo/redo buttons in the UI are hidden (not just disabled) when
-there's nothing in that direction — `cursor < 0` for undo,
-`cursor >= eventLog.length - 1` for redo.
+Damage/heal is the canonical example: every `hp-action-*` button computes
+a delta and calls one shared `applyHpDelta(delta, kind)` doing a single
+`dispatch("adjust-hp", ...)` — not one event type per button. `kind`
+(`"half"`/`"double"`) only affects the label.
 
-The log itself renders as a list styled and behaving like `static/app.js`'s
-Roll History list (`renderRollHistory`) — same "newest first, short
-one-line description per entry" convention, so the whole app feels
-consistent rather than battle-helper inventing its own log UI language.
+Temp HP absorbing damage before real HP happens *inside* that same
+mutator, touching `state.hp` and `state.tempHp` together, so undo reverts
+both pools as one event rather than needing two paired events kept in
+sync. Granting temp HP is separately `dispatch("adjust-temp-hp", ...)`,
+which *replaces* the value (temp HP doesn't stack with itself) unlike
+damage/heal's additive deltas.
 
-The header's "Clear" button empties `eventLog` and resets `cursor` to `-1`
-directly (`eventLog = []`), the same style as `static/app.js`'s
-`clearRollHistory()` — no confirmation dialog, matching that existing
-convention. This is deliberately **not** a `dispatch()` call: `eventLog`
-itself isn't part of `battleState` (dispatch only snapshots/restores
-`battleState`), and undo/redo work by walking `eventLog` — clearing the
-log that undo/redo depends on isn't something undo/redo could sensibly
-undo. Clearing only touches the log; placements, HP, custom objects, etc.
-are untouched, so the battle itself doesn't change, only its history.
+`resizeGrid()` is the same idea at a larger scale: one dispatch covering
+the new size, the new origin, the pruned walls and terrain, and any tokens
+evicted by a removed row — so a single Ctrl+Z restores all of it rather
+than leaving a half-undone board.
+
+### What does *not* dispatch
+
+Anything that only changes *what the UI is showing*: selection
+(`selectedSquareKey`), the active tool, zoom, pan, hover previews, which
+panel tab is open (`selectedObjectTab`), and Raise a Shield
+(`raisedShieldIds`). These set a plain module-level variable and call
+`render()` directly.
+
+The test: **if it wouldn't surprise a player to see it silently reappear
+after an undo, it's not an event.** Raise a Shield is the interesting case
+— it's situational and would be expected to reset, so it's UI-only despite
+changing a number on screen. It has to be module-level rather than local
+to a render function, since those rebuild their `innerHTML` on every
+`render()`, including ones triggered by unrelated dispatches.
+
+Dialog staging is also not an event: the HP dialog's steppers and number
+input only stage the value the action buttons will use.
+
+Clearing the event log is a related but distinct case — see Rule 2.
+Battle-tab operations are another — see "Multiple battles".
+
+## Rule 2: The event log drives undo/redo
+
+`eventLog` plus a `cursor` (index of the last *applied* event, `-1` if
+none) is the only state undo/redo needs:
+
+- **Undo**: if `cursor >= 0`, restore `eventLog[cursor].before`, decrement.
+- **Redo**: if `cursor < eventLog.length - 1`, increment, restore
+  `eventLog[cursor].after`.
+- **New event while not at the end**: truncate everything after `cursor`
+  before pushing. The old redo branch is gone, as in any undo stack.
+
+The buttons are **hidden**, not disabled, when there's nothing in that
+direction.
+
+### The keyboard shortcut must yield to text fields
+
+Ctrl+Z is wired at `document` level, but it returns early — **before**
+`preventDefault()` — when the event target is a text-entry control, so the
+browser's own undo can take back half-typed text. Battle undo would
+otherwise reach past the field and revert the last real action, with
+nothing on screen connecting the keystroke to what it did (the typing was
+never an event, per Rule 1).
+
+`isTextEntry()` deliberately **excludes** checkboxes, colour swatches and
+range inputs: they hold no text and have no history for the browser to
+step back through, so swallowing the shortcut there would just make it
+dead while a token's colour picker happens to have focus. If you add an
+input type to the page, check which side of that line it falls on.
+
+### Clearing the log
+
+The "Clear" button empties `eventLog` and resets `cursor` directly, no
+confirmation — matching `static/app.js`'s `clearRollHistory()`. It is
+deliberately **not** a dispatch: `eventLog` isn't part of `battleState`,
+and undo/redo work by walking it, so clearing the thing undo depends on
+isn't something undo could sensibly reverse. Battle state is untouched;
+only the history goes.
+
+The log renders newest-first, one short line per entry, like the main
+app's Roll History — so the app feels consistent rather than
+battle-helper inventing its own log language. Entries past the cursor are
+marked `.undone` so the log stays honest about current state.
+
+## Multiple battles
+
+`battles` is `[{ id, name, state, eventLog, cursor }]`, each a fully
+independent encounter with its own undo history, so undoing in one can
+never reach into another. The module-level `battleState`/`eventLog`/
+`cursor` stay exactly what they always were — the *active* battle's live
+values — which is why `dispatch()`, `undo()`, `redo()` and every render
+function needed no changes for this feature. `persistBattleStore()` syncs
+those live values back into the active entry before writing.
+
+Creating, switching, renaming and closing a battle are deliberately **not**
+dispatched, even though they change what's on screen: `dispatch()`
+snapshots `battleState` only, and undo/redo walk a single battle's
+`eventLog` — a tab operation sits *above* that layer, so there's no
+coherent way for a per-battle undo stack to undo it. Same reasoning as the
+log's Clear button.
+
+`setActiveBattle()` resets UI-only state rather than carrying it over:
+square keys and entity ids mean something different, or nothing, in the
+battle being opened.
 
 ## Page layout: "boxing"
 
-The page is a fixed set of boxes (`.battle-box`), not a freeform layout —
-keep new UI inside this structure rather than adding new top-level
-regions:
+A fixed set of boxes (`.battle-box`), not a freeform layout. Keep new UI
+inside this structure rather than adding top-level regions.
 
-- **Left, full page height**: roster (top half) and event log (bottom
-  half), stacked in one box (`.battle-box-left`, split by
-  `.battle-box-section`). The roster's box also has the "add custom
-  object" form (`#battle-add-object-form`) below the list — static markup
+- **Tab strip** across the top (`.battle-tabs`) — one tab per battle. A
+  top-level region rather than a box, because the boxing below it is
+  per-battle and this strip is what scopes all of it.
+- **Left, full height**: roster (top) and event log (bottom), one box split
+  by `.battle-box-section`. The "add custom object" form is static markup
   in `index.html`, not regenerated by `renderRoster()`, so a name being
-  typed survives `render()` calls triggered by unrelated dispatches. The
-  event log's header (`.battle-log-header`) is left-aligned in reading
-  order — Clear, then "Event Log", then Undo/Redo immediately after the
-  title — not `justify-content: space-between`; Undo/Redo should sit next
-  to the title they act on, not be pushed to the box's far edge.
-- **Right, full page height**: initiative track (`.battle-box-right`).
-- **Center column**, between the two sidebars: the map on top
-  (`.battle-box-map`), then a bottom row split in two:
-  - **Bottom-left**: the selected-object info panel (`#battle-stat-panel`)
-    — header row is two clusters pinned to opposite edges
-    (`justify-content: space-between`), *not* one row where the HP bar
-    stretches to fill the gap: `.battle-stat-left` (remove ×, name, level)
-    and `.battle-stat-right` (HP bar, then the AC panel). The HP bar has
-    three segments — HP (green/red), temp HP (blue, immediately to the
-    right of the HP segment), and dark grey "absent" for the rest — sized
-    as percentages of `maxHp + tempHp`, not just `maxHp`, so temp HP visibly
-    eats into the HP/absent portions of the *same fixed-width bar* rather
-    than growing the bar; see `renderStatPanel()`'s comment for the exact
-    math. The `current / max (+temp)` text is centered inside the bar
-    ("sticks to" the HP number, not pinned separately at an edge). The AC
-    panel is a small square button sized to its content (raises the shield
-    on click, disabled when there's no shield to raise) with the shield
-    icon as a decorative corner badge, not a separate inner button. When
-    both clusters are narrower than the row, the empty center is
-    intentional, not a bug — then the remaining checks (Fortitude/Reflex/Will/
-    Perception/Speed) in a grid below.
-  - **Bottom-right**: the token appearance panel
-    (`#battle-appearance-panel`, `renderAppearancePanel()`) — shape,
-    letters, text color, and shape color for the selected entity's token
-    on the map. Mirrors the same `selectedSquareKey` as the stat panel
-    next to it. See "Token appearance" below. (A "set initiative" panel
-    briefly lived here before being moved to a dialog instead — this box
-    has now been claimed for something else; if it needs to change again,
-    check with the project owner first, same as any assigned box.)
+  typed survives unrelated `render()` calls. The log header is
+  left-aligned in reading order — Clear, "Event Log", then Undo/Redo
+  beside the title they act on — not `space-between`.
+- **Right, full height**: initiative track.
+- **Centre column**: the map on top, then a bottom row split in two:
+  - **Bottom-left, `#battle-object-panel`** — the *object* on the selected
+    square, as two tabs. **Character** (`renderCharacterTab()`): identity
+    row, HP bar, AC, saves/Perception, conditions. **Token**
+    (`renderTokenTab()`): shape, letters, colours. They're tabs and not
+    one panel because they're genuinely different subjects — a token's
+    shape says nothing about a creature's Fortitude save.
+  - **Bottom-right, `#battle-square-panel`** (`renderSquarePanel()`) — the
+    *square* itself: coordinates in the heading, difficult terrain under
+    them. No "empty square" state; an empty square is still a square.
+
+The bottom boxes split by **subject** (object vs. ground), which is what
+decides where new UI goes. A property of whoever is standing there belongs
+left; a property of the ground belongs right.
+
+Inside the Character tab, the header row is two clusters pinned to
+opposite edges (`space-between`), *not* one row where the HP bar stretches
+to fill the gap: `.battle-stat-left` (remove ×, name, level, speed) and
+`.battle-stat-right` (HP bar, then AC). When both clusters are narrower
+than the row, the empty centre is intentional. The HP bar has three
+segments — HP, temp HP, and dark grey "absent" — sized as percentages of
+`maxHp + tempHp`, not just `maxHp`, so temp HP visibly eats into the same
+fixed-width bar rather than growing it. Below the header, a fixed 2×2 grid
+of saves/Perception sits left at its natural width with conditions taking
+the rest; the grid is `repeat(2, ...)` rather than `auto-fit`, which would
+reflow between 1 and 4 columns as the panel resized and move tiles under
+the cursor.
 
 Because the sidebars are full-height flex children of the same row as the
-center column, they naturally stretch to match its height (map + bottom
-row) — no explicit height math needed, and the bottom-left box ends up
-flush against the left sidebar's right edge for free.
+centre column, they stretch to match its height for free.
 
 `.battle-layout` is pinned to exactly `height: 100vh` with `overflow:
-hidden` (not `min-height: 100vh`) so the whole page fits the viewport with
-no page-level scrollbar. Individual regions that can overflow (roster,
-event log, initiative list, the map box) each scroll internally via their
-own `overflow-y`/`overflow: auto` — that's the only place scrolling should
-ever happen on this page. If a new box's content can grow unboundedly, give
-*that box* `overflow: auto`, don't relax the page-level `overflow: hidden`.
+hidden` (not `min-height`), so the page fits the viewport with no
+page-level scrollbar. Regions that can overflow scroll internally via their
+own `overflow`. If a new box's content can grow unboundedly, give *that
+box* `overflow: auto` — don't relax the page-level `hidden`.
 
-Every box element IDs the JS reads (`battle-grid`, `battle-roster`,
-`battle-initiative`, `battle-log`, `battle-undo`, `battle-redo`,
-`battle-stat-panel`) are stable regardless of which box wraps them —
-`battle-helper.js` only ever queries by id, never by the box's class
-names, so layout can be restyled without touching JS as long as those ids
-stay put.
+`battle-helper.js` only ever queries by **id**, never by a box's class
+names, so layout can be restyled without touching JS as long as the ids
+stay put. When a box's *subject* changes, though, rename its id to match —
+leaving `#battle-appearance-panel` rendering square info would have been a
+trap for the next reader.
 
 ## Avoiding layout jumps
 
-Panels on this page get re-rendered constantly (every `render()`, i.e.
-every dispatch and every selection change), and several controls only make
-sense conditionally — the shield toggle only for a character with a
-shield, each HP-dialog action button only for the current sign of the
-staged value. It's tempting to solve that with a template-literal ternary
-that omits the element entirely (`` hasShield ? `<button>...` : "" ``), but
-that changes how many children the flex box has, which changes its size,
-which — because these boxes stretch to fill a row alongside siblings
-(`#battle-stat-panel`'s header, `.hp-action-row`) — visibly shifts
-*everything else on the page*, not just the element in question. That's
-the bug this project calls "jumping": selecting a shield-less character
-made the whole stat panel shorter than a shielded one; changing the HP
-dialog's sign re-centered the remaining action buttons into new slots.
+Panels re-render on every `render()` — every dispatch and every selection
+change — and several controls only make sense conditionally. It's tempting
+to omit the element with a ternary (`` hasShield ? `<button>…` : "" ``),
+but that changes how many children a flex box has, which changes its size,
+which visibly shifts *everything else on the page*. That's the bug this
+project calls **jumping**.
 
-The fix is the same idea both times — **always render the element; toggle
-a class instead of the element's presence** — but there are two different
-techniques depending on *what* would otherwise resize, and picking the
-wrong one reintroduces a subtler version of the same bug:
+**Always render the element; toggle a class instead of its presence.**
+Three techniques, and picking the wrong one reintroduces a subtler version
+of the same bug:
 
-- **A single element inside a box whose own size depends on its children**
-  (the shield-toggle `<button>` inside `.battle-stat-ac`, a flex column
-  with no fixed height): use `.invisible` (`visibility: hidden;
-  pointer-events: none;` in `battle-helper.css`). This keeps the element
-  occupying its layout slot — same box, same space reserved — just
-  invisible and unclickable. `renderStatPanel()` always renders the
-  button, only adding `.invisible` (plus `tabindex="-1"` /
-  `aria-hidden="true"`) when `!hasShield`, and only attaches its click
-  listener when `hasShield`. Because the button's slot is always there,
-  `.battle-stat-ac`'s height is now identical for every character, shield
-  or not — using `visibility` here is *load-bearing*, not cosmetic:
-  swapping it for `hidden`/`display:none` would bring the jump back.
-- **Two mutually-exclusive groups of buttons that should each be centered
-  in the same space** (the damage trio vs. the heal/temp-HP pair in
-  `.hp-action-row`): don't lay them out side by side, even at equal
-  `flex: 1` — that only centers each group within *its own half* of the
-  row, which visually reads as depending on the other group's width/
-  presence (exactly the "like they know of each other" symptom). Instead,
-  stack both groups on top of each other: `.hp-action-row` is
-  `position: relative` with a **fixed `height`**, and each
-  `.hp-action-group` is `position: absolute; inset: 0;` with its own
-  `justify-content: center`. Both groups now center within the *entire*
-  row independently — being stacked, not neighbors, one group's content
-  has no way to affect the other's centering — and because the row's
-  height is fixed rather than derived from content, whichever group is
-  showing (or neither, at value `0`) never resizes the row or the dialog.
+**1. One element in a box sized by its children** → `.invisible`
+(`visibility: hidden; pointer-events: none;`). Keeps the layout slot, just
+invisible and unclickable. The shield toggle inside `.battle-stat-ac` uses
+this, plus `tabindex="-1"` / `aria-hidden="true"` when hidden, and only
+attaches its listener when there's a shield. Using `visibility` here is
+load-bearing — `hidden`/`display:none` would bring the jump back.
 
-  Two things bite you specifically with stacked-and-hidden groups, both
-  learned from a real regression here — hide the whole **group**, not its
-  individual buttons, and make sure `hidden` actually wins:
-  - Hiding only the individual buttons inside the *inactive* group (via
-    `hidden` on each `.hp-action`, group itself untouched) breaks
-    clicking on the *active* group entirely: an empty group is still a
-    full-size box stacked on top, and a positioned box intercepts pointer
-    events over its area even with nothing visible painted inside it —
-    the inactive group silently swallows clicks meant for the buttons
-    underneath. Toggle `hidden` on `#hp-action-group-damage` /
-    `#hp-action-group-heal` themselves (`updateHpActionVisibility()`),
-    not their children.
-  - Once you hide the group element itself, its own `display: flex`
-    (needed for the stacking/centering above) fights the browser's
-    built-in `[hidden] { display: none }` rule — and **wins**, since
-    author CSS beats user-agent CSS regardless of specificity. `hidden`
-    would silently do nothing without an explicit
-    `.hp-action-group[hidden] { display: none; }` override (present in
-    `battle-helper.css`). This only matters for elements that declare
-    their own `display` — it's why `.hp-action` itself never needed this
-    (no `display` override) but `.hp-action-group` does.
+**2. Two mutually-exclusive button groups that should each look centred in
+the same space** → stack them, don't put them side by side. Side-by-side at
+equal `flex: 1` only centres each group within *its own half*, which reads
+as depending on the other group's presence. Instead: `position: relative`
+with a **fixed height** on the parent, `position: absolute; inset: 0` on
+each group with its own `justify-content: center`. Both now centre within
+the entire row independently, and the fixed height means neither resizes
+the dialog.
 
-When adding new conditional UI here, ask which situation applies: one
-element whose own box has no fixed size → `.invisible`; two (or more)
-alternative button sets that should each look centered in the same slot →
-stack via `position: absolute; inset: 0;` inside a fixed-height
-`position: relative` parent, hide via `hidden` on the *group* (with a
-`[hidden] { display: none; }` override if the group sets its own
-`display`). Either way, the rule is the same: never let `condition ? html :
-""` change how many
-children a box has, or how a sibling group's layout is computed, when that
-box's size or position affects something else on screen. It's fine to skip
-all of this for elements whose absence genuinely shouldn't reserve space
-(e.g. the roster/initiative "nothing here yet" placeholder rows, which
-replace the whole list rather than living alongside other real rows).
+Two things bite specifically here, both from a real regression:
 
-A simpler third option, used for `.battle-stat-ac`: give the box a **fixed
-`width`/`height`** instead of letting content determine its size at all.
-The AC panel is a square (`3.2rem` × `3.2rem` — small, sized to its actual
-content rather than the much larger box tried initially, which left
-visibly dead space) whether or not the character has a shield — the shield
-icon is an `aria-hidden` corner decoration that's simply present-or-absent
-(`hasShield ? html : ""`), which is safe here specifically *because* the
-panel's size doesn't come from its children. The panel is a single
-`<button>` always, `disabled` when `!hasShield` (rather than a conditional
-`<div>`/`<button>` tag swap or an `.invisible`-style inner toggle button)
-so the whole square — not a small icon inside it — is the click target for
-raising the shield.
+- **Hide the group, not its children.** An empty group is still a
+  full-size positioned box stacked on top, and it intercepts pointer
+  events over its area with nothing painted in it — silently swallowing
+  clicks meant for the visible group underneath.
+- **`hidden` loses to the group's own `display: flex`.** Author CSS beats
+  the user-agent `[hidden] { display: none }` rule regardless of
+  specificity, so an explicit `.hp-action-group[hidden] { display: none; }`
+  is required. This only matters for elements that declare their own
+  `display`.
+
+**3. Give the box a fixed `width`/`height`** so content can't size it at
+all. `.battle-stat-ac` is a fixed square, which is *why* its shield-icon
+corner badge can safely be a plain present-or-absent ternary. It's a single
+`<button>` always, `disabled` when there's no shield, so the whole square
+is the click target rather than a small icon inside it.
+
+Skip all of this for elements whose absence genuinely shouldn't reserve
+space — the roster/initiative "nothing here yet" rows replace the whole
+list rather than sitting alongside real ones.
 
 ## Overriding the global `button:hover`
 
-`style.css`'s global `button:hover` rule (`border-color: var(--accent);
-background: var(--accent-soft);`) applies to every `<button>` on this page
-by default, including ones with their own background/text color set for a
-specific purpose — `#battle-hp-bar` (white text over a dark/colored fill),
-`.battle-stat-ac` (accent background when raised), and `.battle-remove-btn`
-(a solid `--danger` circle). The translucent accent tint stacks on top and
-can wreck contrast (this is what made the HP number "almost unreadable" on
-hover) or, worse, silently *replace* a solid background with a near-white
-one (what made the remove button's hover look "too strong" — a jarring
-color swap, not a gentle highlight — even though the actual override rule
-only touched `filter`).
+`style.css`'s global `button:hover` (`border-color: var(--accent);
+background: var(--accent-soft);`) applies to every button on this page,
+including ones with their own background set for a purpose. The
+translucent tint stacks on top and wrecks contrast, or silently *replaces*
+a solid background with a near-white one.
 
-The CSS lesson behind both bugs: **the cascade resolves per property, not
-per rule.** `.battle-remove-btn:hover { filter: brightness(1.1); }` has
-higher specificity than `button:hover`, but it doesn't declare
-`background` at all — so for the `background` property specifically,
-`button:hover`'s declaration is the only one in the running and applies
-regardless of the other rule's higher specificity elsewhere. Any custom
-`:hover` (or `.active:hover`) rule on a button with its own background
-must **explicitly re-declare every property the global rule sets**
-(`background`, `border-color`) that you don't want overridden, not just
-the properties you're trying to add.
+**The cascade resolves per property, not per rule.** A
+`.battle-remove-btn:hover { filter: brightness(1.1); }` has higher
+specificity but doesn't declare `background` at all — so for that property
+the global rule is the only declaration in the running and applies anyway.
+Any custom `:hover` on a button with its own background must **re-declare
+every property the global rule sets** (`background`, `border-color`), not
+just the ones you're adding.
 
-Once contrast is safe, keep the actual hover *effect* light — a single
-border-color shift to `var(--accent)` for panel-style buttons with a
-visible border (`.battle-hp-bar`, `.battle-stat-ac`), or
-`filter: brightness(1.1)` alone for solid-fill buttons
-(`.battle-remove-btn`, `.battle-stat-ac.active`). Skip the hover rule
-entirely for controls that aren't actually clickable right now (e.g.
-`.battle-stat-ac:not(:disabled):hover`, not `.battle-stat-ac:hover`) —
-otherwise hovering a disabled control shows an affordance that lies about
-what will happen on click.
+Two corollaries:
 
-`:not(:disabled):hover` only stops *your own* rule from matching a
-disabled control — it doesn't cancel the global `button:hover` rule, which
-has no `:not(:disabled)` guard and matches every button regardless (CSS
-`:hover` isn't blocked by the `disabled` attribute, only click handling
-is). Without an explicit `.battle-stat-ac:disabled:hover` resetting things
-back to the base look, a disabled AC panel (no shield) still highlighted
-on hover, sourced entirely from the global rule leaking through. Any
-`:not(:disabled):hover` override on a button needs a matching
-`:disabled:hover` reset alongside it, not just the positive-case rule.
+- Keep the effect light once contrast is safe — a border-colour shift for
+  panel-style buttons, `filter: brightness(1.1)` for solid-fill ones.
+- **`:not(:disabled):hover` needs a matching `:disabled:hover` reset.** It
+  only stops *your* rule matching a disabled control; it can't cancel the
+  global rule, which has no such guard and matches regardless (`:hover`
+  isn't blocked by `disabled`, only click handling is). Without the reset,
+  a disabled control still lights up, sourced entirely from the global
+  rule leaking through.
 
 ## State separation from the main app
 
-Battle state (placements, per-character HP/temp-HP, event log) persists to
-its own localStorage key (`pathfinder-dm-tools:battle`), separate from the
-main app's `pathfinder-dm-tools` character store. `battle-helper.js` only
-ever **reads** the character store (to populate the roster and the stat
-panel) — it never writes to it. Characters aren't copied into battle state
-either; a placement stores a character `id` and looks the character back
-up from the store at render time, so battle-helper always reflects a
-character's current sheet rather than a stale copy — this is also why max
-HP is never stored, only current HP (`battleState.hp[characterId]`): max HP
-is recomputed live from the character's build every render via
-`computeMaxHp()`, so if the character sheet changes, the HP bar's max
-follows it.
+Battle state persists to its own localStorage key
+(`pathfinder-dm-tools:battle`), separate from the main app's
+`pathfinder-dm-tools` character store. `battle-helper.js` only ever
+**reads** the character store — never writes to it.
 
-Current HP and temp HP are both keyed by character id, not by square —
-they need to survive a future "move" event without resetting. Both are
-deleted on `remove-token` (leaving the field means a full reset, not
-persistent-through-removal tracking) and reset on `place-token` — HP to
-max, temp HP cleared outright (`currentHp()`/`currentTempHp()` default to
-max/0 respectively for any id with no tracked entry, which is how a fresh
-placement gets full HP and no temp HP without a separate initialization
-step).
+Characters aren't copied into battle state either: a placement stores an
+`id` and looks the character back up at render time, so battle-helper
+always reflects the current sheet rather than a stale copy. This is also
+why **max HP is never stored** — it's recomputed live every render, so if
+the sheet changes, the bar's max follows. (Drained complicates this; see
+"Conditions".)
+
+HP, temp HP, initiative and conditions are keyed by **entity id, not
+square**, so they survive a move. All are cleared on `remove-token` and
+`place-token` — leaving the field is a full reset. `currentHp()` /
+`currentTempHp()` default to max/0 for any untracked id, which is how a
+fresh placement gets full HP with no separate initialisation step. This
+"reconcile on read, don't write back" pattern recurs:
+`initiativeOrderIds()` and `getAppearance()` both use it, and none of them
+mutate outside `dispatch()`.
+
+**Appearance is the exception** — it survives `remove-token` (see
+`references/map.md`).
 
 ## Custom objects
 
-Not everything placed on the field needs to be a real character — a DM
-might want a marker for a trap, a hazard, or an unstatted prop. Custom
-objects are name-only entities the DM adds directly on this page (the
-roster's "add custom object" form), unlike characters, which only ever
-come from the main app's store. They live in `battleState.customObjects`
-(`{ id: { name } }`, id like `custom-<uuid>` from `crypto.randomUUID()`)
-rather than `localStorage["pathfinder-dm-tools"]`, since — unlike
-characters — they have no existence outside this battle.
+Name-only entities the DM adds on this page (a trap, a hazard, a prop),
+living in `battleState.customObjects` rather than the character store,
+since they have no existence outside this battle.
 
-**`findEntity(id)` is the one place that resolves either kind by id** —
-it checks the character store first, then `battleState.customObjects`,
-and returns a uniform `{ id, name, build, isCustom }` (`build` is `null`
-for custom objects, since they carry no sheet data). Every place that
-previously assumed "placements only ever point at characters" —
-`drawGrid()`'s token labels, `renderInitiative()`, `renderRoster()`'s
-merged unplaced list, `renderStatPanel()`, the canvas click handler's
-placement logic — goes through `findEntity()` rather than calling
-`loadCharacters().find(...)` directly, so a custom object behaves exactly
-like a character everywhere generic ("has a name, can be armed, placed,
-selected, removed") without a parallel set of custom-object-only code
-paths. The one exception is the HP dialog: it's only ever opened from the
-full character stat panel (see below), so `applyHpDelta()`/`applyTempHp()`
-still call `loadCharacters().find(...)` directly — safe, since
-`hpDialogCharacterId` can never hold a custom object's id.
+**`findEntity(id)` is the one place that resolves either kind**, returning
+a uniform `{ id, name, build, isCustom }` with `build: null` for custom
+objects. Everything generic — token drawing, initiative, roster, the
+object panel, placement — goes through it rather than
+`loadCharacters().find(...)`, so a custom object behaves exactly like a
+character everywhere without a parallel set of code paths. The one
+exception is the HP dialog, which only ever opens from the full character
+panel, so `hpDialogCharacterId` can never hold a custom object's id.
 
-`renderStatPanel()` branches on `!entity.build`: a custom object (or, as a
-defensive fallback, a real character somehow missing sheet data) gets a
-minimal panel — name and the remove (×) button only, no HP bar, AC, or
-stat grid — instead of the full character layout. Both branches share one
-`bindRemoveButton(entityId, name)` helper for the actual removal, so
-"remove from field" behaves identically (same event type, same state
-cleanup) regardless of which kind of entity is selected.
+`renderCharacterTab()` branches on `!entity.build`: a custom object (or,
+defensively, a character missing sheet data) gets name + remove button +
+conditions, no HP bar or stat grid. Both branches share
+`bindRemoveButton()` so removal behaves identically.
 
-Custom objects can also be **deleted** outright (the small red × next to
-one in the roster, `renderRoster()`) — different from removal: removing
-from the field just un-places an entity, keeping its definition around so
-it reappears in the roster; deleting erases
-`battleState.customObjects[id]` (and any `initiative[id]`) for good. Only
-custom objects get this button — real characters are managed on the main
-page, not here, so there's nothing to delete from this side. The delete
-button's click handler calls `event.stopPropagation()` so clicking it
-doesn't also trigger the containing `<li>`'s own click handler (which
-arms/disarms the entity for placement) — it's nested inside that `<li>`,
-so without stopping propagation both handlers would fire on every click.
+**Deleting** a custom object (the red × in the roster) is distinct from
+removing it from the field: removal un-places it but keeps the definition
+so it reappears in the roster; deletion erases it for good. Only custom
+objects get this — real characters are managed on the main page. Its
+handler calls `stopPropagation()`, since it's nested inside the `<li>`
+whose own click arms the entity for placement.
 
 ## Initiative track
 
-The initiative track has two independent pieces of state, deliberately not
-derived from each other:
+Two pieces of state, deliberately not derived from each other:
 
-- **`battleState.initiative`** (`{ id: number }`) — the initiative
-  *number* for a placed entity, set via `#battle-initiative-dialog`
-  (`openInitiativeDialog(entityId, name)`), opened by clicking the small
-  `.battle-initiative-value` box next to a name in the track (shows the
-  current number, or `—` if unset — same "always show the control, the
-  value inside it is what's absent" idea as the HP bar's temp-HP bracket).
-  Submitting an empty value **clears** initiative back to unset rather
-  than being rejected — `—` is a real, reachable state, not just an
-  initial default. It's purely informational — works for any placed
-  entity, custom objects included, unlike the HP dialog which only ever
-  opens for real characters.
-- **`battleState.initiativeOrder`** (`id[]`) — the *display order* of the
-  initiative track, appended to on `place-token` and pruned on
-  `remove-token`. This is what actually controls the list's order, **not**
-  a sort by the initiative number — sorting by number would fight manual
-  drag-and-drop on every render (any reorder would immediately snap back),
-  so order and number are deliberately separate.
+- **`initiative`** (`id -> number`) — the number, set via a dialog opened
+  from the small value box on a row (shows `—` when unset; submitting
+  empty *clears* it, so `—` is a reachable state, not just a default).
+  Purely informational, and works for any placed entity.
+- **`initiativeOrder`** (`id[]`) — the display order. This is what controls
+  the list, **not** a sort by the number. Sorting would fight manual
+  drag-and-drop on every render, snapping any reorder straight back.
 
-Drag-and-drop (`renderInitiative()`) uses the native HTML5 DnD API
-(`draggable="true"`, `dragstart`/`dragover`/`dragleave`/`drop` on each
-`<li>`) to reorder `initiativeOrder` — `dragEntityId` (module-level,
-UI-only, mirroring `armedEntityId`'s pattern) tracks which entity is
-mid-drag between the `dragstart` and `drop` events. The actual reorder
-happens in a `dispatch("reorder-initiative", ...)` on `drop`: real,
-undoable battle state, not a UI convenience, per Rule 1.
+Reordering uses the native HTML5 DnD API (unlike the map — see
+`references/map.md` for why that one is hand-rolled) and commits via
+`dispatch("reorder-initiative", ...)` on drop: real battle state, not a UI
+convenience.
 
-The `.battle-initiative-value` button lives *inside* the draggable `<li>`,
-which needs two guards: `draggable="false"` on the button itself, so
-clicking it to open the dialog doesn't get swallowed into starting a drag
-gesture on the row; and the drag-handler-attaching loop must query
-`"li[data-entity-id]"`, not the bare `"[data-entity-id]"` — the button
-carries the same attribute (for its own click handler, so it can look up
-which entity it belongs to), and the unscoped selector would wrongly
-attach `dragstart`/`dragover`/etc. handlers to the button too.
+The value button lives *inside* the draggable `<li>`, which needs two
+guards: `draggable="false"` on the button, so clicking it doesn't start a
+drag; and the handler loop must query `"li[data-entity-id]"`, not the bare
+attribute — the button carries the same attribute and the unscoped
+selector would attach drag handlers to it too.
 
-**Selection is shared both ways between the map and the track**, and it's
-still UI-only (`selectedSquareKey`), not a `dispatch()` — same reasoning
-as clicking a square directly. Clicking a row (outside the value button,
-which `stopPropagation()`s) looks up that entity's square via
-`squareKeyForEntity(entityId)` — the reverse of `placements[squareKey] =
-entityId` — and sets `selectedSquareKey` to it, same as a canvas click.
-The other direction needs no new code: `renderInitiative()` already reads
-`selectedSquareKey` on every `render()` to compute
-`battleState.placements[selectedSquareKey]` and adds `.selected` to that
-entity's row, so selecting a square on the grid highlights the matching
-row for free, the same render pass that already updates the stat panel.
+**Selection is shared both ways** with the map, and stays UI-only.
+Clicking a row resolves the entity's square via `squareKeyForEntity()`;
+the other direction needs no code at all, since `renderInitiative()`
+already reads `selectedSquareKey` every render.
 
-`initiativeOrderIds()` reads `initiativeOrder` reconciled against current
-`placements` — drops any id no longer placed (defensive; `remove-token`
-should already have pruned it) and appends any placed id missing from the
-order (self-healing for battle state saved before this feature existed).
-This is a **read-time-only** fixup: it returns a corrected list without
-writing it back to `battleState`, the same pattern `currentHp()`/
-`currentTempHp()` use for defaulting missing tracked values — reconcile on
-read, don't mutate outside `dispatch()`.
+## Conditions
 
-## Token appearance
+`battleState.conditions[entityId][conditionId] = { active, value }`.
+`active` is the checkbox — a condition can be applied but suppressed,
+which is how a DM parks something that isn't currently biting without
+losing its tier. `value` exists only for valued conditions.
 
-`battleState.appearance` (`{ id: { shape, letters, textColor,
-shapeColor } }`) controls how an entity's token is drawn on the canvas —
-all four fields are optional per entity, and `getAppearance(entityId,
-name)` is the one place that merges a stored override with computed
-defaults (`currentHp()`'s "default unless tracked" pattern again):
-`shape` defaults to `"circle"`; `letters` defaults to
-`defaultInitials(name)` — one letter from each of the first two words, or
-the first two letters if there's only one word (`"Tumb Kamneshit"` →
-`"TK"`, `"Goblin"` → `"GO"`); `textColor`/`shapeColor` default to the
-live `--accent-contrast`/`--accent` theme colors (already hex, per
-`style.css`), so an uncustomized token keeps following light/dark mode —
-only a token with an explicit override breaks from the theme.
+The dictionary and all the effect maths live in `static/pf2e-conditions.js`
+(loaded as a plain global before `battle-helper.js`, like `pf2e-math.js`),
+which stays free of DOM code. Three ideas there are worth knowing before
+touching any of it:
 
-**Unlike HP/temp-HP/initiative, appearance is *not* reset on
-`remove-token`** — it's deleted only by `delete-custom-object` (a
-permanent identity, not battle progress, going away with the object it
-belonged to). A character or custom object pulled off the field and
-placed again later keeps looking the way it was set up, the same way its
-name does.
+- **Stacking is per type.** Only the worst penalty of a given type applies
+  (and the best bonus), while untyped ones always stack. Frightened 2 +
+  Sickened 1 is −2, not −3; Frightened 2 + Flat-Footed really is −4 to AC.
+  `combineModifierTerms()` keeps the losing terms with `applied: false`
+  rather than dropping them, so a tooltip can explain itself.
+- **AC is a DC**, so "all checks and DCs" conditions reach it. One umbrella
+  key in `PF2E_STAT_SOURCES` does that instead of every entry listing five
+  stats.
+- **Conditions impose other conditions, transitively** — Encumbered →
+  Clumsy 1, Dying → Unconscious → Blinded + Flat-Footed.
+  `resolveConditions()` expands the graph breadth-first with a visited
+  guard: the data is acyclic today, but a cycle would hang `render()`.
 
-`renderAppearancePanel()` (the bottom-right box) renders four controls for
-whatever's selected — a shape button row (`TOKEN_SHAPES`, `.active` on the
-current one), a 2-character letters input, and two `<input type="color">`
-pickers — all funneled through one `updateAppearance(entityId, patch,
-label)` helper that does a single `dispatch("update-appearance", ...)`
-per change. Color/letter inputs listen for `change`, not `input` — `input`
-fires continuously while dragging a color wheel or typing, which would
-flood the undo log with one event per intermediate value; `change` fires
-once, on the committed result. Clearing the letters input back to empty
-calls `updateAppearance` with `letters: undefined`, which
-`updateAppearance` treats specially: `undefined` **deletes** that key from
-the stored override (reverting to the computed default) rather than being
-stored literally — a real `undefined` value would still work today
-(`??` treats `null`/`undefined` alike), but would silently vanish anyway
-the next time `persistBattleStore()` round-trips through `JSON.stringify`
-(which drops `undefined`-valued keys), so deleting explicitly keeps
-in-memory state consistent with what's actually persisted, rather than
-relying on that JSON quirk.
+Imposed conditions are **derived on every read, never stored.** Removing
+Encumbered has to take its Clumsy with it and must not disturb a Clumsy
+applied separately, and deriving is the only way that stays true without a
+bookkeeping pass on every add/remove. They render as italic rows with a
+disabled ticked checkbox naming their source.
 
-The canvas drawing side is `traceTokenShape(shape, cx, cy, radius)` —
-traces one of the four shapes into the current path via `ctx.beginPath()`
-+ moves/lines/`ctx.arc()`, but does **not** fill; the caller sets
-`ctx.fillStyle` to `appearance.shapeColor` first, then calls `ctx.fill()`,
-so the same tracing function works regardless of color. Keeping shape
-tracing and coloring as separate steps (rather than baking a color into
-`traceTokenShape` itself) is what let `drawGrid()`'s per-token loop stay a
-single small block instead of a shape/color cross-product of draw calls.
+Effects on rolls this page doesn't make (Enfeebled's melee penalties,
+Clumsy's skills) stay prose-only in the summary **on purpose** — a
+half-modelled penalty a DM leans on is worse than none. Same for
+conditional ones whose trigger the page can't know, like Blinded's −4
+Perception "if vision was your only precise sense". If you add effects,
+add them for stats the panel actually shows.
 
-## Moving a token by drag-and-drop
+Drained breaks the "max HP is never stored, just recomputed" rule's
+simplicity by *lowering* max HP, so everything that clamps HP goes through
+`effectiveMaxHp()` — the panel and the damage/heal dialog both, so healing
+can't exceed the reduced cap. A stat a condition moved renders red with the
+arithmetic in its tooltip; an untouched stat renders exactly as before, so
+red always means a live condition.
 
-The map is a single `<canvas>` — there's no per-square element to hang
-native `draggable="true"` on the way the initiative track does, so
-dragging here is hand-rolled from `mousedown`/`mousemove`/`mouseup`
-instead of the HTML5 DnD API. The actual move (`moveToken()`) is a
-`dispatch("move-token", ...)` like everything else in Rule 1; everything
-before the drop — arming, tracking the hovered square — is UI-only
-(`dragFromKey`, `dragHoverKey`, `dragStartPos`, `dragMoved`), the same
-split as `armedEntityId`/`selectedSquareKey`.
+## Verifying changes here
 
-**Distinguishing a drag from a plain click on the same element** is the
-subtle part, since canvas is one element for both gestures:
-`mousedown` only *arms* a potential drag (records the origin square and
-start position) if that square is occupied and no roster entity is
-currently armed for placement — it does not yet treat this as a drag.
-`mousemove` only flips `dragMoved` to `true` once the cursor has moved
-past `DRAG_THRESHOLD` (4px) from the start position; below that, it's
-still just a click in progress. The `click` handler checks `dragMoved`
-first and bails out (after resetting it) if a real drag just happened —
-otherwise a completed drag would *also* trigger the click handler's
-select/place logic right after, since `mouseup` and `click` both fire on
-the same target in sequence for a normal press-drag-release. Because
-`mouseup` is attached to `window`, not the canvas, a drag that ends
-outside the grid still resolves cleanly (cancels, since there's no valid
-square) instead of leaving `dragFromKey` stuck set — but that means
-`click` might never fire on canvas to do the `dragMoved` reset, so
-`mouseup` also schedules a `setTimeout(() => { dragMoved = false; }, 0)`
-as a backstop, timed to run after any same-target click already had its
-chance to see `dragMoved === true`.
+There's usually no Node and no browser automation available locally, so
+UI behaviour genuinely cannot be confirmed from the agent side — say so
+rather than claiming it works, and ask the developer to click through it
+(this is what step 2 of the `pathfinder-dm-tools` workflow is for).
 
-`moveToken(fromKey, toKey)` computes distance via `pf2eDistanceFeet()`
-(alternating-diagonal, not straight-line — see the pf2e-battle-grid
-skill) and logs it alongside both squares' coordinates in one line (e.g.
-`"Moved Grog 15 ft, from (3, 2) to (5, 3)"`, coordinates as `(col, row)`)
-so the log is useful for tracking actual movement spent, not just that
-*something* moved. A drop is only valid on a different, currently-empty
-square — `mouseup` checks this before calling `moveToken()` — and
-`selectedSquareKey` follows the moved token to its new square afterward
-(plain assignment, not `dispatch()`, same as any other selection change),
-so the stat/appearance panels keep showing the entity you just moved
-instead of an now-empty square.
+What *can* be checked locally, and has caught real bugs:
 
-While a drag is in progress, `drawGrid()` reads the same `dragFromKey`/
-`dragHoverKey` — dims the origin square and tints the hovered square green
-(empty, valid drop) or red (occupied, invalid) — drawn *before* the token
-loop so the dragged token still visibly sits at its original square for
-the whole drag; it only actually jumps to the new square once the drop
-commits and a fresh `render()` runs. `mousemove` calls `drawGrid()`
-directly rather than the full `render()` on every pixel of movement —
-nothing but the drag-hover visuals changed, so re-rendering the roster,
-initiative track, stat panel, etc. on every mouse move would be wasted
-work.
+- **Brace/paren balance** on edited JS, and `{`/`}` plus `/*`/`*/` counts
+  on the CSS. CI's `node --check` is the real syntax gate, but it only
+  runs after a push.
+- **Cross-checks between files** — every class the JS emits exists in the
+  CSS, every id the JS queries exists in the HTML, every `data-*` value
+  matches its constant.
+- **Python mirrors of the pure logic.** The condition resolver, the
+  pathfinder, the door-magnet geometry and the anchored-coordinate resize
+  all have executable mirrors that parse their data out of the shipped
+  source rather than copying it, so they can't drift. When a mirror
+  disagrees with an expectation, check which one is wrong before "fixing"
+  the code — several times the code was right and the test's assumed route
+  or symmetry was not.
