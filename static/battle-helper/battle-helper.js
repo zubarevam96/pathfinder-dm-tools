@@ -12,7 +12,7 @@ const canvas = document.getElementById("battle-grid");
 const ctx = canvas.getContext("2d");
 const mapViewport = document.getElementById("battle-map-viewport");
 const objectPanel = document.getElementById("battle-object-panel");
-const squarePanel = document.getElementById("battle-square-panel");
+const abilitiesPanel = document.getElementById("battle-abilities-panel");
 const rosterList = document.getElementById("battle-roster");
 const initiativeList = document.getElementById("battle-initiative");
 const logList = document.getElementById("battle-log");
@@ -409,6 +409,14 @@ let dragMoved = false; // true once mouse movement crossed DRAG_THRESHOLD — su
 let dragPath = null; // shortest route from dragFromKey to dragHoverKey, or null if unreachable
 const DRAG_THRESHOLD = 4; // px
 
+// A roster row being dragged onto the map. Native HTML5 DnD rather than the
+// mouse-based gesture above, because here the thing dragged is a real
+// element. It reuses dragHoverKey for the green/red target tint — the two
+// gestures can't overlap, since starting a native drag stops mousemove
+// firing — but never dragFromKey, which is what suppresses the walked-path
+// overlay: a token being placed is coming from off the board, not walking.
+let rosterDragId = null;
+
 // Panning: grabbing the map by an empty square — or by the blank space
 // around it — and dragging the view. Distinct from the token drag above —
 // that moves a piece, this moves the camera — so it gets its own state and
@@ -596,7 +604,7 @@ function battleCharacterIds() {
 // code paths, which is the same reason findEntity() exists at all.
 //
 // The reference list is name -> AoN page, built by
-// scripts/build_monster_entities.py from data/monsters.txt. Statblocks are
+// local/scripts/build_monster_entities.py from local/data/monsters.txt. Statblocks are
 // deliberately NOT copied into this repo: the popup opens the real AoN
 // page, so there's no partial, drifting copy of a monster's numbers here.
 // That does mean a monster token carries no HP or AC of its own yet — the
@@ -676,6 +684,77 @@ function findEntity(id) {
     return { id, name: custom.name, build: null, isCustom: true, monsterName: custom.monster ?? null };
   }
   return null;
+}
+
+// A monster's published stats, or null. They ship in monsters.json rather
+// than being fetched, because Archives of Nethys is unreachable from a
+// browser on this origin: its elasticsearch backend allowlists exactly one
+// Origin (2e.aonprd.com) and 403s everything else, and its HTML pages send
+// no CORS header at all. A browser can't suppress the Origin header, so no
+// amount of client-side caching would have made a runtime fetch work. See
+// local/scripts/build_monster_entities.py, which takes these out of the same
+// response that already resolved the statblock link — so the app makes
+// zero requests to AoN for stats, however many battles are opened.
+function monsterStats(monsterName) {
+  return monsterByName.get(monsterName)?.stats ?? null;
+}
+
+// Base stats — before conditions — in one shape whichever kind of entity
+// they came from. A character's are computed from their Pathbuilder build
+// with PF2e's proficiency math; a monster's are published as finished
+// totals and need none of it. Normalising here is what lets a single stat
+// panel, a single HP pool and a single condition pipeline serve both,
+// instead of a monster branch beside every stat.
+//
+// Returns null for anything with no stats at all — a plain custom object,
+// a monster AoN had nothing for, or a character whose sheet data is
+// missing — which is the signal to fall back to the minimal panel.
+//
+// `speedText` is the monster's prose speed ("25 feet, fly 40 feet"): one
+// number can't say a dragon flies, so the panel keeps it for the tooltip.
+function entityStatBlock(entity) {
+  const build = entity?.build;
+  if (build) {
+    const prof = build.proficiencies ?? {};
+    const attrs = build.attributes ?? {};
+    return {
+      level: build.level ?? 1,
+      maxHp: computeMaxHp(build),
+      ac: Number(build.acTotal?.acTotal) || 0,
+      fortitude: checkTotal(build, prof.fortitude ?? 0, "con"),
+      reflex: checkTotal(build, prof.reflex ?? 0, "dex"),
+      will: checkTotal(build, prof.will ?? 0, "wis"),
+      perception: checkTotal(build, prof.perception ?? 0, "wis"),
+      speed: (attrs.speed ?? 0) + (attrs.speedBonus ?? 0),
+      speedText: null,
+    };
+  }
+
+  const stats = monsterStats(entity?.monsterName);
+  if (!stats) return null;
+  // A monster missing one field (AoN's documents aren't uniformly
+  // complete) shows a dash for that stat rather than a misleading 0, so
+  // nulls are carried through rather than defaulted here. Max HP is the
+  // exception: the HP bar has to divide by it, so a monster with no
+  // published HP gets no HP bar at all.
+  return {
+    level: stats.level ?? 0,
+    maxHp: stats.hp ?? null,
+    ac: stats.ac ?? null,
+    fortitude: stats.fortitude ?? null,
+    reflex: stats.reflex ?? null,
+    will: stats.will ?? null,
+    perception: stats.perception ?? null,
+    speed: stats.speed ?? null,
+    speedText: stats.speedText ?? null,
+  };
+}
+
+// The stat block for an entity id, looked up from scratch. Convenience for
+// the several places that hold an id rather than an entity.
+function statBlockFor(entityId) {
+  const entity = findEntity(entityId);
+  return entity ? entityStatBlock(entity) : null;
 }
 
 // Every name currently in play — characters from the store plus everything
@@ -1070,11 +1149,11 @@ function initiativeOrderIds() {
 // freshly placed character, or battle state persisted before HP tracking
 // existed) — never stored redundantly, so it always reflects the
 // character's current sheet if their build changes.
-// maxHp is a parameter (defaulting to the sheet's) rather than always
-// recomputed here because drained lowers it — see effectiveMaxHp(). The
-// clamp is what makes a drained character's HP drop on screen without
-// touching the stored value, so it climbs back when drained ends.
-function currentHp(characterId, build, maxHp = computeMaxHp(build)) {
+// maxHp is a required parameter rather than recomputed here because
+// drained lowers it — see effectiveMaxHp(). The clamp is what makes a
+// drained entity's HP drop on screen without touching the stored value, so
+// it climbs back when drained ends.
+function currentHp(characterId, maxHp) {
   const tracked = battleState.hp[characterId];
   return tracked == null ? maxHp : Math.min(tracked, maxHp);
 }
@@ -1431,10 +1510,10 @@ function renderRoster() {
 
   rosterList.innerHTML = unplaced.length
     ? unplaced.map((e) => `
-        <li class="battle-roster-item${e.id === armedEntityId ? " armed" : ""}${e.id === clipboardSourceId ? " copied" : ""}" data-entity-id="${escapeHtml(e.id)}">
+        <li draggable="true" class="battle-roster-item${e.id === armedEntityId ? " armed" : ""}${e.id === clipboardSourceId ? " copied" : ""}" data-entity-id="${escapeHtml(e.id)}">
           <span class="battle-roster-item-name">${escapeHtml(e.name)}</span>
-          ${e.monsterName ? `<button type="button" class="battle-roster-stats" data-monster="${escapeHtml(e.monsterName)}" title="${escapeHtml(e.monsterName)} statblock" aria-label="${escapeHtml(e.monsterName)} statblock">&#9744;</button>` : ""}
-          <button type="button" class="battle-remove-btn battle-roster-delete" data-entity-id="${escapeHtml(e.id)}" title="${e.isCustom ? `Delete ${escapeHtml(e.name)}` : `Take ${escapeHtml(e.name)} out of this battle`}" aria-label="${e.isCustom ? `Delete ${escapeHtml(e.name)}` : `Take ${escapeHtml(e.name)} out of this battle`}">&times;</button>
+          ${e.monsterName ? `<button type="button" class="battle-roster-stats" draggable="false" data-monster="${escapeHtml(e.monsterName)}" title="${escapeHtml(e.monsterName)} statblock" aria-label="${escapeHtml(e.monsterName)} statblock">&#9744;</button>` : ""}
+          <button type="button" class="battle-remove-btn battle-roster-delete" draggable="false" data-entity-id="${escapeHtml(e.id)}" title="${e.isCustom ? `Delete ${escapeHtml(e.name)}` : `Take ${escapeHtml(e.name)} out of this battle`}" aria-label="${e.isCustom ? `Delete ${escapeHtml(e.name)}` : `Take ${escapeHtml(e.name)} out of this battle`}">&times;</button>
         </li>
       `).join("")
     : '<li class="placeholder">Nobody here yet — add characters, a monster, or a custom object below.</li>';
@@ -1449,11 +1528,45 @@ function renderRoster() {
     });
   }
 
-  for (const li of rosterList.querySelectorAll("[data-entity-id]")) {
+  // Scoped to li[data-entity-id], not the bare attribute selector — the
+  // delete button carries data-entity-id too (for its own handler below)
+  // and would otherwise pick up the row's arm/drag behaviour.
+  for (const li of rosterList.querySelectorAll("li[data-entity-id]")) {
     li.addEventListener("click", () => {
       const id = li.dataset.entityId;
       armedEntityId = armedEntityId === id ? null : id;
       render();
+    });
+
+    // Dragging a row onto a square is the second way to place an entity,
+    // alongside arm-then-click. Native HTML5 DnD, like the initiative
+    // track's reordering and unlike the map's own token drag — the thing
+    // being dragged here IS an element, so there's nothing to hand-roll.
+    li.addEventListener("dragstart", (event) => {
+      rosterDragId = li.dataset.entityId;
+      // An entity armed by an earlier click would otherwise still be
+      // waiting to drop on the next map click, long after this drag placed
+      // a different one somewhere else.
+      armedEntityId = null;
+      li.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "copy";
+      // Firefox refuses to start a drag with nothing on the transfer. The
+      // payload is the NAME, not the id, so a stray drop into some other
+      // text field pastes something a person would recognise; the drop
+      // handler on the canvas reads rosterDragId and ignores this.
+      event.dataTransfer.setData("text/plain", findEntity(rosterDragId)?.name ?? "");
+      // Deliberately no render() here, despite armedEntityId having just
+      // changed: render() rebuilds the roster, and destroying the element
+      // the drag started from cancels the drag outright. The stale armed
+      // styling lasts until the drag ends, which is a moment away.
+    });
+    li.addEventListener("dragend", () => {
+      // A backstop for drags that end anywhere but the map (cancelled, or
+      // released off-target). A successful drop can't rely on this: it
+      // re-renders the roster, and this row — now placed — is gone from it
+      // before dragend would have fired.
+      li.classList.remove("dragging");
+      endRosterDrag();
     });
   }
 
@@ -1483,6 +1596,40 @@ function renderRoster() {
       if (clipboardSourceId === id) clipboard = null;
     });
   }
+}
+
+// Puts a roster entity on an empty square. Shared by the arm-then-click
+// path and the drag-and-drop one so the two can't drift into placing
+// subtly different things — HP seeding and the initiative-track insert are
+// easy to remember in one place and forget in the other. Returns whether
+// it happened; an occupied square is a no-op, not a swap.
+function placeEntity(entityId, key) {
+  if (battleState.placements[key]) return false;
+  const entity = findEntity(entityId);
+  if (!entity) return false;
+  const stats = entityStatBlock(entity);
+  dispatch("place-token", `Placed ${entity.name} on the field`, (state) => {
+    state.placements[key] = entityId;
+    // Characters get their computed max, monsters their published one, and
+    // a plain custom object none at all — it's name-only by design, per
+    // the battle-helper-architecture skill.
+    if (stats?.maxHp != null) state.hp[entityId] = stats.maxHp;
+    else delete state.hp[entityId];
+    delete state.tempHp[entityId];
+    delete state.conditions[entityId];
+    state.initiativeOrder.push(entityId);
+  });
+  return true;
+}
+
+// Clears whatever a roster drag left behind. Called from dragend and from
+// a drop that placed nothing; a drop that DID place goes through dispatch()
+// instead, having cleared these first so its render sees them gone.
+function endRosterDrag() {
+  if (!rosterDragId && dragHoverKey === null) return;
+  rosterDragId = null;
+  dragHoverKey = null;
+  render();
 }
 
 function addCharacterToBattle(characterId, name) {
@@ -1645,11 +1792,18 @@ function bindRemoveButton() {
 // had tabs.
 const OBJECT_TAB_CHARACTER = "character";
 const OBJECT_TAB_TOKEN = "token";
+const OBJECT_TAB_SQUARE = "square";
 let selectedObjectTab = OBJECT_TAB_CHARACTER;
 
+// Everything the selected square can tell you, in one box: who's standing
+// there (stats and conditions), the token drawn for them, and the ground
+// itself. Square joined these two when the bottom-right box was given over
+// to abilities — it's a third view of the same selection, so it belongs
+// with them rather than in a box of its own.
 const OBJECT_TABS = [
   { id: OBJECT_TAB_CHARACTER, label: "Character" },
   { id: OBJECT_TAB_TOKEN, label: "Token" },
+  { id: OBJECT_TAB_SQUARE, label: "Square" },
 ];
 
 function renderObjectPanel() {
@@ -1676,24 +1830,20 @@ function renderObjectPanel() {
 
   const body = document.getElementById("battle-object-body");
   if (selectedObjectTab === OBJECT_TAB_TOKEN) renderTokenTab(body);
+  else if (selectedObjectTab === OBJECT_TAB_SQUARE) renderSquareTab(body);
   else renderCharacterTab(body);
 }
 
-// Bottom-right box: the ground itself, independent of who's on it. Terrain
-// is keyed by square, so there's no "empty square" case here the way there
-// is for the object panel — an empty square is still a square with terrain.
-function renderSquarePanel() {
-  if (!selectedSquareKey) {
-    squarePanel.innerHTML = '<p class="placeholder">Click a square to select it.</p>';
-    return;
-  }
-
+// The ground itself, independent of who's on it. Terrain is keyed by
+// square, so unlike the other two tabs there's no "empty square" case —
+// an empty square is still a square, and still has terrain.
+function renderSquareTab(objectBody) {
   const key = selectedSquareKey;
   const [row, col] = key.split(",").map(Number);
   const difficult = isDifficultTerrain(key);
 
-  squarePanel.innerHTML = `
-    <h2>Square (${col}, ${row})</h2>
+  objectBody.innerHTML = `
+    <h3 class="battle-square-heading">Square (${col}, ${row})</h3>
     <div class="battle-square-info">
       <label class="battle-square-toggle">
         <input type="checkbox" id="battle-square-difficult"${difficult ? " checked" : ""} />
@@ -1713,6 +1863,261 @@ function renderSquarePanel() {
   });
 }
 
+// Bottom-right box: what the selected creature can DO, as opposed to what
+// it is. Two tabs, split the way a DM reaches for them: Actions is the
+// in-combat page (strikes, then special abilities), Proficiencies is the
+// out-of-combat one (attribute modifiers and skills).
+//
+// TODO, deliberately left for now: the secondary speeds (climb, fly, swim —
+// present unparsed in stats.speedText) and Recall Knowledge DCs.
+const ABILITY_TAB_ACTIONS = "actions";
+const ABILITY_TAB_PROFICIENCIES = "proficiencies";
+let selectedAbilityTab = ABILITY_TAB_ACTIONS;
+
+const ABILITY_TABS = [
+  { id: ABILITY_TAB_ACTIONS, label: "Actions" },
+  { id: ABILITY_TAB_PROFICIENCIES, label: "Proficiencies" },
+];
+
+function renderAbilitiesPanel() {
+  if (!selectedSquareKey) {
+    abilitiesPanel.innerHTML = '<p class="placeholder">Click a square to select it.</p>';
+    return;
+  }
+  const entityId = battleState.placements[selectedSquareKey];
+  const entity = entityId ? findEntity(entityId) : null;
+  if (!entity) {
+    abilitiesPanel.innerHTML = '<p class="placeholder">Empty square.</p>';
+    return;
+  }
+
+  const abilities = entityAbilities(entity);
+  if (abilities === "loading") {
+    abilitiesPanel.innerHTML = '<p class="placeholder">Loading&hellip;</p>';
+    return;
+  }
+  if (!abilities) {
+    abilitiesPanel.innerHTML = `<p class="placeholder">${
+      entity.isCustom && !entity.monsterName
+        ? "Custom object — nothing to do."
+        : "No abilities recorded for this creature."
+    }</p>`;
+    return;
+  }
+
+  // Same tab markup and classes as the bottom-left box, so the two boxes
+  // read as one pattern rather than two inventions.
+  abilitiesPanel.innerHTML = `
+    <div class="battle-object-tabs" role="tablist">
+      ${ABILITY_TABS.map(({ id, label }) => `
+        <button type="button" class="battle-object-tab${selectedAbilityTab === id ? " active" : ""}" data-ability-tab="${id}" role="tab" aria-selected="${selectedAbilityTab === id}">${label}</button>`).join("")}
+    </div>
+    <div id="battle-ability-body" class="battle-object-body"></div>
+  `;
+
+  for (const btn of abilitiesPanel.querySelectorAll(".battle-object-tab")) {
+    btn.addEventListener("click", () => {
+      if (selectedAbilityTab === btn.dataset.abilityTab) return;
+      selectedAbilityTab = btn.dataset.abilityTab;
+      render();
+    });
+  }
+
+  const body = document.getElementById("battle-ability-body");
+  if (selectedAbilityTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities);
+  else renderActionsTab(body, abilities);
+}
+
+function renderActionsTab(body, { strikes, special }) {
+  // The multiple-attack penalty beside each strike, because a DM reads it
+  // every single round and doing the arithmetic mid-fight is exactly the
+  // kind of friction this panel exists to remove.
+  const strikeRows = strikes.map((s) => `
+    <li class="battle-ability-strike">
+      <span class="battle-ability-strike-head">
+        ${s.action ? `<span class="battle-ability-action" title="${escapeHtml(s.action)}">${actionGlyph(s.action)}</span>` : ""}
+        ${s.kind ? `<span class="battle-ability-kind">${escapeHtml(s.kind)}</span>` : ""}
+        <span class="battle-ability-name">${escapeHtml(s.name)}</span>
+        <span class="battle-ability-bonus">${formatMod(s.bonus)}</span>
+        ${s.map ? `<span class="battle-ability-map" title="Multiple attack penalty: second and third attacks this round">[${s.map.map(formatMod).join(" / ")}]</span>` : ""}
+      </span>
+      ${s.traits?.length ? `<span class="battle-ability-traits">${s.traits.map((t) => `<span class="battle-ability-trait">${escapeHtml(t)}</span>`).join("")}</span>` : ""}
+      ${s.damage ? `<span class="battle-ability-damage">${escapeHtml(s.damage)}</span>` : ""}
+    </li>
+  `).join("");
+
+  const specialRows = special.map((a) => `
+    <li class="battle-ability-special">
+      <span class="battle-ability-special-head">
+        ${a.action ? `<span class="battle-ability-action" title="${escapeHtml(a.action)}">${actionGlyph(a.action)}</span>` : ""}
+        <span class="battle-ability-name">${escapeHtml(a.name)}</span>
+      </span>
+      ${a.text ? `<span class="battle-ability-text">${abilityText(a.text)}</span>` : ""}
+    </li>
+  `).join("");
+
+  body.innerHTML = `
+    <div class="battle-ability-body">
+      <ul class="battle-ability-list">
+        ${strikeRows || '<li class="placeholder">No strikes.</li>'}
+      </ul>
+      ${specialRows ? `<ul class="battle-ability-list">${specialRows}</ul>` : ""}
+    </div>
+  `;
+}
+
+function renderProficienciesTab(body, { attributes, skills }) {
+  // Abbreviated, not ABILITY_NAMES' full "Strength" — six of them share one
+  // row, where the Character tab's grid only ever fits two. The title
+  // carries the full name.
+  const attrRow = ABILITIES.map((key) => {
+    const value = attributes?.[key];
+    return `<div class="battle-stat" title="${escapeHtml(ABILITY_NAMES[key] ?? key)}"><span class="stat-label">${key.toUpperCase()}</span><span class="stat-value${value == null ? " unknown" : ""}">${value == null ? "&mdash;" : formatMod(value)}</span></div>`;
+  }).join("");
+
+  // A conditional bonus ("Athletics +5 (+9 to Climb)") is shown beside the
+  // flat one rather than replacing it — both apply, and which one is live
+  // depends on what's being attempted. It's the whole reason these are
+  // scraped from the rendered statblock; see the build script.
+  const skillRows = (skills ?? []).map((s) => `
+    <li class="battle-ability-skill">
+      <span class="battle-ability-skill-name">${escapeHtml(s.name)}</span>
+      <span class="battle-ability-bonus">${formatMod(s.modifier)}</span>
+      ${(s.notes ?? []).map((n) => `<span class="battle-ability-skill-note">${formatMod(n.modifier)}${n.condition ? ` ${escapeHtml(n.condition)}` : ""}</span>`).join("")}
+    </li>
+  `).join("");
+
+  body.innerHTML = `
+    <div class="battle-ability-body">
+      <div class="battle-stat-grid battle-ability-attrs">${attrRow}</div>
+      <ul class="battle-ability-list battle-ability-skills">
+        ${skillRows || '<li class="placeholder">No trained skills.</li>'}
+      </ul>
+    </div>
+  `;
+}
+
+// AoN writes the sub-headings inside an ability's text as **bold** runs
+// ("**Trigger** ... **Effect** ..."). Rendered rather than shown literally,
+// but through an explicit escape-then-replace: the text is third-party
+// data, so it goes through escapeHtml() first and only the bold markers are
+// promoted back to tags afterwards.
+function abilityText(text) {
+  return escapeHtml(text).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
+// PF2e's action symbols. The font Archives of Nethys uses isn't available
+// here, so these are the closest stable glyphs: one/two/three pips for
+// actions, an arrow for a reaction, an infinity for free.
+const ACTION_GLYPHS = {
+  "Single Action": "◆",
+  "Two Actions": "◆◆",
+  "Three Actions": "◆◆◆",
+  "Reaction": "↺",
+  "Free Action": "◇",
+};
+
+function actionGlyph(action) {
+  return ACTION_GLYPHS[action] ?? escapeHtml(action);
+}
+
+// Monster abilities live in their own file, loaded on first use rather than
+// at startup. They're ~216 KB gzipped against monsters.json's ~14 KB, and a
+// session that never opens the abilities panel never needs a byte of them —
+// putting that on the critical path of a page whose main job is drawing a
+// grid would be paying for everyone what few use.
+//
+// null means "not fetched yet", a Map means "fetched" (possibly empty, if
+// the fetch failed). The promise is memoised, so the render below can ask
+// for it every frame and only ever cause one request.
+let monsterAbilitiesByName = null;
+let monsterAbilitiesPromise = null;
+
+function loadMonsterAbilities() {
+  if (monsterAbilitiesPromise) return monsterAbilitiesPromise;
+  monsterAbilitiesPromise = fetch("../monster-data/monster-abilities.json")
+    .then((response) => (response.ok ? response.json() : []))
+    .then((list) => {
+      monsterAbilitiesByName = new Map(list.map((m) => [m.name, m.abilities]));
+      // Repaints the panel that asked for this. Safe against a loop: the
+      // memoised promise means the next render finds the Map and returns.
+      render();
+    })
+    .catch(() => {
+      // Non-fatal, and cached as an empty Map so a failed fetch isn't
+      // retried on every render. The panel says so; nothing else breaks.
+      monsterAbilitiesByName = new Map();
+      render();
+    });
+  return monsterAbilitiesPromise;
+}
+
+// Strikes, attribute modifiers and special abilities, from whichever source
+// the entity has — mirroring entityStatBlock()'s job for the stat panel.
+// A character's strikes come from their Pathbuilder weapons; a monster's
+// were parsed out of its statblock at build time.
+//
+// Returns the string "loading" for a monster whose abilities file hasn't
+// arrived yet, which is distinct from null ("this thing has none").
+function entityAbilities(entity) {
+  const build = entity?.build;
+  if (build) {
+    const strikes = (build.weapons ?? []).map((w) => {
+      const bonus = Number(w.attack) || 0;
+      const damage = [w.die, w.damageBonus ? formatMod(w.damageBonus) : "", w.damageType]
+        .filter(Boolean).join(" ");
+      return {
+        // No kind and no traits: Pathbuilder's export says neither whether
+        // a weapon is melee or ranged nor whether it's agile. Guessing from
+        // the name ("bow", "sling"…) would mislabel often enough to be
+        // worse than saying nothing, and mis-stating agile would put the
+        // wrong penalty in front of a DM every round. Both stay absent
+        // until the export carries them — the standard -5/-10 shown here is
+        // right for the large majority of weapons.
+        kind: null,
+        action: "Single Action",
+        name: w.display || w.name || "weapon",
+        bonus,
+        map: [bonus - 5, bonus - 10],
+        traits: [],
+        damage: damage || null,
+      };
+    });
+    const attributes = Object.fromEntries(
+      ABILITIES.map((key) => [key, abilityMod(build.abilities?.[key] ?? 10)])
+    );
+    // Only trained-and-above, matching what a monster statblock lists — an
+    // untrained skill is just the attribute modifier, already shown above,
+    // and eighteen rows of those would bury the handful that matter.
+    // SKILLS maps a skill name to its key ability; checkTotal() applies
+    // PF2e's "no level bonus while untrained" rule.
+    const prof = build.proficiencies ?? {};
+    const skills = Object.entries(SKILLS)
+      .filter(([key]) => (prof[key] ?? 0) > 0)
+      .map(([key, ability]) => ({
+        name: key.charAt(0).toUpperCase() + key.slice(1),
+        modifier: checkTotal(build, prof[key], ability),
+        notes: [],
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return { strikes, attributes, special: [], skills };
+  }
+
+  if (!entity?.monsterName) return null;
+  if (monsterAbilitiesByName === null) {
+    loadMonsterAbilities();
+    return "loading";
+  }
+  const abilities = monsterAbilitiesByName.get(entity.monsterName);
+  if (!abilities) return null;
+  return {
+    strikes: abilities.strikes ?? [],
+    attributes: abilities.attributes ?? {},
+    special: abilities.special ?? [],
+    skills: abilities.skills ?? [],
+  };
+}
+
 // The character or custom object standing on the selected square — sheet
 // numbers and conditions. Not the marker drawn for them; that's
 // renderTokenTab() below.
@@ -1729,11 +2134,14 @@ function renderCharacterTab(objectBody) {
     return;
   }
 
-  // Custom objects (name only, by design), monsters (whose numbers live on
-  // Archives of Nethys rather than here) and — as a defensive fallback —
-  // any real character missing sheet data all get the same minimal panel:
-  // a name, a way to remove them from the field, and conditions.
-  if (!entity.build) {
+  // The branch is on having STATS, not on being a character: a monster
+  // with published numbers gets the full panel — HP bar, AC, saves,
+  // Perception, conditions applying to all of it — and renders through
+  // exactly the same code below. Custom objects (name only, by design), a
+  // monster AoN had nothing for, and — defensively — a character missing
+  // sheet data all fall through to the minimal panel.
+  const stats = entityStatBlock(entity);
+  if (!stats) {
     // A renamed monster still points at its statblock, so the button is
     // labelled with the bestiary entry rather than the token's name —
     // "Sneaky Pete" opening a page headed "Goblin Warrior" would look like
@@ -1770,20 +2178,18 @@ function renderCharacterTab(objectBody) {
     return;
   }
 
-  // Past this point entity.build is guaranteed (the branch above already
-  // returned otherwise), so this is always a real character — renamed for
-  // readability in the rest of this function, which is character-specific.
-  const character = entity;
+  // Past this point `stats` is guaranteed (the branch above returned
+  // otherwise), so this renders a character and a statted monster alike.
   const characterId = entityId;
   const build = entity.build;
-  const prof = build.proficiencies ?? {};
-  const attrs = build.attributes ?? {};
   // Conditions are resolved once for the whole panel — every stat below
   // reads its own entry out of this, rather than each recomputing the
   // grant graph.
-  const mods = entityModifiers(characterId, build.level ?? 1);
-  const { base: baseMaxHp, max: maxHp } = effectiveMaxHp(characterId, build);
-  const hp = currentHp(characterId, build, maxHp);
+  const mods = entityModifiers(characterId, stats.level ?? 1);
+  const hpPools = effectiveMaxHp(characterId, stats);
+  const baseMaxHp = hpPools?.base ?? 0;
+  const maxHp = hpPools?.max ?? 0;
+  const hp = currentHp(characterId, maxHp);
   const tempHp = currentTempHp(characterId);
   // The bar's whole is max HP + temp HP, not just max HP, so adding temp
   // HP visibly shrinks the HP/absent portions to make room for it rather
@@ -1796,51 +2202,77 @@ function renderCharacterTab(objectBody) {
   const hpFillPct = hpPool > 0 ? Math.max(0, Math.min(100, (hp / hpPool) * 100)) : 0;
   const tempFillPct = hpPool > 0 ? Math.max(0, Math.min(100, (tempHp / hpPool) * 100)) : 0;
   const hpLow = maxHp > 0 && hp / maxHp <= 0.25;
-  const { hasShield, shieldBonus } = getAcBonuses(build);
-  const shieldRaised = raisedShieldIds.has(characterId);
+  // Only a character can raise a shield — a monster's AC already includes
+  // whatever it carries, and there's no published shield bonus to add.
+  const { hasShield, shieldBonus } = build ? getAcBonuses(build) : { hasShield: false, shieldBonus: 0 };
+  const shieldRaised = hasShield && raisedShieldIds.has(characterId);
   // Conditions apply on top of the raised-shield bonus, not instead of it:
   // the shield is a circumstance bonus, so it and a status penalty from
   // e.g. frightened both count. baseAc here is "AC before conditions".
-  const baseAc = (Number(build.acTotal?.acTotal) || 0) + (shieldRaised ? shieldBonus : 0);
-  const ac = baseAc + mods.ac.total;
-  const baseFort = checkTotal(build, prof.fortitude ?? 0, "con");
-  const baseReflex = checkTotal(build, prof.reflex ?? 0, "dex");
-  const baseWill = checkTotal(build, prof.will ?? 0, "wis");
-  const basePerception = checkTotal(build, prof.perception ?? 0, "wis");
-  const baseSpeed = (attrs.speed ?? 0) + (attrs.speedBonus ?? 0);
+  const baseAc = stats.ac == null ? null : stats.ac + (shieldRaised ? shieldBonus : 0);
+  const baseSpeed = stats.speed;
   // Speed can't go below 0 however much is stacked on it, and it's shown
   // as a plain number of feet rather than a signed modifier.
-  const speed = Math.max(0, baseSpeed + mods.speed.total);
+  const speed = baseSpeed == null ? null : Math.max(0, baseSpeed + mods.speed.total);
 
   // Each save/Perception tile is the same shape, so build them from one
-  // list instead of four near-identical lines of template literal.
+  // list instead of four near-identical lines of template literal. A stat
+  // the source didn't publish shows an em dash rather than a plausible
+  // "+0" — a monster with no listed Will save has an unknown one, not a
+  // zero one, and the difference matters at the table.
   const checks = [
-    { label: "Fortitude", base: baseFort, modifier: mods.fortitude },
-    { label: "Reflex", base: baseReflex, modifier: mods.reflex },
-    { label: "Will", base: baseWill, modifier: mods.will },
-    { label: "Perception", base: basePerception, modifier: mods.perception },
+    { label: "Fortitude", base: stats.fortitude, modifier: mods.fortitude },
+    { label: "Reflex", base: stats.reflex, modifier: mods.reflex },
+    { label: "Will", base: stats.will, modifier: mods.will },
+    { label: "Perception", base: stats.perception, modifier: mods.perception },
   ].map(({ label, base, modifier }) => {
+    if (base == null) {
+      return `<div class="battle-stat"><span class="stat-label">${label}</span><span class="stat-value unknown" title="Not published for this creature">&mdash;</span></div>`;
+    }
     const hint = modifierHint(label, base, modifier);
     return `<div class="battle-stat"><span class="stat-label">${label}</span><span class="stat-value ${modifierClass(modifier)}"${hint ? ` title="${escapeHtml(hint)}"` : ""}>${formatMod(base + modifier.total)}</span></div>`;
   }).join("");
 
-  const acHint = modifierHint("AC", baseAc, mods.ac, String);
-  const speedHint = modifierHint("Speed", baseSpeed, mods.speed, String);
-  const maxHpHint = modifierHint("Max HP", baseMaxHp, mods.maxHp, String);
+  const ac = baseAc == null ? null : baseAc + mods.ac.total;
+  const hasHp = hpPools != null;
+
+  const acHint = baseAc == null ? "" : modifierHint("AC", baseAc, mods.ac, String);
+  const speedHint = baseSpeed == null ? "" : modifierHint("Speed", baseSpeed, mods.speed, String);
+  const maxHpHint = hasHp ? modifierHint("Max HP", baseMaxHp, mods.maxHp, String) : "";
   // The AC panel's tooltip already explains the shield toggle; the
   // condition breakdown is appended below it rather than replacing it.
   const acTitle = [hasShield ? `Raise a Shield (+${shieldBonus} AC)` : "AC", acHint].filter(Boolean).join("\n\n");
-  const hpTitle = ["Click to adjust HP", maxHpHint].filter(Boolean).join("\n\n");
+  const hpTitle = hasHp
+    ? ["Click to adjust HP", maxHpHint].filter(Boolean).join("\n\n")
+    : "No published HP for this creature";
+  // A monster's prose speed ("25 feet, fly 40 feet") goes in the tooltip:
+  // the panel shows one number, and one number can't say a dragon flies.
+  const speedTitle = [stats.speedText, speedHint].filter(Boolean).join("\n\n");
   // Speed and max HP sit in running text rather than in a .stat-value slot
   // of their own, so they're only wrapped when a condition actually moved
   // them — otherwise they keep exactly the bare-number markup they had
   // before conditions existed, with no empty class attribute.
-  const speedText = mods.speed.total
-    ? `<span class="${modifierClass(mods.speed)}" title="${escapeHtml(speedHint)}">${speed}</span>`
-    : `${speed}`;
+  let speedText;
+  if (speed == null) speedText = '<span class="unknown" title="Not published for this creature">&mdash;</span>';
+  else if (mods.speed.total || speedTitle) speedText = `<span class="${modifierClass(mods.speed)}" title="${escapeHtml(speedTitle)}">${speed} ft</span>`;
+  else speedText = `${speed} ft`;
   const maxHpText = mods.maxHp.total
     ? `<span class="${modifierClass(mods.maxHp)} on-fill">${maxHp}</span>`
     : `${maxHp}`;
+
+  // Monsters keep a way through to the full statblock — the panel carries
+  // the numbers a fight needs, not the strikes, spells and abilities. The
+  // NAME is the link rather than a separate icon beside it: the header row
+  // is tight, and an extra control there was crowding the speed and HP bar
+  // for something the name itself can carry.
+  //
+  // Its tooltip names the STATBLOCK, not the token — "Giant Gecko 4" is
+  // this particular gecko, and what the link opens is the page for Giant
+  // Gecko. Same reasoning the roster's button already used.
+  const monsterName = entity.monsterName;
+  const nameHtml = monsterName
+    ? `<button type="button" id="battle-monster-stats" class="battle-stat-name battle-stat-name-link" title="${escapeHtml(monsterName)} statblock">${escapeHtml(entity.name)}</button>`
+    : `<span class="battle-stat-name">${escapeHtml(entity.name)}</span>`;
 
   // Two clusters pinned to opposite edges (identity on the left, HP/AC on
   // the right) rather than one row that stretches the HP bar to fill the
@@ -1851,20 +2283,24 @@ function renderCharacterTab(objectBody) {
       <div class="battle-stat-left">
         <button id="battle-remove-token" class="battle-remove-btn" title="Remove from field" aria-label="Remove from field">&times;</button>
         <div class="battle-stat-identity">
-          <span class="battle-stat-name">${escapeHtml(character.name)}</span>
-          <span class="battle-stat-level">Lvl ${build.level ?? 1}</span>
-          <span class="battle-stat-speed">Speed ${speedText} ft</span>
+          <!-- Name and level share one inline wrapper so the flex gap falls
+               between the name and Speed, not between the name and its own
+               superscript. The <sup> is a sibling, not a child of the name:
+               inside the monster case's <button> it would make the level
+               part of the click target. -->
+          <span class="battle-stat-name-wrap">${nameHtml}<sup class="battle-stat-level" title="Level ${stats.level ?? 1}">${stats.level ?? 1}</sup></span>
+          <span class="battle-stat-speed">Speed ${speedText}</span>
         </div>
       </div>
       <div class="battle-stat-right">
-        <button type="button" id="battle-hp-bar" class="battle-hp-bar" title="${escapeHtml(hpTitle)}">
+        <button type="button" id="battle-hp-bar" class="battle-hp-bar" title="${escapeHtml(hpTitle)}" ${hasHp ? "" : "disabled"}>
           <span class="battle-hp-bar-fill${hpLow ? " low" : ""}" style="width:${hpFillPct}%"></span>
           ${tempHp > 0 ? `<span class="battle-hp-bar-temp-fill" style="left:${hpFillPct}%; width:${tempFillPct}%"></span>` : ""}
-          <span class="battle-hp-bar-text">${hp} / ${maxHpText}${tempHp > 0 ? ` (+${tempHp})` : ""}</span>
+          <span class="battle-hp-bar-text">${hasHp ? `${hp} / ${maxHpText}${tempHp > 0 ? ` (+${tempHp})` : ""}` : "&mdash;"}</span>
         </button>
         <button type="button" id="battle-toggle-shield" class="battle-stat-ac${shieldRaised ? " active" : ""}" title="${escapeHtml(acTitle)}" ${hasShield ? "" : "disabled"}>
           <span class="stat-label">AC</span>
-          <span class="stat-value ${modifierClass(mods.ac)}">${ac}</span>
+          <span class="stat-value ${ac == null ? "unknown" : modifierClass(mods.ac)}">${ac == null ? "&mdash;" : ac}</span>
           ${hasShield ? `<span class="battle-stat-ac-shield-icon" aria-hidden="true">&#128737;</span>` : ""}
         </button>
       </div>
@@ -1878,11 +2314,19 @@ function renderCharacterTab(objectBody) {
   `;
 
   bindRemoveButton();
-  bindConditionsSection(characterId, character.name);
+  bindConditionsSection(characterId, entity.name);
 
-  document.getElementById("battle-hp-bar").addEventListener("click", () => {
-    openHpDialog(characterId, character.name);
-  });
+  if (monsterName) {
+    document.getElementById("battle-monster-stats").addEventListener("click", () => {
+      openAonPopup(monsterUrl(monsterName), monsterName);
+    });
+  }
+
+  if (hasHp) {
+    document.getElementById("battle-hp-bar").addEventListener("click", () => {
+      openHpDialog(characterId, entity.name);
+    });
+  }
 
   if (hasShield) {
     document.getElementById("battle-toggle-shield").addEventListener("click", () => {
@@ -1929,13 +2373,20 @@ function entityModifiers(entityId, level) {
 }
 
 // Drained is the one condition that changes max HP, so max HP is no longer
-// a pure function of the sheet. Everything that clamps HP goes through
+// a pure function of the stat block. Everything that clamps HP goes through
 // here so the cap is the same in the panel and in the damage/heal dialog.
-// Floored at 1: enough drained on a low-level character would otherwise
+// Floored at 1: enough drained on a low-level entity would otherwise
 // produce a zero-or-negative maximum, which the HP bar can't divide by.
-function effectiveMaxHp(entityId, build) {
-  const base = computeMaxHp(build);
-  const modifier = entityModifiers(entityId, build.level ?? 1).maxHp;
+//
+// Takes a normalised stat block (see entityStatBlock()), so a monster's
+// published HP is drained exactly like a character's computed HP — drained
+// is level-scaled, and a monster has a level like anything else. Returns
+// null for an entity with no HP at all, which is the panel's cue to leave
+// the bar out rather than draw a bar over a made-up maximum.
+function effectiveMaxHp(entityId, stats) {
+  if (stats?.maxHp == null) return null;
+  const base = stats.maxHp;
+  const modifier = entityModifiers(entityId, stats.level ?? 1).maxHp;
   return { base, max: Math.max(1, base + modifier.total), modifier };
 }
 
@@ -2393,7 +2844,7 @@ function render() {
   renderRoster();
   renderInitiative();
   renderObjectPanel();
-  renderSquarePanel();
+  renderAbilitiesPanel();
   renderLog();
   renderUndoRedoButtons();
 }
@@ -2444,15 +2895,19 @@ function updateHpActionVisibility() {
 // how much of the damage each pool actually took, not just the total.
 function applyHpDelta(delta, kind) {
   const characterId = hpDialogCharacterId;
-  const character = loadCharacters().find((c) => c.id === characterId);
-  if (!character || !delta) {
+  // findEntity(), not loadCharacters(): a monster has an HP pool too, and
+  // looking only in the character store would silently no-op every button
+  // in this dialog for one.
+  const character = findEntity(characterId);
+  const pools = character ? effectiveMaxHp(characterId, entityStatBlock(character)) : null;
+  if (!pools || !delta) {
     hpDialog.close();
     return;
   }
 
-  // The drained-reduced maximum, not the sheet's — healing can't push a
-  // drained character back above the cap the condition imposes.
-  const { max: maxHp } = effectiveMaxHp(characterId, character.data.build);
+  // The drained-reduced maximum, not the published one — healing can't push
+  // a drained creature back above the cap the condition imposes.
+  const { max: maxHp } = pools;
   const suffix = kind ? ` (${kind})` : "";
   let label;
   if (delta < 0) {
@@ -2490,7 +2945,9 @@ function applyHpDelta(delta, kind) {
 // not an additive stepper like damage/heal).
 function applyTempHp(value) {
   const characterId = hpDialogCharacterId;
-  const character = loadCharacters().find((c) => c.id === characterId);
+  // findEntity(), for the same reason as applyHpDelta(): temp HP applies
+  // to a monster just as much as to a character.
+  const character = findEntity(characterId);
   if (!character || !value) {
     hpDialog.close();
     return;
@@ -3650,23 +4107,12 @@ canvas.addEventListener("click", (event) => {
   const square = squareFromEvent(event);
   if (!square) return;
   const key = squareKey(square.row, square.col);
-  const occupantId = battleState.placements[key];
 
   if (armedEntityId) {
-    if (!occupantId) {
-      const entity = findEntity(armedEntityId);
-      if (entity) {
-        dispatch("place-token", `Placed ${entity.name} on the field`, (state) => {
-          state.placements[key] = armedEntityId;
-          // Custom objects have no build data, so no HP to initialize —
-          // per the battle-helper-architecture skill, they're name-only.
-          if (entity.build) state.hp[armedEntityId] = computeMaxHp(entity.build);
-          delete state.tempHp[armedEntityId];
-          delete state.conditions[armedEntityId];
-          state.initiativeOrder.push(armedEntityId);
-        });
-      }
-    }
+    // The render() is needed even when placeEntity() dispatched one of its
+    // own: disarming is UI-only state, and a rejected placement (occupied
+    // square) wouldn't otherwise clear the row's armed highlight.
+    placeEntity(armedEntityId, key);
     armedEntityId = null;
     render();
     return;
@@ -3676,6 +4122,45 @@ canvas.addEventListener("click", (event) => {
   // an event, per the battle-helper-architecture skill.
   selectedSquareKey = key;
   render();
+});
+
+// The map as a drop target for roster rows. dragover's preventDefault() is
+// what makes it one at all — without it the browser refuses every drop and
+// shows "no entry" across the whole map.
+canvas.addEventListener("dragover", (event) => {
+  if (!rosterDragId) return;
+  event.preventDefault();
+  const square = squareFromEvent(event);
+  const key = square ? squareKey(square.row, square.col) : null;
+  // Says "you can't put it there" on the cursor itself, before the drop —
+  // the same answer the green/red square tint gives, in the place the
+  // pointer is already looking.
+  event.dataTransfer.dropEffect = key && !battleState.placements[key] ? "copy" : "none";
+  if (key === dragHoverKey) return;
+  dragHoverKey = key;
+  // drawGrid(), not render(): re-rendering the roster mid-drag would
+  // destroy the row the drag started from and cancel it.
+  drawGrid();
+});
+
+canvas.addEventListener("dragleave", () => {
+  if (!rosterDragId || dragHoverKey === null) return;
+  dragHoverKey = null;
+  drawGrid();
+});
+
+canvas.addEventListener("drop", (event) => {
+  if (!rosterDragId) return;
+  event.preventDefault();
+  const square = squareFromEvent(event);
+  const entityId = rosterDragId;
+  const key = square ? squareKey(square.row, square.col) : null;
+  // Cleared BEFORE placing, so the render() inside dispatch() already sees
+  // the drag as over and doesn't paint a target tint on the square the
+  // token now occupies.
+  rosterDragId = null;
+  dragHoverKey = null;
+  if (!key || !placeEntity(entityId, key)) render();
 });
 
 undoBtn.addEventListener("click", undo);

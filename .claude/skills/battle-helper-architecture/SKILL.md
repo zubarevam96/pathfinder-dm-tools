@@ -208,19 +208,28 @@ inside this structure rather than adding top-level regions.
   beside the title they act on — not `space-between`.
 - **Right, full height**: initiative track.
 - **Centre column**: the map on top, then a bottom row split in two:
-  - **Bottom-left, `#battle-object-panel`** — the *object* on the selected
-    square, as two tabs. **Character** (`renderCharacterTab()`): identity
-    row, HP bar, AC, saves/Perception, conditions. **Token**
-    (`renderTokenTab()`): shape, letters, colours. They're tabs and not
+  - **Bottom-left, `#battle-object-panel`** — everything the selected
+    square *is*, as three tabs. **Character** (`renderCharacterTab()`):
+    identity row, HP bar, AC, saves/Perception, conditions. **Token**
+    (`renderTokenTab()`): shape, letters, colours. **Square**
+    (`renderSquareTab()`): coordinates and difficult terrain. Tabs and not
     one panel because they're genuinely different subjects — a token's
-    shape says nothing about a creature's Fortitude save.
-  - **Bottom-right, `#battle-square-panel`** (`renderSquarePanel()`) — the
-    *square* itself: coordinates in the heading, difficult terrain under
-    them. No "empty square" state; an empty square is still a square.
+    shape says nothing about a creature's Fortitude save. Only the Square
+    tab has no "empty square" state; an empty square is still a square.
+  - **Bottom-right, `#battle-abilities-panel`** (`renderAbilitiesPanel()`)
+    — what that creature can *do*, as two tabs split by when a DM reaches
+    for them. **Actions** (`renderActionsTab()`): strikes, then named
+    special abilities — the in-combat page. **Proficiencies**
+    (`renderProficienciesTab()`): attribute modifiers and skills — the
+    out-of-combat one. It reuses the left box's `.battle-object-tabs`
+    markup and classes deliberately: one tab pattern on the page, not two.
 
-The bottom boxes split by **subject** (object vs. ground), which is what
-decides where new UI goes. A property of whoever is standing there belongs
-left; a property of the ground belongs right.
+The bottom boxes split by **is vs. does**, which is what decides where new
+UI goes. Anything describing the selection — the creature, its token, the
+ground under it — is a tab on the left. Anything it can perform belongs
+right. (Square lived in its own bottom-right box until abilities needed
+that space; it is a third view of the same selection, so it moved in with
+the other two rather than displacing either.)
 
 Inside the Character tab, the header row is two clusters pinned to
 opposite edges (`space-between`), *not* one row where the HP bar stretches
@@ -451,13 +460,75 @@ reappears in the roster; deletion erases it for good. Its handler calls
 arms the entity for placement — the monster statblock button beside it
 needs the same guard for the same reason.
 
+### Placing: two gestures, one function
+
+A roster row can be **armed** (click it, then click a square) or **dragged**
+straight onto a square. Both go through `placeEntity(entityId, key)`, which
+is the point: seeding HP from the build, clearing stale temp HP and
+conditions, and pushing onto the initiative track are all easy to remember
+in one entry point and forget in the other. An occupied square is a no-op
+in both, never a swap.
+
+The drag is native HTML5 DnD — the same choice the initiative track makes,
+and for the same reason: what's being dragged *is* an element. (The map's
+own token drag is hand-rolled from mouse events only because a canvas has
+no per-square element to make `draggable`.) Three things it has to get
+right:
+
+- **`dragstart` must not `render()`.** It clears `armedEntityId`, so
+  re-rendering is tempting — but `render()` rebuilds the roster, and
+  destroying the element a drag started from cancels the drag. The stale
+  armed highlight lasts until the drag ends, moments later.
+- **`dragover` must `preventDefault()`**, or the canvas isn't a drop target
+  at all and the browser shows "no entry" across the whole map. It sets
+  `dropEffect` too, so the cursor gives the same yes/no answer as the
+  green/red square tint, where the pointer is already looking.
+- **`dragend` can't be the only cleanup.** A successful drop re-renders the
+  roster, and the row — now placed — is gone from it before `dragend` would
+  fire. The drop clears the drag state itself; `dragend` is the backstop for
+  drags that end anywhere else.
+
+The row's handlers are bound with `querySelectorAll("li[data-entity-id]")`,
+not the bare attribute selector: the delete button carries
+`data-entity-id` too, and would otherwise pick up the row's arm and drag
+behaviour. Making the row `draggable` also makes everything inside it a
+drag handle, so both buttons need `draggable="false"` — the same opt-out
+the initiative track's value button uses.
+
+The roster drag reuses `dragHoverKey` for the target tint but never
+`dragFromKey`, which is what suppresses the walked-path overlay: a token
+arriving from the roster isn't walking anywhere. The two gestures can't
+overlap, since starting a native drag stops `mousemove` firing.
+
 ### Statblocks come from Archives of Nethys, not from here
 
-`static/monster-data/monsters.json` (built by
-`scripts/build_monster_entities.py`, gitignored like the other data build
-scripts) maps a monster name to an AoN page. Clicking a monster opens that
-page in an iframe popup — the same `openAonPopup()` the main app uses for
-spells and items, with the dialog markup and CSS shared via `style.css`.
+`local/static/monster-data/monsters.json` (built by
+`local/scripts/build_monster_entities.py`) maps a monster name to an AoN
+page. Clicking a monster opens that page in an iframe popup — the same
+`openAonPopup()` the main app uses for spells and items, with the dialog
+markup and CSS shared via `style.css`.
+
+**Monster data is local-only and is not published.** `local/` is the
+gitignored half of the repo: build scripts (`local/scripts/`), their source
+tables and the AoN download cache (`local/data/`), smoke-test output
+(`local/partial/`), *and* the monster JSON itself (`local/static/`). One
+`.gitignore` rule covers all of it. Nothing derived from Archives of Nethys
+is committed.
+
+That has a consequence worth stating plainly, because it looks like a bug
+from the inside: **on GitHub Pages the monster data isn't there.** The
+roster's monster list and every monster stat panel work in local dev and
+are empty on the deployed site. `app.py` bridges the gap locally with a
+`/monster-data/<path>` route pointing at `local/static/monster-data/`, so
+the browser sees the same URL it always did; production has no server and
+no such route. `loadMonsters()` already treats a failed fetch as "no
+monsters available" rather than breaking the page, which is what makes this
+degrade quietly instead of throwing.
+
+Spell and item data are the *opposite* case — still generated by scripts in
+`local/scripts/`, but written to `static/spell-data/` and
+`static/item-data/`, committed, and served by Pages. Don't "fix" the
+inconsistency by moving those without asking; the split is deliberate.
 
 Two things differ from the item pipeline:
 
@@ -474,10 +545,244 @@ Two things differ from the item pipeline:
   then filters on the source table's level/HP/AC, and finally prefers a
   core rulebook over an adventure module.
 
-No statblock numbers are copied into this repo, so a monster token
-currently carries no HP or AC of its own. That's a deliberate deferral,
-not an oversight — `data/monsters.txt` has both columns whenever monster
-HP tracking is wanted.
+### Monster stats are baked in at build time, and this is not optional
+
+`monsters.json` carries each creature's level, HP, AC, Fort/Ref/Will,
+Perception and speed, so a monster token has a real HP pool, a real AC and
+real saves that conditions modify exactly like a character's.
+
+**Archives of Nethys cannot be read from a browser on our origin.** Its
+elasticsearch backend allowlists exactly one `Origin` —
+`https://2e.aonprd.com` — and answers every other one, including `null` and
+its own parent domain, with **403**. The HTML pages send no
+`Access-Control-Allow-Origin` at all. A browser cannot suppress or forge
+the `Origin` header, so there is no client-side cache, retry or
+request-coalescing scheme that makes a runtime fetch work. Don't spend time
+rediscovering this; verify with a request carrying an `Origin` header if you
+doubt it. (The statblock popup still works because an iframe isn't subject
+to CORS — but its contents can't be read cross-origin either, so scraping
+the iframe is not a way around it.)
+
+Resolving at build time is also simply the right thing to do to someone
+else's backend: the app makes **zero** requests to AoN for stats, however
+many DMs open however many battles. The stats cost the build script no
+extra requests either — they come out of the same response that already
+resolved the statblock link, which was previously being discarded.
+
+The level/HP/AC columns in `local/data/monsters.txt` stay *lookup hints* and are
+not shipped. The resolved AoN document is the authority; publishing two
+copies of the same number only invites them to disagree.
+
+### Two data files, split by when they're needed
+
+- **`monsters.json`** (~14 KB gzipped) — name, AoN id/page, stats. Loaded at
+  startup: it drives the roster picker and every placed monster's stat panel.
+- **`monster-abilities.json`** (~216 KB gzipped) — strikes, attribute
+  modifiers, special abilities. Loaded **lazily**, on the first render that
+  actually needs it, via a memoised promise so N renders cause one request.
+
+Keep them apart. Merging abilities back in would put ~230 KB on the critical
+path of a page whose main job is drawing a grid, for something a session
+might never open. `entityAbilities()` returns the string `"loading"` — not
+`null` — while the file is in flight, because "hasn't arrived" and "has none"
+must render differently. A failed fetch caches an empty `Map` so it isn't
+retried on every render.
+
+### Abilities are parsed from AoN's markdown at build time
+
+`parse_abilities()` in the build script turns AoN's pseudo-markdown
+statblock into `{strikes, attributes, special}`. The format's one gift is
+that it's **blank-line separated, with every strike and every ability as
+exactly one paragraph** — so "split on blank lines, classify by the leading
+`**Label**`" is a complete parse, not a pile of heuristics. Three things it
+must keep doing:
+
+- **Scan only from the level-2 title down.** Above it is flavour prose and
+  Recall Knowledge, full of bold runs that would otherwise parse as
+  abilities.
+- **Use AoN's own `creature_ability` list as an allowlist** for what counts
+  as an ability. The statblock's field labels vary by creature type
+  (Immunities, Weaknesses, Spells, Rituals…), so a blocklist would quietly
+  promote any unfamiliar label into a fake ability.
+- **Compute the multiple-attack penalty**: −4/−8 for agile strikes, −5/−10
+  otherwise, from the strike's traits. A DM reads it every round.
+
+Ability text keeps AoN's `**Trigger**`/`**Effect**` bold runs. It reaches
+`innerHTML`, so `abilityText()` escapes first and promotes *only* the bold
+markers afterwards — that order is the whole point.
+
+Characters' strikes come from Pathbuilder weapons instead, and deliberately
+carry **no kind and no traits**: the export says neither melee/ranged nor
+agile. Guessing from the weapon name would mislabel often, and a wrong agile
+guess would show the wrong penalty every round.
+
+### The rendered page is the source of truth, not the search index
+
+Two requests per creature, doing different jobs:
+
+1. **The elasticsearch query picks WHICH page.** A creature name routinely
+   matches three documents (legacy Bestiary, Monster Core remaster, an
+   adventure reprint), and the index's level/HP/AC/source fields are what
+   tell them apart. This is all it's used for.
+2. **The page is then parsed for every published value** (`parse_page`).
+
+The index is not good enough to parse from, and this was measured, not
+assumed. For Giant Gecko it drops: the conditional skill bonus
+(`skill_markdown` says `Athletics +5` where the page says
+`Athletics +5 (+9 to Climb)`, and **no** field anywhere holds that `+9`);
+the printed multiple-attack penalties (`jaws +8 [+3/-2]` vs
+`attack_bonus=8`); the damage expression (only `strike_damage_average`);
+and Recall Knowledge DCs entirely. Don't re-derive this — check a page
+against its document if in doubt.
+
+If a page can't be fetched (about 1 creature in 60 after one retry), the
+index-based extraction still runs as a fallback: the creature keeps its
+core numbers and loses only the detail above.
+
+`statblock_text()` converts `<b>` to `**…**` *before* stripping tags,
+because bold is the page's only structural signal — every field label and
+every ability name is bold, and nothing else is. Three things the parser
+must keep doing:
+
+- **Anchor on the `monster-statblock-name` heading.** The page opens with
+  another `<h1 class="title">` above the flavour text; matching that one
+  swallows paragraphs of prose and finds no statistics at all.
+- **Segment on bold runs globally, not line by line.** The page emits
+  consecutive strikes and abilities on a single line with no `<br>`
+  between them, so a per-line parse hands the first `Damage` field the
+  entire rest of the statblock — one strike with a wall of text for damage,
+  and no abilities.
+- **Treat lowercase bold as inline emphasis, not a label.** Statblocks bold
+  condition names mid-sentence ("has a creature **grabbed** or restrained").
+  Ability names are always Title Case; without this the zombie grows an
+  ability called "grabbed" holding the rest of its real one.
+
+The skills line parser additionally must **split on commas outside
+brackets** (`Athletics +5 (+9 to Climb, +7 to Swim)` is one skill, not two)
+and **unwrap brackets in a loop** (Magnetic Gecko ships
+`Athletics +6 ((+8 to Climb))`).
+
+A conditional bonus renders *beside* the flat one, never replacing it —
+both apply, and which is live depends on what's being attempted.
+
+**`--limit` and `--skip-lookup` write `*.partial.json`** and leave the
+shipped files alone. A partial run used to overwrite 558 resolved monsters
+with however many it had done, which looks fine until a panel comes up
+blank.
+
+### Downloading and parsing are separate steps
+
+Every response — the search document and the whole statblock page — is
+cached under `local/data/aon-cache/` (`index/<slug>.json`, `pages/<page>-<id>.html`),
+and a build reads the cache before it reaches for the network. The first
+build downloads ~1100 pages over about half an hour; every build after that
+parses those same pages off disk in **seconds, sending zero requests**.
+
+This is what makes the parser cheap to fix. Before the cache, correcting a
+regex meant re-downloading the entire corpus from a third party to produce
+output that differed only because the regex changed — which is both slow
+enough to discourage fixing anything and rude to AoN. `--refresh` forces a
+re-download, and is only needed when *AoN itself* has changed; a parser
+change never needs it.
+
+What's cached is the **full** response, not the fields extracted from it.
+A parser taught to read something new — spells, immunities, resistances,
+senses — picks it up straight out of the cache. The pages already on disk
+carry far more than the app currently displays.
+
+Four things this layer gets right on purpose, each of which was a way to
+get it subtly wrong:
+
+- **The politeness delay is paid per download, not per creature** (it lives
+  inside `load_page()`, not at the call site). Otherwise a fully cached run
+  still sleeps its way through all 560 entries for requests it isn't making.
+- **A failed fetch is not cached.** Nothing is written, so the next run
+  retries instead of remembering the failure forever.
+- **An empty cache file counts as a miss**, so a write interrupted halfway
+  gets re-fetched rather than being served as a cached empty page.
+- **The cached search file records the name it was fetched for.**
+  `cache_slug()` isn't injective — "Devil, Horned" and "Devil Horned" share
+  a stem — and a mismatch counts as a miss. Getting this wrong hands one
+  creature another's document: a *wrong* statblock, not a missing one.
+
+The cache stays under `local/` with everything else derived from AoN. It is
+also large — ~50 MB of HTML for the full corpus, against 2 MB for the JSON
+parsed out of it — which is its own reason never to commit it.
+
+A full cold build is 1116 requests over roughly half an hour. Once cached,
+the same build resolves **558/560 creatures with zero index fallbacks**;
+the two misses are names in `monsters.txt` with no matching AoN document at
+all, not fetch failures.
+
+Characters' skills are computed instead, from `build.proficiencies` through
+`checkTotal()`, and **only trained and above** are listed — an untrained
+skill is just the attribute modifier already shown above it, and eighteen
+such rows would bury the handful that matter. That matches what a monster
+statblock lists.
+
+Still TODO by request, though the **data is now present** for both: the
+secondary speeds (in `stats.speedText`, e.g. `"30 feet, climb 30 feet"` —
+shown in the Speed tooltip but not broken out) and Recall Knowledge
+(`abilities.recallKnowledge`, e.g. `"DC 15 • Animal (Nature)"` — parsed and
+shipped, not yet displayed anywhere).
+
+### One stat block, two kinds of entity
+
+`entityStatBlock(entity)` normalises a character's Pathbuilder build and a
+monster's published stats into one shape (`level`, `maxHp`, `ac`,
+`fortitude`, `reflex`, `will`, `perception`, `speed`, `speedText`). A
+character's values need PF2e's proficiency math (`checkTotal`,
+`computeMaxHp`); a monster's are already finished totals. Everything
+downstream — the stat panel, the HP pool, `effectiveMaxHp()`, the
+damage/heal dialog, the condition pipeline — consumes the normalised shape,
+so there is no monster branch beside every stat.
+
+`renderCharacterTab()` therefore branches on **having stats**, not on being
+a character. A statted monster renders through the identical code; custom
+objects, a monster AoN had nothing for, and (defensively) a character with
+no sheet data fall through to the minimal panel.
+
+Two consequences worth keeping:
+
+- **A missing stat stays `null` all the way to the panel**, which shows a
+  muted em dash. Defaulting to 0 would print "+0", and an unknown Will save
+  is not a zero Will save. `.unknown` is deliberately muted rather than
+  red — missing information is not a penalty and must not read as one.
+- **Anything that resolves an HP pool must use `findEntity()`**, not
+  `loadCharacters()`. The damage/heal and temp-HP handlers looked only in
+  the character store, which would silently no-op every button in that
+  dialog for a monster.
+
+### The Character panel's header row is tight — treat it as full
+
+Left cluster (remove ×, name, level, speed) and right cluster (HP bar, AC)
+sit at opposite ends of a `space-between` row inside a box that is only as
+wide as the bottom-left region. It has no spare room; adding a control there
+pushes something else off the end.
+
+- **The level is a `<sup>` on the name**, not a separate "Lvl N" label —
+  the label was spending horizontal space the row doesn't have. Name and
+  `<sup>` share a `.battle-stat-name-wrap` so the identity row's `gap`
+  falls between the name and Speed rather than between the name and its own
+  superscript. That wrapper must **not** be `display: flex`: `vertical-align`
+  is ignored on flex items, which would drop the superscript to the baseline.
+  The `<sup>` is a *sibling* of the name, not a child — inside the monster
+  case's `<button>` it would join the click target.
+- **A monster's name IS the statblock link** (`.battle-stat-name-link`, a
+  `<button>` styled back down to look like the text it replaces). A separate
+  icon button beside Speed used to do this and was crowding the row. Its
+  tooltip names the *statblock*, not the token: "Giant Gecko 4" is this
+  particular gecko, and the page it opens is Giant Gecko's.
+- **Only the name gives way.** `.battle-stat-left`, `.battle-stat-identity`
+  and `.battle-stat-name-wrap` all set `min-width: 0` — a flex item's default
+  min-width is `min-content`, so `overflow: hidden` further in does nothing
+  unless every step of the chain allows shrinking. The right cluster and
+  Speed are `flex-shrink: 0`. Before this, both clusters refused to shrink
+  and a long name simply ran underneath the HP bar.
+- **The AC square is fixed at 2.5rem.** Fixed is load-bearing — it's what
+  lets the shield icon be present-or-absent with nothing jumping (see
+  "Avoiding layout jumps"). Shrinking it is the lever for giving the rest of
+  the row room, not making it content-sized.
 
 ### Avoiding a broken dblclick
 

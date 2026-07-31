@@ -23,7 +23,7 @@
       <section class="battle-box battle-box-left">
         <div class="battle-box-section">
           <h2>Roster</h2>
-          <p class="battle-panel-hint">Click a character, then click an empty square to place them.</p>
+          <p class="battle-panel-hint">Drag a character onto a square, or click them and then click the square.</p>
           <ul id="battle-roster" class="battle-roster"></ul>
           <form id="battle-add-object-form" class="battle-add-object-form">
             <input type="text" id="battle-add-object-name" placeholder="Custom object name" maxlength="60" />
@@ -82,13 +82,14 @@
         </section>
 
         <div class="battle-row-bottom">
-          <!-- Bottom-left: whatever stands on the selected square, as two
-               tabs — the character (stats, HP, conditions) and the token
-               drawn for them on the map. Bottom-right: the square itself. -->
+          <!-- Bottom-left: everything the selected square can tell you, as
+               three tabs — the character on it (stats, HP, conditions), the
+               token drawn for them, and the ground itself. Bottom-right:
+               what that creature can DO — strikes, attributes, abilities. -->
           <section id="battle-object-panel" class="battle-box battle-box-bottom-left">
             <p class="placeholder">Click a square to select it.</p>
           </section>
-          <section id="battle-square-panel" class="battle-box battle-box-bottom-right">
+          <section id="battle-abilities-panel" class="battle-box battle-box-bottom-right">
             <p class="placeholder">Click a square to select it.</p>
           </section>
         </div>

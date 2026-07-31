@@ -495,6 +495,11 @@
   font-size: 0.85rem;
 }
 
+/* grab, not pointer: a row can be dragged straight onto a square as well as
+   clicked to arm it, and dragging is the one of the two that nothing else
+   on screen would hint at. Clicking still works — grab doesn't disclaim it,
+   the same way the map viewport's grab cursor doesn't stop clicks landing
+   on squares. */
 .battle-roster-item {
   display: flex;
   align-items: center;
@@ -504,12 +509,18 @@
   margin-bottom: 0.35rem;
   border: 1px solid var(--border);
   border-radius: 6px;
-  cursor: pointer;
+  cursor: grab;
 }
 
 .battle-roster-item:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+/* Same fade the initiative track's rows use while being dragged, so the two
+   drag gestures on this page look like the same gesture. */
+.battle-roster-item.dragging {
+  opacity: 0.4;
 }
 
 .battle-roster-item.armed {
@@ -808,10 +819,18 @@
   min-width: 0;
 }
 
-/* --- Selected-square info box (bottom-right) ---
+/* --- The Square tab (bottom-left, third tab) ---
    The ground itself. A column rather than a single control because square
-   properties beyond difficult terrain belong here as they arrive; the
-   coordinates live in the box's <h2>. */
+   properties beyond difficult terrain belong here as they arrive. The
+   coordinates were the box's <h2> when this had a box of its own; as a tab
+   they're an <h3> inside the shared body, since the box heading is now
+   spoken for by the tab strip. */
+.battle-square-heading {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .battle-square-info {
   display: flex;
   flex-direction: column;
@@ -877,6 +896,19 @@
   gap: 0.5rem;
 }
 
+/* The left cluster gives way first when the panel is narrow. Both clusters
+   used to refuse to shrink, so a long name simply ran under the HP bar
+   instead of being trimmed. min-width:0 on every step of the chain is what
+   makes that possible at all — a flex item's default min-width is
+   min-content, which no amount of overflow:hidden further in can override. */
+.battle-stat-left {
+  min-width: 0;
+}
+
+.battle-stat-right {
+  flex-shrink: 0;
+}
+
 /* justify-content:center (not the header's old align-items:stretch) keeps
    this box sized to exactly its own content — label + value + the shield
    toggle's reserved slot, present or not — instead of stretching to match
@@ -891,12 +923,17 @@
    the panel's size is fixed by width/height, not derived from content). */
 /* Sized to its content (label + value + the corner icon slot) rather than
    the earlier fixed 4.4rem square, which left a lot of visibly dead space
-   around a 2-line, 2-character value. */
+   around a 2-line, 2-character value. Trimmed again from 3.2rem: this box
+   is flex-shrink:0 in a row that also holds the name, level, speed and the
+   HP bar, so every millimetre it takes is one the rest of the header has to
+   give up — and it was squeezing them. Still a fixed square, which is what
+   lets the shield icon be simply present-or-absent without anything
+   jumping. */
 .battle-stat-ac {
   position: relative;
   flex-shrink: 0;
-  width: 3.2rem;
-  height: 3.2rem;
+  width: 2.5rem;
+  height: 2.5rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -910,11 +947,12 @@
 }
 
 .battle-stat-ac .stat-label {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
 }
 
 .battle-stat-ac .stat-value {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
+  line-height: 1.1;
 }
 
 .battle-stat-ac:disabled {
@@ -962,9 +1000,9 @@
 
 .battle-stat-ac-shield-icon {
   position: absolute;
-  bottom: 1px;
-  right: 3px;
-  font-size: 0.6rem;
+  bottom: 0;
+  right: 2px;
+  font-size: 0.55rem;
   line-height: 1;
 }
 
@@ -986,8 +1024,24 @@
    white HP text and makes it nearly unreadable) but still gives a light,
    single-property highlight — matching .battle-stat-ac's hover — instead
    of no feedback at all. */
-.battle-hp-bar:hover {
+.battle-hp-bar:not(:disabled):hover {
   border-color: var(--accent);
+  background: #33302c;
+}
+
+/* The bar is disabled for a creature with no published HP — there's no pool
+   to adjust. Both rules are needed, and for different reasons: :disabled
+   drops the click affordance, while :disabled:hover exists because
+   :not(:disabled) above only guards THIS file's rule and can't stop
+   style.css's global button:hover, which has no such guard. Same pairing as
+   .battle-stat-ac and .battle-grid-btn — see "Overriding the global
+   button:hover" in the battle-helper-architecture skill. */
+.battle-hp-bar:disabled {
+  cursor: default;
+}
+
+.battle-hp-bar:disabled:hover {
+  border-color: var(--border);
   background: #33302c;
 }
 
@@ -1029,19 +1083,72 @@
 }
 
 .battle-stat-identity {
-  flex-shrink: 0;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
+
+/* Deliberately NOT display:flex — the level is a <sup>, and vertical-align
+   is ignored on a flex item, which would drop the superscript back onto the
+   baseline. Normal inline flow inside this one wrapper is what keeps it
+   raised while .battle-stat-identity stays a flex row around it.
+
+   This is also the one thing in the header that gives way: a long name
+   ellipsizes rather than pushing Speed and the HP bar off the end. */
+.battle-stat-name-wrap {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 
 .battle-stat-name {
   font-weight: 600;
   color: var(--accent);
 }
 
-.battle-stat-level,
+/* A monster's name opens its statblock. Styled back down to look like the
+   text it replaces — a button here should read as a link, not as a control
+   competing with the HP bar and AC beside it. */
+.battle-stat-name-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+/* Re-declares background and border-color, not just the underline: the
+   cascade resolves PER PROPERTY, so style.css's global button:hover would
+   otherwise still paint an accent-tinted box behind the name. See
+   "Overriding the global button:hover" in the battle-helper-architecture
+   skill. */
+.battle-stat-name-link:hover {
+  background: none;
+  border-color: transparent;
+  text-decoration: underline;
+}
+
+/* Level rides as a superscript on the name rather than a separate "Lvl N"
+   label, which was spending horizontal room the header row doesn't have.
+   font-size is set explicitly because <sup>'s default `smaller` compounds
+   awkwardly; the title spells out "Level N" since a bare number next to a
+   name that may itself end in one ("Giant Gecko 4") needs saying. */
+.battle-stat-level {
+  margin-left: 0.15rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* flex-shrink: 0 — Speed is three short words; trimming it buys nothing and
+   reads as broken, so the name absorbs the loss instead. */
 .battle-stat-speed {
+  flex-shrink: 0;
   font-size: 0.78rem;
   color: var(--muted);
   white-space: nowrap;
@@ -1521,6 +1628,152 @@
   gap: 0.4rem;
 }
 
+/* --- Abilities panel (bottom-right) ---
+   What the selected creature can DO: strikes, then attribute modifiers,
+   then named special abilities. The box already scrolls (see
+   .battle-box-bottom-right), so nothing here needs its own overflow. */
+.battle-ability-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.battle-ability-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.battle-ability-strike,
+.battle-ability-special {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.4rem 0.55rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.battle-ability-strike-head,
+.battle-ability-special-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+/* The PF2e action cost. AoN's own action font isn't available here, so
+   these are plain glyphs — the title carries the full name for anyone who
+   doesn't read the pips. */
+.battle-ability-action {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 0.7rem;
+  letter-spacing: -0.05em;
+}
+
+.battle-ability-kind {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.battle-ability-name {
+  font-weight: 600;
+}
+
+.battle-ability-bonus {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+
+/* The second/third-attack penalties, muted because they're a reference
+   the eye skips past until it needs them — the first bonus is the one
+   being read most of the time. */
+.battle-ability-map {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.battle-ability-traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.battle-ability-trait {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.battle-ability-damage,
+.battle-ability-text {
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.battle-ability-text {
+  color: var(--muted);
+}
+
+/* Six attributes, not the stat grid's two columns — they're a single short
+   row of modifiers and read as one unit. */
+.battle-ability-attrs {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+/* Skills are one line each: name, flat modifier, then any conditional
+   bonuses. Tighter than a strike row — there are a lot more of them and
+   each carries far less. */
+.battle-ability-skills .battle-ability-skill {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.battle-ability-skill-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
+/* "+9 to Climb" — shown BESIDE the flat modifier, not instead of it: both
+   apply, and which one is live depends on what's being attempted. Outlined
+   rather than plain text so it reads as a separate, conditional number and
+   can't be mistaken for the one that always applies. */
+.battle-ability-skill-note {
+  padding: 0.05rem 0.35rem;
+  border: 1px dashed var(--border);
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.battle-ability-attrs .stat-label {
+  font-size: 0.55rem;
+}
+
+.battle-ability-attrs .stat-value {
+  font-size: 0.9rem;
+}
+
 .battle-stat {
   display: flex;
   flex-direction: column;
@@ -1556,6 +1809,15 @@
 
 .buffed {
   color: var(--success);
+}
+
+/* An em dash where a stat would be, for a creature whose source didn't
+   publish one. Muted rather than red or green — an unknown Will save is
+   missing information, not a penalty, and it must not read as one. Never
+   combined with .penalized/.buffed: a value that isn't there can't have
+   been moved by a condition. */
+.unknown {
+  color: var(--muted);
 }
 
 /* .battle-stat-ac.active .stat-value forces --accent-contrast so the AC
