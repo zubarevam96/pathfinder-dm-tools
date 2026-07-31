@@ -19,9 +19,17 @@ PATHBUILDER_JSON_URL = "https://pathbuilder2e.com/json.php"
 ID_PATTERN = re.compile(r"^\d+$")
 REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; pathfinder-dm-tools/0.1)"}
 
-DATA_DIR = Path(__file__).parent / "data"
+LOCAL_DIR = Path(__file__).parent / "local"
+DATA_DIR = LOCAL_DIR / "data"
 LEGACY_STORE_FILE = DATA_DIR / "store.json"
 LEGACY_CHARACTERS_FILE = DATA_DIR / "characters.json"
+
+# Monster data is generated from Archives of Nethys and deliberately kept
+# out of the committed site, so it can't live in static/ and GitHub Pages
+# never sees it. Serving it here keeps the battle helper's stat panels
+# working in local dev, where the fetch resolves to the same
+# /monster-data/... URL it would have had before the move.
+MONSTER_DATA_DIR = LOCAL_DIR / "static" / "monster-data"
 
 
 def extract_character_id(link_or_id: str) -> str | None:
@@ -48,6 +56,15 @@ def battle_helper():
     # (unlike GitHub Pages in production), so this mirrors that behavior
     # for local dev.
     return send_from_directory(app.static_folder, "battle-helper/index.html")
+
+
+@app.get("/monster-data/<path:filename>")
+def monster_data(filename):
+    # More specific than the catch-all static route, so Werkzeug matches it
+    # first. 404s cleanly when the data hasn't been built yet — the battle
+    # helper already treats a failed fetch as "no monsters available"
+    # rather than breaking the page.
+    return send_from_directory(MONSTER_DATA_DIR, filename)
 
 
 @app.post("/api/fetch")
