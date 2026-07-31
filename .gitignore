@@ -6,11 +6,14 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .env
-data/
 *.log
 
-# Local tooling for parsing data/*.txt into JSON — not shipped, kept local.
-scripts/build_spell_data.py
-scripts/build_spell_entities.py
-scripts/build_item_entities.py
-scripts/build_monster_entities.py
+# Everything that builds the shipped data but isn't part of the site:
+# local/scripts/ (the build scripts), local/data/ (their source tables and
+# the Archives of Nethys download cache), local/partial/ (smoke-test
+# output). One directory, one rule — these used to be three scattered
+# entries, which made it easy to lose track of what was ignored and why.
+#
+# What these scripts PRODUCE is tracked, not ignored: static/*-data/*.json
+# is served to the browser and has to be in the repo for GitHub Pages.
+local/

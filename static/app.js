@@ -268,7 +268,7 @@ function chipList(items) {
 // a numeric ID), so as a fallback we link to its search endpoint, which
 // takes the name as a query param and reliably surfaces the matching spell
 // as the top result. Known IDs and traditions come from
-// static/spell-data/*.json (built by scripts/build_spell_entities.py),
+// static/spell-data/*.json (built by local/scripts/build_spell_entities.py),
 // loaded into these maps at startup — see loadSpellIdMap().
 let spellIdMap = {};
 let spellTraditionMap = {};
