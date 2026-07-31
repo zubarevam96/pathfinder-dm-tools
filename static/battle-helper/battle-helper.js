@@ -36,8 +36,31 @@ const conditionFilter = document.getElementById("battle-condition-filter");
 const conditionOptions = document.getElementById("battle-condition-options");
 const conditionCloseBtn = document.getElementById("battle-condition-close");
 
+const characterDialog = document.getElementById("battle-character-dialog");
+const characterFilter = document.getElementById("battle-character-filter");
+const characterOptions = document.getElementById("battle-character-options");
+const characterCloseBtn = document.getElementById("battle-character-close");
+
+const monsterDialog = document.getElementById("battle-monster-dialog");
+const monsterFilter = document.getElementById("battle-monster-filter");
+const monsterOptions = document.getElementById("battle-monster-options");
+const monsterCloseBtn = document.getElementById("battle-monster-close");
+
+const entityRenameDialog = document.getElementById("battle-entity-rename-dialog");
+const entityRenameForm = document.getElementById("battle-entity-rename-form");
+const entityRenameInput = document.getElementById("battle-entity-rename-input");
+const entityRenameCloseBtn = document.getElementById("battle-entity-rename-close");
+
+const aonDialog = document.getElementById("aon-dialog");
+const aonDialogTitle = document.getElementById("aon-dialog-title");
+const aonDialogBody = document.getElementById("aon-dialog-body");
+const aonDialogOpenTab = document.getElementById("aon-dialog-open-tab");
+const aonDialogClose = document.getElementById("aon-dialog-close");
+
 const addObjectForm = document.getElementById("battle-add-object-form");
 const addObjectNameInput = document.getElementById("battle-add-object-name");
+const addCharacterBtn = document.getElementById("battle-add-character");
+const addMonsterBtn = document.getElementById("battle-add-monster");
 const logClearBtn = document.getElementById("battle-log-clear");
 
 const tabList = document.getElementById("battle-tab-list");
@@ -109,6 +132,20 @@ const EDGE_DOOR = "door";
 
 // How thick a wall is drawn, in logical (unzoomed) px.
 const WALL_THICKNESS = 5;
+
+// Blank margin around the grid, in logical px. Walls and doors straddle
+// the line they sit on, so one on the outer boundary has half its width
+// outside the grid rectangle. Without room for that overhang the bitmap
+// clips it, and the old fix — nudging boundary walls inward by half a
+// thickness — made them visibly sit inside the first row of squares
+// instead of on the edge. Reserving the space instead keeps every wall
+// centred on its own line, wherever it is.
+//
+// Sized for the widest thing that can overhang: a door panel is
+// DOOR_THICKNESS across plus a DOOR_BORDER stroke centred on its edge.
+// Kept a whole number so it can't knock the half-pixel grid-line
+// alignment off.
+const CANVAS_PAD = 5;
 
 // A door spans 80% of its cell edge. On its own it sits centred, leaving a
 // 10% wall stub at each end. When the neighbouring cell's matching edge
@@ -195,13 +232,125 @@ const ZOOM_MAX = 3;
 const ZOOM_STEP = 0.2;
 let zoom = 1;
 
-function setZoom(value) {
+// How the map is panned, in CSS px, on top of wherever the layout puts the
+// canvas (.battle-grid's margin: auto — see the CSS). Panning used to be
+// mapViewport.scrollLeft/scrollTop, which composed nicely with the
+// scrollbars but could only move a canvas *bigger* than its viewport: a
+// small map had no scroll range, so dragging it did nothing at all. A
+// transform has no such floor, so one gesture now works at every size, and
+// the viewport no longer scrolls (or needs scrollbars) at all.
+let panX = 0;
+let panY = 0;
+
+// Enough of the canvas to grab hold of again. Panning is unbounded in the
+// sense that you can push the map most of the way off the box, but never so
+// far that there's nothing left on screen to drag back.
+const MIN_MAP_VISIBLE = 60;
+
+function applyPan() {
+  canvas.style.transform = panX || panY ? `translate(${panX}px, ${panY}px)` : "";
+}
+
+// Pulls the pan back until the canvas still overlaps the viewport, and is
+// also what keeps a pan honest after the map shrinks or the zoom drops.
+//
+// Works off measured rects rather than predicted ones deliberately: where
+// the layout puts an unpanned canvas changes as it outgrows the viewport
+// (flexbox treats auto margins as 0 once free space goes negative, so a
+// centred map becomes a start-anchored one), and duplicating that rule here
+// would be one more thing to keep in sync with the stylesheet.
+function clampPan() {
+  const rect = canvas.getBoundingClientRect();
+  const view = mapViewport.getBoundingClientRect();
+  if (!rect.width || !view.width) return;
+  const keepX = Math.min(MIN_MAP_VISIBLE, rect.width);
+  const keepY = Math.min(MIN_MAP_VISIBLE, rect.height);
+  let dx = 0;
+  let dy = 0;
+  if (rect.right < view.left + keepX) dx = view.left + keepX - rect.right;
+  else if (rect.left > view.right - keepX) dx = view.right - keepX - rect.left;
+  if (rect.bottom < view.top + keepY) dy = view.top + keepY - rect.bottom;
+  else if (rect.top > view.bottom - keepY) dy = view.bottom - keepY - rect.top;
+  if (!dx && !dy) return;
+  panX += dx;
+  panY += dy;
+  applyPan();
+}
+
+function setPan(x, y) {
+  panX = x;
+  panY = y;
+  applyPan();
+  clampPan();
+  // The reset button's enabled state depends on the pan, not just the zoom
+  // — a centred map at fit zoom is the only state it can't improve on.
+  renderZoomControls();
+}
+
+// `anchor` is an optional { clientX, clientY } to hold still — the point
+// under the mouse wheel. Without it a zoom grows the canvas from its
+// centre (see .battle-grid's margin: auto) and whatever you were looking
+// at slides away, which makes wheel-zoom feel like it's fighting you.
+function setZoom(value, anchor = null) {
   // Rounded to whole percents so repeated +/- steps can't drift onto
   // values like 0.9999999999 and miss the ZOOM_MIN/MAX comparisons.
   const next = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value)) * 100) / 100;
   if (next === zoom) return;
+
+  // Where the anchor sits in unzoomed canvas coordinates, measured BEFORE
+  // the canvas is resized.
+  let hold = null;
+  if (anchor) {
+    const rect = canvas.getBoundingClientRect();
+    hold = {
+      x: (anchor.clientX - rect.left) / zoom,
+      y: (anchor.clientY - rect.top) / zoom,
+      clientX: anchor.clientX,
+      clientY: anchor.clientY,
+    };
+  }
+
   zoom = next;
   render();
+
+  if (hold) {
+    // Put the same canvas point back under the cursor, by correcting the
+    // pan by however far it actually drifted. Measuring the drift beats
+    // predicting it: the prediction would have to model both the centring
+    // above and clampPan()'s correction inside that render().
+    const rect = canvas.getBoundingClientRect();
+    setPan(panX + hold.clientX - (rect.left + hold.x * zoom),
+           panY + hold.clientY - (rect.top + hold.y * zoom));
+  }
+}
+
+// The zoom at which the whole map fits the viewport — what the reset button
+// aims for. Not 100%: on a big board 100% shows a fraction of it, and on a
+// small one it wastes most of the box, so "show me all of it" is the useful
+// reset and it lands above or below 100% depending on the map.
+function fitZoom() {
+  const width = gridCols() * SQUARE_SIZE + CANVAS_PAD * 2;
+  const height = gridRows() * SQUARE_SIZE + CANVAS_PAD * 2;
+  const view = mapViewport.getBoundingClientRect();
+  if (!view.width || !view.height) return zoom;
+  const raw = Math.min(view.width / width, view.height / height);
+  // Floored to a whole percent, never rounded: rounding up is enough to
+  // push the last row of squares back out of the box, which is the one
+  // thing this is for. The clamps mean a huge map can still overflow at
+  // ZOOM_MIN — panning covers that case, as it did before.
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.floor(raw * 100) / 100));
+}
+
+// Can't go through setZoom(): the pan has to be reset even when the zoom is
+// already right (a panned-away map at fit zoom still needs re-centring),
+// and setZoom() returns early on an unchanged value.
+function fitMapToView() {
+  const next = fitZoom();
+  if (next !== zoom) {
+    zoom = next;
+    render();
+  }
+  setPan(0, 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +359,7 @@ function setZoom(value) {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -260,13 +409,13 @@ let dragMoved = false; // true once mouse movement crossed DRAG_THRESHOLD — su
 let dragPath = null; // shortest route from dragFromKey to dragHoverKey, or null if unreachable
 const DRAG_THRESHOLD = 4; // px
 
-// Panning: grabbing the map by an EMPTY square and dragging the view.
-// Distinct from the token drag above — that moves a piece, this moves the
-// camera — so it gets its own state and its own click-suppression flag,
-// but the same press/threshold/release shape. Implemented as scrolling
-// the viewport rather than an offset of our own, so it composes with the
-// scrollbars the overflow already provides.
-let panFromScroll = null; // { left, top } viewport scroll captured at mousedown
+// Panning: grabbing the map by an empty square — or by the blank space
+// around it — and dragging the view. Distinct from the token drag above —
+// that moves a piece, this moves the camera — so it gets its own state and
+// its own click-suppression flag, but the same press/threshold/release
+// shape. Moves panX/panY (see setPan()), which unlike a scroll offset works
+// however small the map is.
+let panFrom = null; // { x, y } pan offset captured at mousedown
 let panStartPos = null; // {x,y} client coords at mousedown
 let panMoved = false; // true once movement crossed DRAG_THRESHOLD — suppresses the click that would otherwise select a square
 
@@ -329,6 +478,20 @@ function normalizeState(raw) {
   }
   state.walls = walls;
 
+  // The roster used to list every character in the main app's store.
+  // It now lists only the ones added to this battle, so a save from before
+  // that needs seeding — with the characters actually in play, not with
+  // everything. Anything else would refill the roster of every old battle
+  // with people who were never in it, which is the mess the change was
+  // made to avoid. A placed character has to be in the list, or removing
+  // them from the field would strand them with no way back on.
+  if (!Array.isArray(raw?.characterIds)) {
+    const customIds = new Set(Object.keys(state.customObjects ?? {}));
+    state.characterIds = [...new Set(Object.values(state.placements))].filter((id) => !customIds.has(id));
+  } else {
+    state.characterIds = raw.characterIds.filter((id) => typeof id === "string");
+  }
+
   return state;
 }
 
@@ -389,18 +552,160 @@ function loadCharacters() {
   }
 }
 
+// Groups are how the main page organises characters (typically one per
+// party), and the character picker mirrors that so a DM finds people where
+// they filed them.
+function loadGroups() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORE_KEY)) ?? {};
+    return raw.groups ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// Characters grouped exactly the way renderSidebar() groups them on the
+// main page: groups in store order, then everything with no group — or a
+// group id that no longer resolves — under "Ungrouped".
+function charactersByGroup() {
+  const characters = loadCharacters();
+  const groups = loadGroups();
+  const sections = groups
+    .map((group) => ({ name: group.name, characters: characters.filter((c) => c.groupId === group.id) }))
+    .filter((section) => section.characters.length);
+
+  const ungrouped = characters.filter((c) => !c.groupId || !groups.some((g) => g.id === c.groupId));
+  if (ungrouped.length) sections.push({ name: "Ungrouped", characters: ungrouped });
+  return sections;
+}
+
+// Character ids added to THIS battle, reconciled against the store on read
+// — a character deleted on the main page shouldn't leave a dead roster row
+// behind. Read-time only, like initiativeOrderIds(): it returns a corrected
+// list without writing one back outside dispatch().
+function battleCharacterIds() {
+  const known = new Set(loadCharacters().map((c) => c.id));
+  return (battleState.characterIds ?? []).filter((id) => known.has(id));
+}
+
+// ---------------------------------------------------------------------------
+// Monsters. A monster on the field is a custom object that remembers which
+// bestiary entry it came from — deliberately NOT a third kind of entity.
+// Everything custom objects already do (placement, initiative, conditions,
+// appearance, removal, deletion) then works for monsters with no parallel
+// code paths, which is the same reason findEntity() exists at all.
+//
+// The reference list is name -> AoN page, built by
+// scripts/build_monster_entities.py from data/monsters.txt. Statblocks are
+// deliberately NOT copied into this repo: the popup opens the real AoN
+// page, so there's no partial, drifting copy of a monster's numbers here.
+// That does mean a monster token carries no HP or AC of its own yet — the
+// source table has both columns whenever that's wanted.
+const AON_BASE = "https://2e.aonprd.com";
+let monsterList = []; // [{ name, archives_of_nexus_id, archives_of_nexus_page }]
+let monsterByName = new Map();
+
+async function loadMonsterList() {
+  try {
+    const response = await fetch("../monster-data/monsters.json");
+    if (!response.ok) return;
+    monsterList = await response.json();
+    monsterByName = new Map(monsterList.map((m) => [m.name, m]));
+  } catch {
+    // Non-fatal: the roster's "Add monster" button just finds nothing to
+    // offer, and every other feature on the page is unaffected.
+  }
+}
+
+// Unlike items, creatures aren't all on one AoN page type — some live on
+// Monsters.aspx and some on NPCs.aspx — so the page is stored per monster
+// rather than derived from a category. An unresolved monster falls back to
+// AoN's search page, the same fallback the main app uses for an item it
+// doesn't recognise.
+function monsterUrl(monsterName) {
+  const monster = monsterByName.get(monsterName);
+  if (monster?.archives_of_nexus_id != null && monster.archives_of_nexus_page) {
+    return `${AON_BASE}/${monster.archives_of_nexus_page}?ID=${monster.archives_of_nexus_id}`;
+  }
+  return `${AON_BASE}/Search.aspx?q=${encodeURIComponent(monsterName)}`;
+}
+
+// One hidden iframe per distinct URL, kept alive rather than removed, so
+// reopening an already-viewed statblock doesn't re-request it — only its
+// visibility toggles. Mirrors openAonPopup() in static/app.js, including
+// its reasoning; the dialog markup and styling are shared via style.css.
+const aonIframes = new Map();
+
+function openAonPopup(url, name) {
+  let iframe = aonIframes.get(url);
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.src = url;
+    iframe.loading = "lazy";
+    aonIframes.set(url, iframe);
+    aonDialogBody.appendChild(iframe);
+  }
+  for (const [otherUrl, otherIframe] of aonIframes) {
+    otherIframe.classList.toggle("active", otherUrl === url);
+  }
+  aonDialogTitle.textContent = name;
+  aonDialogOpenTab.href = url;
+  aonDialog.showModal();
+}
+
+aonDialogClose.addEventListener("click", () => aonDialog.close());
+
 // A placement, roster entry, or initiative-track entry can point at either
-// a real character (from the main app's store) or a custom object (name
-// only, tracked in battleState.customObjects — see the
-// battle-helper-architecture skill's "Custom objects" section). This is
-// the one place that knows how to resolve either kind by id, so the rest
-// of the file can treat them uniformly wherever only a name is needed.
+// a real character (from the main app's store) or a battle-local entity —
+// a custom object or a monster, both tracked in battleState.customObjects
+// (see the battle-helper-architecture skill's "Custom objects" section).
+// This is the one place that knows how to resolve any of them by id, so
+// the rest of the file can treat them uniformly wherever only a name is
+// needed.
+//
+// `monsterName` is the bestiary entry this entity came from, which is NOT
+// the same as `name`: renaming "Goblin Warrior 2" to "Sneaky Pete" has to
+// keep pointing at the same statblock.
 function findEntity(id) {
   const character = loadCharacters().find((c) => c.id === id);
-  if (character) return { id, name: character.name, build: character.data?.build ?? null, isCustom: false };
+  if (character) {
+    return { id, name: character.name, build: character.data?.build ?? null, isCustom: false, monsterName: null };
+  }
   const custom = battleState.customObjects[id];
-  if (custom) return { id, name: custom.name, build: null, isCustom: true };
+  if (custom) {
+    return { id, name: custom.name, build: null, isCustom: true, monsterName: custom.monster ?? null };
+  }
   return null;
+}
+
+// Every name currently in play — characters from the store plus everything
+// battle-local. Used to keep a newly added monster's name unique.
+function existingEntityNames() {
+  return new Set([
+    ...loadCharacters().map((c) => c.name),
+    ...Object.values(battleState.customObjects).map((o) => o.name),
+  ]);
+}
+
+// "Goblin Warrior", then "Goblin Warrior 2", "Goblin Warrior 3"… The first
+// one keeps the bare name — numbering only appears once there's an actual
+// clash, so a lone monster doesn't read as one of a set. Checked against
+// every name in the battle, not just other monsters, so a monster can't
+// collide with a character or a custom object either.
+function uniqueEntityName(base) {
+  const taken = existingEntityNames();
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base} ${n}`)) n += 1;
+  return `${base} ${n}`;
+}
+
+function addMonster(monsterName) {
+  const id = `custom-${crypto.randomUUID()}`;
+  const name = uniqueEntityName(monsterName);
+  dispatch("add-monster", `Added ${name} to the roster`, (state) => {
+    state.customObjects[id] = { name, monster: monsterName };
+  });
 }
 
 // Default token letters: one letter from each of the first two words, or
@@ -866,18 +1171,27 @@ function drawGrid() {
   // the zoom controls actually change; the canvas is free to overflow its
   // viewport, which is what there is to pan around.
   const scale = zoom * (window.devicePixelRatio || 1);
-  const bitmapWidth = Math.round(width * scale);
-  const bitmapHeight = Math.round(height * scale);
+  // The canvas is CANVAS_PAD larger than the grid on every side, and the
+  // transform is translated by the same, so logical (0, 0) is the grid's
+  // top-left corner while a boundary wall's overhang still has bitmap to
+  // land on. Everything below draws in grid coordinates and needn't know.
+  const canvasWidth = width + CANVAS_PAD * 2;
+  const canvasHeight = height + CANVAS_PAD * 2;
+  const bitmapWidth = Math.round(canvasWidth * scale);
+  const bitmapHeight = Math.round(canvasHeight * scale);
   // Assigning canvas.width/height reallocates and clears the bitmap, so
   // only touch it on an actual change — drawGrid() also runs on every
   // mousemove while a token is being dragged.
   if (canvas.width !== bitmapWidth) canvas.width = bitmapWidth;
   if (canvas.height !== bitmapHeight) canvas.height = bitmapHeight;
-  canvas.style.width = `${width * zoom}px`;
-  canvas.style.height = `${height * zoom}px`;
+  canvas.style.width = `${canvasWidth * zoom}px`;
+  canvas.style.height = `${canvasHeight * zoom}px`;
   // Re-applied every draw, not just on resize: assigning canvas.width
   // resets the context, and the scale changes with zoom anyway.
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.setTransform(scale, 0, 0, scale, CANVAS_PAD * scale, CANVAS_PAD * scale);
+  // The pad is left transparent so the box's own background shows through
+  // it; only the grid rectangle gets the surface fill below.
+  ctx.clearRect(-CANVAS_PAD, -CANVAS_PAD, canvasWidth, canvasHeight);
 
   const surface = cssVar("--surface");
   const border = cssVar("--border");
@@ -923,11 +1237,10 @@ function drawGrid() {
   //
   // The half-pixel offset puts a 1px stroke on a whole pixel instead of
   // straddling two and blurring; a 2px stroke is crisp centred on a whole
-  // pixel instead, hence the offset depending on weight. Either way the
-  // line is clamped to keep its full width inside the bitmap: the bitmap
-  // spans 0..width, so a line pushed past that edge is clipped away
-  // entirely — which is what used to make the right and bottom borders
-  // invisible.
+  // pixel instead, hence the offset depending on weight. The closing lines
+  // need no clamping toward the middle — CANVAS_PAD gives them bitmap to
+  // sit on, where before they fell outside 0..width and were clipped away
+  // entirely, which is what made the right and bottom borders invisible.
   // Heaviness is keyed off the ABSOLUTE coordinate, not the line's index
   // from the edge, so the 5x5 blocks stay pinned to the board. Growing the
   // map leftward slides the heavy lines along with everything else and can
@@ -936,16 +1249,13 @@ function drawGrid() {
   // the dividend, but only === 0 is tested here and -0 === 0, so negative
   // coordinates need no special handling.)
   ctx.strokeStyle = border;
-  const gridLinePos = (index, coordinate, count, extent) => {
+  const gridLinePos = (index, coordinate, count) => {
     const major = coordinate % GRID_MAJOR_EVERY === 0 || index === 0 || index === count;
-    const lineWidth = major ? 2 : 1;
-    const half = lineWidth / 2;
-    const raw = index * SQUARE_SIZE + (major ? 0 : 0.5);
-    return { lineWidth, pos: Math.min(Math.max(raw, half), extent - half) };
+    return { lineWidth: major ? 2 : 1, pos: index * SQUARE_SIZE + (major ? 0 : 0.5) };
   };
 
   for (let col = 0; col <= cols; col++) {
-    const { lineWidth, pos } = gridLinePos(col, originCol + col, cols, width);
+    const { lineWidth, pos } = gridLinePos(col, originCol + col, cols);
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
     ctx.moveTo(pos, 0);
@@ -953,7 +1263,7 @@ function drawGrid() {
     ctx.stroke();
   }
   for (let row = 0; row <= rows; row++) {
-    const { lineWidth, pos } = gridLinePos(row, originRow + row, rows, height);
+    const { lineWidth, pos } = gridLinePos(row, originRow + row, rows);
     ctx.lineWidth = lineWidth;
     ctx.beginPath();
     ctx.moveTo(0, pos);
@@ -1014,7 +1324,7 @@ function drawGrid() {
 
     for (const [key, state] of wallEntries) {
       if (previewed.has(key)) continue;
-      drawEdgeShape(key, state, width, height, cssVar("--text"), effective);
+      drawEdgeShape(key, state, cssVar("--text"), effective);
     }
 
     if (hover) {
@@ -1028,11 +1338,11 @@ function drawGrid() {
         // about to go, not where it would sit afterwards.
         const turning = Boolean(hover.add);
         ctx.globalAlpha = turning ? 0.22 : 0.6;
-        drawEdgeShape(hover.remove, walls[hover.remove], width, height, cssVar(turning ? "--muted" : "--danger"), walls);
+        drawEdgeShape(hover.remove, walls[hover.remove], cssVar(turning ? "--muted" : "--danger"), walls);
       }
       if (hover.add) {
         ctx.globalAlpha = 0.55;
-        drawEdgeShape(hover.add, hover.state, width, height, cssVar("--text"), effective);
+        drawEdgeShape(hover.add, hover.state, cssVar("--text"), effective);
       }
       ctx.globalAlpha = 1;
     }
@@ -1111,18 +1421,33 @@ function drawGrid() {
 
 function renderRoster() {
   const placedIds = new Set(Object.values(battleState.placements));
-  const characters = loadCharacters().map((c) => ({ id: c.id, name: c.name, isCustom: false }));
-  const customs = Object.entries(battleState.customObjects).map(([id, obj]) => ({ id, name: obj.name, isCustom: true }));
+  // Only characters actually added to this battle, not everyone in the
+  // store — a DM running one encounter shouldn't have to scroll past three
+  // other parties. See battleCharacterIds() and the character picker.
+  const byId = new Map(loadCharacters().map((c) => [c.id, c]));
+  const characters = battleCharacterIds().map((id) => ({ id, name: byId.get(id).name, isCustom: false, monsterName: null }));
+  const customs = Object.entries(battleState.customObjects).map(([id, obj]) => ({ id, name: obj.name, isCustom: true, monsterName: obj.monster ?? null }));
   const unplaced = [...characters, ...customs].filter((e) => !placedIds.has(e.id));
 
   rosterList.innerHTML = unplaced.length
     ? unplaced.map((e) => `
-        <li class="battle-roster-item${e.id === armedEntityId ? " armed" : ""}" data-entity-id="${escapeHtml(e.id)}">
+        <li class="battle-roster-item${e.id === armedEntityId ? " armed" : ""}${e.id === clipboardSourceId ? " copied" : ""}" data-entity-id="${escapeHtml(e.id)}">
           <span class="battle-roster-item-name">${escapeHtml(e.name)}</span>
-          ${e.isCustom ? `<button type="button" class="battle-remove-btn battle-roster-delete" data-entity-id="${escapeHtml(e.id)}" title="Delete ${escapeHtml(e.name)}" aria-label="Delete ${escapeHtml(e.name)}">&times;</button>` : ""}
+          ${e.monsterName ? `<button type="button" class="battle-roster-stats" data-monster="${escapeHtml(e.monsterName)}" title="${escapeHtml(e.monsterName)} statblock" aria-label="${escapeHtml(e.monsterName)} statblock">&#9744;</button>` : ""}
+          <button type="button" class="battle-remove-btn battle-roster-delete" data-entity-id="${escapeHtml(e.id)}" title="${e.isCustom ? `Delete ${escapeHtml(e.name)}` : `Take ${escapeHtml(e.name)} out of this battle`}" aria-label="${e.isCustom ? `Delete ${escapeHtml(e.name)}` : `Take ${escapeHtml(e.name)} out of this battle`}">&times;</button>
         </li>
       `).join("")
-    : '<li class="placeholder">No characters available — add one on the main page, or add a custom object below.</li>';
+    : '<li class="placeholder">Nobody here yet — add characters, a monster, or a custom object below.</li>';
+
+  // Same stopPropagation() reasoning as the delete button below: this sits
+  // inside the <li> whose own click arms the entity for placement, and
+  // checking a statblock shouldn't also arm it.
+  for (const btn of rosterList.querySelectorAll(".battle-roster-stats")) {
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openAonPopup(monsterUrl(btn.dataset.monster), btn.dataset.monster);
+    });
+  }
 
   for (const li of rosterList.querySelectorAll("[data-entity-id]")) {
     li.addEventListener("click", () => {
@@ -1132,27 +1457,72 @@ function renderRoster() {
     });
   }
 
-  // Only custom objects get a delete button — real characters are managed
-  // on the main page, not here. stopPropagation() keeps this from also
-  // triggering the <li>'s own click handler (arming it for placement).
+  // Every row gets an ×, but it means two different things — which is why
+  // the title spells out which. For a battle-local entity it DELETES the
+  // thing (it exists nowhere else). For a character it only takes them out
+  // of this battle; the sheet on the main page is untouched, and they can
+  // be added back from the picker. stopPropagation() keeps either from
+  // also triggering the <li>'s own click handler (arming for placement).
   for (const btn of rosterList.querySelectorAll(".battle-roster-delete")) {
     btn.addEventListener("click", (event) => {
       event.stopPropagation();
       const id = btn.dataset.entityId;
       const entity = findEntity(id);
       if (!entity) return;
-      dispatch("delete-custom-object", `Deleted ${entity.name}`, (state) => {
-        delete state.customObjects[id];
-        delete state.initiative[id];
-        delete state.appearance[id];
-        delete state.conditions[id];
-      });
+      if (entity.isCustom) {
+        dispatch("delete-custom-object", `Deleted ${entity.name}`, (state) => {
+          delete state.customObjects[id];
+          delete state.initiative[id];
+          delete state.appearance[id];
+          delete state.conditions[id];
+        });
+      } else {
+        removeCharacterFromBattle(id, entity.name);
+      }
       if (armedEntityId === id) armedEntityId = null;
+      if (clipboardSourceId === id) clipboard = null;
     });
   }
 }
 
+function addCharacterToBattle(characterId, name) {
+  dispatch("add-character", `Added ${name} to the battle`, (state) => {
+    if (!state.characterIds.includes(characterId)) state.characterIds.push(characterId);
+  });
+}
+
+// Only removes them from this battle's roster. Their sheet lives in the
+// main app's store, which this page never writes to. Battle progress keyed
+// to them goes with it, the same way remove-token clears it — they're
+// leaving the encounter, not stepping off the field for a moment.
+function removeCharacterFromBattle(characterId, name) {
+  dispatch("remove-character", `Took ${name} out of the battle`, (state) => {
+    state.characterIds = state.characterIds.filter((id) => id !== characterId);
+    for (const [key, id] of Object.entries(state.placements)) {
+      if (id === characterId) delete state.placements[key];
+    }
+    state.initiativeOrder = state.initiativeOrder.filter((id) => id !== characterId);
+    delete state.hp[characterId];
+    delete state.tempHp[characterId];
+    delete state.conditions[characterId];
+    delete state.initiative[characterId];
+  });
+  raisedShieldIds.delete(characterId);
+}
+
 let dragEntityId = null; // entity id currently being dragged in the initiative track — UI-only, not battle state
+
+// Delegated to the <ul> and attached once, for exactly the reason the
+// battle tabs' rename is: renderInitiative() replaces every <li> on each
+// render, and a row's own click handler re-renders (it selects the
+// entity's square). So on a double-click the two clicks land on different
+// nodes and the browser dispatches dblclick on their nearest common
+// ancestor — this <ul> — never on the row itself.
+initiativeList.addEventListener("dblclick", (event) => {
+  if (event.target.closest(".battle-initiative-value")) return;
+  const row = event.target.closest("li[data-entity-id]");
+  if (row) openEntityRenameDialog(row.dataset.entityId);
+});
 
 function renderInitiative() {
   const placed = initiativeOrderIds()
@@ -1171,9 +1541,15 @@ function renderInitiative() {
 
   initiativeList.innerHTML = placed.map((e) => {
     const initiative = battleState.initiative[e.id];
+    // Only battle-local entities can be renamed here — a character's name
+    // comes from their sheet. The title says which, so a double-click that
+    // does nothing on a character row isn't a mystery.
+    const nameTitle = e.isCustom
+      ? "Double-click to rename"
+      : "Renaming a character is done on their sheet, on the main page";
     return `
       <li draggable="true" data-entity-id="${escapeHtml(e.id)}" class="${e.id === selectedEntityId ? "selected" : ""}">
-        <span class="battle-initiative-name">${escapeHtml(e.name)}</span>
+        <span class="battle-initiative-name" title="${escapeHtml(nameTitle)}">${escapeHtml(e.name)}</span>
         <button type="button" class="battle-initiative-value" draggable="false" data-entity-id="${escapeHtml(e.id)}" title="Set initiative">${initiative != null ? initiative : "—"}</button>
       </li>
     `;
@@ -1246,21 +1622,11 @@ function renderInitiative() {
 // identically either way — same event type, same state cleanup. The id it
 // binds, battle-remove-token, is correctly named: it takes the occupant's
 // token off the map, leaving them in the roster.
-function bindRemoveButton(entityId, name) {
-  document.getElementById("battle-remove-token").addEventListener("click", () => {
-    const key = selectedSquareKey;
-    dispatch("remove-token", `Removed ${name} from the field`, (state) => {
-      delete state.placements[key];
-      delete state.hp[entityId];
-      delete state.tempHp[entityId];
-      delete state.conditions[entityId];
-      delete state.initiative[entityId];
-      state.initiativeOrder = state.initiativeOrder.filter((id) => id !== entityId);
-    });
-    raisedShieldIds.delete(entityId);
-    selectedSquareKey = null;
-    render();
-  });
+// Both this button and the Delete key remove the selected square's
+// occupant, so both go through deleteSelectedToken() — one event type, one
+// piece of state cleanup, no chance of the two drifting apart.
+function bindRemoveButton() {
+  document.getElementById("battle-remove-token").addEventListener("click", deleteSelectedToken);
 }
 
 // The bottom-left box is about the object standing on the selected square,
@@ -1363,10 +1729,20 @@ function renderCharacterTab(objectBody) {
     return;
   }
 
-  // Custom objects (name only, by design) and — as a defensive fallback —
-  // any real character missing sheet data get the same minimal panel:
-  // just a name and a way to remove them from the field.
+  // Custom objects (name only, by design), monsters (whose numbers live on
+  // Archives of Nethys rather than here) and — as a defensive fallback —
+  // any real character missing sheet data all get the same minimal panel:
+  // a name, a way to remove them from the field, and conditions.
   if (!entity.build) {
+    // A renamed monster still points at its statblock, so the button is
+    // labelled with the bestiary entry rather than the token's name —
+    // "Sneaky Pete" opening a page headed "Goblin Warrior" would look like
+    // the wrong link otherwise.
+    const monsterName = entity.monsterName;
+    const summary = monsterName
+      ? `<button type="button" id="battle-monster-stats" class="battle-monster-stats">View ${escapeHtml(monsterName)} statblock</button>`
+      : `<p class="placeholder">${entity.isCustom ? "Custom object — no additional stats." : "No sheet data for this character."}</p>`;
+
     objectBody.innerHTML = `
       <div class="battle-stat-header">
         <div class="battle-stat-left">
@@ -1376,12 +1752,17 @@ function renderCharacterTab(objectBody) {
           </div>
         </div>
       </div>
-      <p class="placeholder">${entity.isCustom ? "Custom object — no additional stats." : "No sheet data for this character."}</p>
+      ${summary}
       <div class="battle-stat-body">
         ${conditionsSectionHtml(entityId)}
       </div>
     `;
-    bindRemoveButton(entityId, entity.name);
+    bindRemoveButton();
+    if (monsterName) {
+      document.getElementById("battle-monster-stats").addEventListener("click", () => {
+        openAonPopup(monsterUrl(monsterName), monsterName);
+      });
+    }
     // Custom objects get conditions too: a hazard can be broken or take
     // persistent damage, and conditions aren't sheet data — they're battle
     // state that applies to anything on the field, like initiative.
@@ -1496,7 +1877,7 @@ function renderCharacterTab(objectBody) {
     </div>
   `;
 
-  bindRemoveButton(characterId, character.name);
+  bindRemoveButton();
   bindConditionsSection(characterId, character.name);
 
   document.getElementById("battle-hp-bar").addEventListener("click", () => {
@@ -1871,6 +2252,11 @@ function setActiveBattle(id) {
   dragHoverKey = null;
   dragPath = null;
   dragMoved = false;
+  // The clipboard itself deliberately SURVIVES the switch — carrying a
+  // creature from one battle to another is the main reason to copy one.
+  // Only the "copied" highlight resets, since it points at a row in the
+  // battle being left.
+  clipboardSourceId = null;
 }
 
 function switchBattle(id) {
@@ -1996,6 +2382,11 @@ deleteBattleCancelBtn.addEventListener("click", () => deleteBattleDialog.close()
 function render() {
   renderTabs();
   drawGrid();
+  // After drawGrid(), which is what resizes the canvas: shrinking the grid
+  // or zooming out can leave a pan that was fine a moment ago pointing at
+  // empty space. Not inside drawGrid() itself — that also runs on every
+  // mousemove of a token drag, where nothing has resized.
+  clampPan();
   renderGridControls();
   renderZoomControls();
   renderToolControls();
@@ -2220,6 +2611,270 @@ conditionFilter.addEventListener("input", renderConditionOptions);
 conditionCloseBtn.addEventListener("click", () => conditionDialog.close());
 
 // ---------------------------------------------------------------------------
+// Character picker. A toggle list, like the condition dialog: clicking an
+// added character takes them back out, so a mis-click is one click to fix.
+// Grouped by the main page's groups, since that's where a DM filed them.
+
+function renderCharacterOptions() {
+  const inBattle = new Set(battleCharacterIds());
+  const placed = new Set(Object.values(battleState.placements));
+  const needle = characterFilter.value.trim().toLowerCase();
+
+  const sections = charactersByGroup()
+    .map(({ name, characters }) => ({
+      name,
+      characters: characters.filter((c) => !needle || c.name.toLowerCase().includes(needle)),
+    }))
+    .filter((section) => section.characters.length);
+
+  if (!sections.length) {
+    characterOptions.innerHTML = loadCharacters().length
+      ? '<li class="placeholder">No character matches that.</li>'
+      : '<li class="placeholder">No characters saved yet — add one on the main page first.</li>';
+    return;
+  }
+
+  characterOptions.innerHTML = sections.map(({ name, characters }) => `
+    <li class="battle-character-group">${escapeHtml(name)}</li>
+    ${characters.map((c) => {
+      const added = inBattle.has(c.id);
+      // A character standing on the map can't be un-picked here without
+      // silently pulling their token off, so the row says so instead of
+      // doing it. Taking them off the field first re-enables it.
+      const onField = placed.has(c.id);
+      const title = !added
+        ? `Add ${escapeHtml(c.name)} to this battle`
+        : onField
+          ? `${escapeHtml(c.name)} is on the field — remove their token first`
+          : `Take ${escapeHtml(c.name)} out of this battle`;
+      return `
+      <li class="battle-monster-row">
+        <button type="button" class="battle-monster-option${added ? " applied" : ""}" data-character-id="${escapeHtml(c.id)}"${added && onField ? " disabled" : ""} title="${title}">
+          <span class="battle-monster-option-name">${escapeHtml(c.name)}</span>
+          ${added ? '<span class="battle-monster-count">&check;</span>' : ""}
+        </button>
+      </li>`;
+    }).join("")}`).join("");
+}
+
+characterOptions.addEventListener("click", (event) => {
+  const option = event.target.closest(".battle-monster-option");
+  if (!option || option.disabled) return;
+  const id = option.dataset.characterId;
+  const character = loadCharacters().find((c) => c.id === id);
+  if (!character) return;
+  if (battleCharacterIds().includes(id)) removeCharacterFromBattle(id, character.name);
+  else addCharacterToBattle(id, character.name);
+  // dispatch() re-rendered the roster behind the backdrop; this refreshes
+  // the ticks in the still-open list.
+  renderCharacterOptions();
+});
+
+characterFilter.addEventListener("input", renderCharacterOptions);
+characterCloseBtn.addEventListener("click", () => characterDialog.close());
+
+addCharacterBtn.addEventListener("click", () => {
+  characterFilter.value = "";
+  renderCharacterOptions();
+  characterDialog.showModal();
+  characterFilter.focus();
+});
+
+// ---------------------------------------------------------------------------
+// Monster picker. Stays open after a pick, like the condition dialog and for
+// the same reason: adding four goblins at once is the normal case, and
+// reopening the list for each would be tedious.
+
+// The full list is ~560 entries. Unlike the 42-row condition picker, this
+// one delegates its clicks to the <ul> and caps how many rows it draws —
+// attaching hundreds of listeners on every keystroke is work with nothing
+// to show for it, and nobody reads past the first screenful anyway.
+const MONSTER_OPTIONS_SHOWN = 60;
+
+// How many of each monster are already in this battle. The dialog is
+// modal, so the roster updating behind it is hidden by the backdrop —
+// without this, clicking a monster looks like it did nothing. Counts by
+// the statblock reference, not the name, so renaming "Goblin Warrior 2"
+// to "Sneaky Pete" doesn't make the tally lie.
+function monsterCounts() {
+  const counts = new Map();
+  for (const object of Object.values(battleState.customObjects)) {
+    if (!object.monster) continue;
+    counts.set(object.monster, (counts.get(object.monster) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function renderMonsterOptions() {
+  const counts = monsterCounts();
+  const needle = monsterFilter.value.trim().toLowerCase();
+  const matches = needle
+    ? monsterList.filter((m) => m.name.toLowerCase().includes(needle))
+    : monsterList;
+
+  if (!monsterList.length) {
+    monsterOptions.innerHTML = '<li class="placeholder">Monster list unavailable.</li>';
+    return;
+  }
+  if (!matches.length) {
+    monsterOptions.innerHTML = '<li class="placeholder">No monster matches that.</li>';
+    return;
+  }
+
+  // Two sibling buttons rather than a "Stats" control nested inside the
+  // row button: nested interactive elements are invalid HTML, and a
+  // <button> inside a <button> gets reparented by the parser outright.
+  const shown = matches.slice(0, MONSTER_OPTIONS_SHOWN);
+  const more = matches.length - shown.length;
+  monsterOptions.innerHTML = shown.map((m) => {
+    const count = counts.get(m.name) ?? 0;
+    return `
+    <li class="battle-monster-row">
+      <button type="button" class="battle-monster-option${count ? " added" : ""}" data-monster="${escapeHtml(m.name)}" title="Add ${escapeHtml(m.name)} to the roster">
+        <span class="battle-monster-option-name">${escapeHtml(m.name)}</span>
+        ${count ? `<span class="battle-monster-count">&times;${count}</span>` : ""}
+      </button>
+      <button type="button" class="battle-monster-preview" data-monster="${escapeHtml(m.name)}" title="Open the ${escapeHtml(m.name)} statblock">Stats</button>
+    </li>`;
+  }).join("")
+    + (more ? `<li class="placeholder">…and ${more} more — keep typing to narrow it down.</li>` : "");
+}
+
+// Delegated to the <ul>: the list is redrawn on every keystroke, and
+// attaching two listeners per row each time is work with nothing to show
+// for it. Preview is checked first only for readability — the two buttons
+// are siblings, so neither click can reach the other.
+monsterOptions.addEventListener("click", (event) => {
+  const preview = event.target.closest(".battle-monster-preview");
+  if (preview) {
+    openAonPopup(monsterUrl(preview.dataset.monster), preview.dataset.monster);
+    return;
+  }
+  const option = event.target.closest(".battle-monster-option");
+  if (option) {
+    addMonster(option.dataset.monster);
+    // dispatch() re-rendered the roster behind the backdrop; this refreshes
+    // the count badges in the still-open list, the same way the condition
+    // picker refreshes its applied ticks.
+    renderMonsterOptions();
+  }
+});
+
+monsterFilter.addEventListener("input", renderMonsterOptions);
+monsterCloseBtn.addEventListener("click", () => monsterDialog.close());
+
+addMonsterBtn.addEventListener("click", () => {
+  monsterFilter.value = "";
+  renderMonsterOptions();
+  monsterDialog.showModal();
+  monsterFilter.focus();
+});
+
+// ---------------------------------------------------------------------------
+// Copy/paste, over the roster and the initiative track. UI-only state, like
+// selection: a clipboard isn't part of the battle, and undoing a copy would
+// be baffling. Pasting IS a battle change and dispatches.
+//
+// What's copied is a *description* — the base name and the statblock
+// reference — not an entity id. Copy a goblin, delete it, paste: you still
+// get a goblin. An id would dangle.
+//
+// Characters are deliberately not duplicable. There is one Tumb; his sheet
+// lives in the main app's store, and a second battle-local "Tumb 2" would
+// be a name with no stats behind it, which is worse than nothing. Copying
+// one is allowed and does something useful anyway — see pasteEntity().
+let clipboard = null; // { baseName, monster, isCharacter, characterId, sourceName }
+let clipboardSourceId = null; // for the roster's "copied" highlight — UI-only
+
+// "Goblin Warrior 4" -> "Goblin Warrior", so pasting a copy continues the
+// series rather than producing "Goblin Warrior 4 2". A custom object the DM
+// literally named "Pillar 2" bases to "Pillar" too, which is the same
+// intent read a different way.
+function baseEntityName(name) {
+  return name.replace(/\s+\d+$/, "").trim() || name;
+}
+
+// The entity a copy would take: a roster row armed for placement, or
+// whatever is on the selected square. Roster first — arming one is the more
+// deliberate act, and it's how you reach something that isn't on the map.
+function copyTargetId() {
+  if (armedEntityId) return armedEntityId;
+  return selectedSquareKey ? battleState.placements[selectedSquareKey] ?? null : null;
+}
+
+function copyEntity() {
+  const id = copyTargetId();
+  const entity = id ? findEntity(id) : null;
+  if (!entity) return false;
+  clipboard = {
+    baseName: entity.monsterName ?? baseEntityName(entity.name),
+    monster: entity.monsterName,
+    isCharacter: !entity.isCustom,
+    characterId: entity.isCustom ? null : entity.id,
+    sourceName: entity.name,
+  };
+  clipboardSourceId = id;
+  render();
+  return true;
+}
+
+function pasteEntity() {
+  if (!clipboard) return false;
+
+  // A character can't be duplicated, so pasting one puts THEM in the
+  // battle instead — which makes Ctrl+C/Ctrl+V a way to carry someone from
+  // one battle tab to another, the only thing copying a character could
+  // usefully mean.
+  if (clipboard.isCharacter) {
+    if (!loadCharacters().some((c) => c.id === clipboard.characterId)) return false;
+    if (battleCharacterIds().includes(clipboard.characterId)) return false;
+    addCharacterToBattle(clipboard.characterId, clipboard.sourceName);
+    return true;
+  }
+
+  const id = `custom-${crypto.randomUUID()}`;
+  const name = uniqueEntityName(clipboard.baseName);
+  const monster = clipboard.monster;
+  dispatch("paste-entity", `Added ${name} to the roster`, (state) => {
+    state.customObjects[id] = monster ? { name, monster } : { name };
+  });
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Renaming a creature on the initiative track. Battle-local entities only:
+// a character's name lives on their sheet in the main app's store, which
+// this page only ever reads.
+
+let renameEntityId = null;
+
+function openEntityRenameDialog(entityId) {
+  const entity = findEntity(entityId);
+  if (!entity?.isCustom) return;
+  renameEntityId = entityId;
+  entityRenameInput.value = entity.name;
+  entityRenameDialog.showModal();
+  entityRenameInput.select();
+}
+
+entityRenameForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entity = findEntity(renameEntityId);
+  const name = entityRenameInput.value.trim();
+  if (entity && name && name !== entity.name) {
+    const id = renameEntityId;
+    dispatch("rename-entity", `Renamed ${entity.name} to ${name}`, (state) => {
+      // Spread rather than assigning .name, so a monster keeps its
+      // `monster` statblock reference through the rename.
+      state.customObjects[id] = { ...state.customObjects[id], name };
+    });
+  }
+  entityRenameDialog.close();
+});
+
+entityRenameCloseBtn.addEventListener("click", () => entityRenameDialog.close());
+
+// ---------------------------------------------------------------------------
 // Initiative dialog. Opened from the small clickable value box on an
 // initiative-track row (works for characters and custom objects alike,
 // since initiative isn't part of a character's sheet data). Setting or
@@ -2264,14 +2919,28 @@ initiativeCloseBtn.addEventListener("click", () => initiativeDialog.close());
 // ---------------------------------------------------------------------------
 // Interaction
 
-function squareFromEvent(event) {
+// A pointer event's position in logical grid pixels, with (0, 0) at the
+// grid's top-left corner. The one place that inverts drawGrid()'s mapping,
+// so a change to how the canvas is sized can't be applied to square
+// picking and forgotten for wall picking (which is exactly what CANVAS_PAD
+// would otherwise have caused).
+//
+// Deliberately NOT via canvas.width/height: the bitmap is oversampled by
+// zoom x devicePixelRatio, so that ratio would land on device pixels
+// rather than the SQUARE_SIZE-based coordinates callers want. And the
+// element spans the grid PLUS a CANVAS_PAD margin on each side, so the
+// ratio is taken against that larger box with the pad subtracted after.
+function gridPointFromEvent(event) {
   const rect = canvas.getBoundingClientRect();
-  // Maps from the on-screen box to logical grid pixels. Deliberately NOT
-  // via canvas.width/height: the bitmap is oversampled by zoom x
-  // devicePixelRatio (see drawGrid()), so that ratio would land on device
-  // pixels rather than the SQUARE_SIZE-based coordinates below.
-  const x = (event.clientX - rect.left) * (gridCols() * SQUARE_SIZE / rect.width);
-  const y = (event.clientY - rect.top) * (gridRows() * SQUARE_SIZE / rect.height);
+  const padded = CANVAS_PAD * 2;
+  return {
+    x: (event.clientX - rect.left) * ((gridCols() * SQUARE_SIZE + padded) / rect.width) - CANVAS_PAD,
+    y: (event.clientY - rect.top) * ((gridRows() * SQUARE_SIZE + padded) / rect.height) - CANVAS_PAD,
+  };
+}
+
+function squareFromEvent(event) {
+  const { x, y } = gridPointFromEvent(event);
   // Offset back into absolute board coordinates, which is what placements
   // and walls are keyed by.
   const col = gridOriginCol() + Math.floor(x / SQUARE_SIZE);
@@ -2311,6 +2980,51 @@ function moveToken(fromKey, toKey) {
   selectedSquareKey = toKey;
 }
 
+// Counts what already ends at one corner of the grid — walls, doors and
+// neighbouring cells' diagonals alike. (r, c) is a grid POINT, not a cell,
+// so the keys around it mix the two indexings wallKey() uses: the four
+// edges meeting there are "h" left and right of it and "v" above and below,
+// while the four diagonals that could end there belong to the four cells it
+// touches.
+//
+// `skipRow`/`skipCol` is the cell being decided. Its own two diagonals are
+// exactly what this is choosing between, so letting them vote would make
+// the answer depend on the answer.
+function cornerLinks(walls, r, c, skipRow, skipCol) {
+  let count = 0;
+  for (const key of [wallKey("h", r, c - 1), wallKey("h", r, c),
+                     wallKey("v", r - 1, c), wallKey("v", r, c)]) {
+    if (walls[key]) count++;
+  }
+  // Offsets from the corner to the cell whose diagonal would end at it:
+  // "\" starts at its cell's NW corner and ends at the SE one, "/" runs
+  // between the other two.
+  for (const [type, dr, dc] of [["b", 0, 0], ["b", -1, -1], ["f", 0, -1], ["f", -1, 0]]) {
+    if (r + dr === skipRow && c + dc === skipCol) continue;
+    if (walls[wallKey(type, r + dr, c + dc)]) count++;
+  }
+  return count;
+}
+
+// Which way a new diagonal in this cell should run. A diagonal is only ever
+// meant to close off a corner, so the useful orientation is the one whose
+// two ends meet something: drawn the other way it leaves a gap at both ends
+// and crosses the middle of the cell for nothing. Guessing wrong is cheap
+// to correct (the centre-zone cycle's next click turns it) but annoying,
+// because it's wrong on exactly the cells where the intent was obvious.
+//
+// A plain count of what each orientation's corners touch, not a search for
+// a specific arrangement: a wall along the cell's own top edge ends at both
+// top corners and so votes for neither, which is the right answer. Ties keep
+// "\", the historical default, so a diagonal in open space is unchanged.
+function preferredDiagonal(walls, row, col) {
+  const back = cornerLinks(walls, row, col, row, col)
+    + cornerLinks(walls, row + 1, col + 1, row, col);
+  const forward = cornerLinks(walls, row, col + 1, row, col)
+    + cornerLinks(walls, row + 1, col, row, col);
+  return forward > back ? "f" : "b";
+}
+
 // Decides what a click at a given position WOULD do, without doing it.
 // Both the click handler and the hover preview go through this, so the
 // preview is incapable of disagreeing with what actually happens — the
@@ -2322,9 +3036,7 @@ function moveToken(fromKey, toKey) {
 // Right/bottom resolve to the NEXT cell's left/top edge, which is what
 // keeps the canonical "top/left only" keying honest.
 function wallActionFromEvent(event) {
-  const rect = canvas.getBoundingClientRect();
-  const x = (event.clientX - rect.left) * (gridCols() * SQUARE_SIZE / rect.width);
-  const y = (event.clientY - rect.top) * (gridRows() * SQUARE_SIZE / rect.height);
+  const { x, y } = gridPointFromEvent(event);
   const col = gridOriginCol() + Math.floor(x / SQUARE_SIZE);
   const row = gridOriginRow() + Math.floor(y / SQUARE_SIZE);
   if (!inGridBounds(row, col)) return null;
@@ -2338,20 +3050,20 @@ function wallActionFromEvent(event) {
   const fromBottom = SQUARE_SIZE - fromTop;
   const nearest = Math.min(fromLeft, fromRight, fromTop, fromBottom);
 
-  // Centre of the cell cycles the diagonal: none -> "\" -> "/" -> none.
-  // Three states rather than two so the same spot that changes direction
-  // also clears it — otherwise a diagonal could be placed but never
-  // removed without a separate control.
+  // Centre of the cell cycles the diagonal: none -> the orientation that
+  // fits -> the other one -> none. Three states rather than two so the same
+  // spot that changes direction also clears it — otherwise a diagonal could
+  // be placed but never removed without a separate control.
   if (nearest > SQUARE_SIZE * WALL_CENTRE_ZONE) {
     // Doors go on cell edges only — there's no sensible doorway through a
     // corner-to-corner diagonal, so the door tool simply has no action in
     // the centre zone (and previews nothing there).
     if (activeTool !== TOOL_WALL) return null;
-    const back = wallKey("b", row, col);
-    const forward = wallKey("f", row, col);
-    if (walls[back]) return { remove: back, add: forward, state: EDGE_WALL };
-    if (walls[forward]) return { remove: forward, add: null, state: null };
-    return { remove: null, add: back, state: EDGE_WALL };
+    const first = wallKey(preferredDiagonal(walls, row, col), row, col);
+    const second = wallKey(first[0] === "b" ? "f" : "b", row, col);
+    if (walls[first]) return { remove: first, add: second, state: EDGE_WALL };
+    if (walls[second]) return { remove: second, add: null, state: null };
+    return { remove: null, add: first, state: EDGE_WALL };
   }
 
   let key;
@@ -2417,26 +3129,25 @@ function applyWallAction(action) {
 // traceTokenShape()'s split — the caller sets colour/alpha, so the solid
 // walls and the translucent hover preview share one definition of where a
 // wall of each type actually sits.
-function traceWall(key, width, height) {
+function traceWall(key) {
   const [type, rowStr, colStr] = key.split(",");
   const row = Number(rowStr);
   const col = Number(colStr);
   const x0 = pixelX(col);
   const y0 = pixelY(row);
-  const half = WALL_THICKNESS / 2;
 
   ctx.beginPath();
   if (type === "h") {
-    // Outer-boundary walls are nudged half a thickness inward so the whole
-    // stroke renders instead of half of it falling outside the bitmap —
-    // the same clipping trap the closing grid lines had.
-    const y = Math.min(Math.max(y0, half), height - half);
-    ctx.moveTo(x0, y);
-    ctx.lineTo(x0 + SQUARE_SIZE, y);
+    // Always centred on its own line, boundary or not. CANVAS_PAD is what
+    // makes that safe — an earlier version nudged boundary walls half a
+    // thickness inward to keep them from being clipped, which left them
+    // visibly sitting inside the first row of squares rather than on the
+    // map's edge.
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0 + SQUARE_SIZE, y0);
   } else if (type === "v") {
-    const x = Math.min(Math.max(x0, half), width - half);
-    ctx.moveTo(x, y0);
-    ctx.lineTo(x, y0 + SQUARE_SIZE);
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x0, y0 + SQUARE_SIZE);
   } else if (type === "b") {
     ctx.moveTo(x0, y0);
     ctx.lineTo(x0 + SQUARE_SIZE, y0 + SQUARE_SIZE);
@@ -2501,13 +3212,13 @@ function panelRect(horizontal, axis, from, to, thickness) {
 // doorway. Colour and globalAlpha are the caller's, so solid rendering and
 // the translucent hover preview share one definition of what each state
 // looks like and can't drift apart.
-function drawEdgeShape(key, state, width, height, color, walls) {
+function drawEdgeShape(key, state, color, walls) {
   const type = key[0];
   if (type === "b" || type === "f" || state === EDGE_WALL) {
     ctx.strokeStyle = color;
     ctx.lineWidth = WALL_THICKNESS;
     ctx.lineCap = "round";
-    traceWall(key, width, height);
+    traceWall(key);
     ctx.stroke();
     return;
   }
@@ -2516,12 +3227,9 @@ function drawEdgeShape(key, state, width, height, color, walls) {
   const row = Number(rowStr);
   const col = Number(colStr);
   const horizontal = type === "h";
-  // Clamped by the thicker of the two so a doorway on the outer boundary
-  // isn't half-clipped, same as walls.
-  const clampHalf = Math.max(WALL_THICKNESS, DOOR_THICKNESS) / 2;
-  const axis = horizontal
-    ? Math.min(Math.max(pixelY(row), clampHalf), height - clampHalf)
-    : Math.min(Math.max(pixelX(col), clampHalf), width - clampHalf);
+  // Centred on its own line wherever it is, boundary included — see
+  // traceWall() and CANVAS_PAD.
+  const axis = horizontal ? pixelY(row) : pixelX(col);
   const start = horizontal ? pixelX(col) : pixelY(row);
   const end = start + SQUARE_SIZE;
 
@@ -2696,20 +3404,24 @@ function renderGridControls() {
 
 const toolButtons = [...document.querySelectorAll(".battle-tool-btn")];
 
+// Shared by the palette buttons and the digit hotkeys, so picking an
+// instrument means the same thing however you did it.
+function selectTool(tool) {
+  if (!tool || activeTool === tool) return;
+  activeTool = tool;
+  // A roster entity armed for placement is meaningless once the map
+  // stops placing tokens, and would silently fire on the first click
+  // after switching back. Disarm on any tool change.
+  armedEntityId = null;
+  // The preview belongs to the wall tool; leaving it up after switching
+  // to select would advertise an edit that clicking no longer performs.
+  wallHoverPos = null;
+  wallHoverSig = null;
+  render();
+}
+
 for (const btn of toolButtons) {
-  btn.addEventListener("click", () => {
-    if (activeTool === btn.dataset.tool) return;
-    activeTool = btn.dataset.tool;
-    // A roster entity armed for placement is meaningless once the map
-    // stops placing tokens, and would silently fire on the first click
-    // after switching back. Disarm on any tool change.
-    armedEntityId = null;
-    // The preview belongs to the wall tool; leaving it up after switching
-    // to select would advertise an edit that clicking no longer performs.
-    wallHoverPos = null;
-    wallHoverSig = null;
-    render();
-  });
+  btn.addEventListener("click", () => selectTool(btn.dataset.tool));
 }
 
 function renderToolControls() {
@@ -2728,7 +3440,7 @@ const zoomResetBtn = document.getElementById("battle-zoom-reset");
 for (const btn of zoomButtons) {
   btn.addEventListener("click", () => {
     const action = btn.dataset.zoom;
-    if (action === "reset") setZoom(1);
+    if (action === "reset") fitMapToView();
     else setZoom(zoom + (action === "in" ? ZOOM_STEP : -ZOOM_STEP));
   });
 }
@@ -2738,11 +3450,13 @@ function renderZoomControls() {
     const action = btn.dataset.zoom;
     if (action === "in") btn.disabled = zoom >= ZOOM_MAX;
     else if (action === "out") btn.disabled = zoom <= ZOOM_MIN;
-    else btn.disabled = zoom === 1;
+    // Nothing left to do only when the map both fits and is centred —
+    // being at fit zoom but panned away is still worth a click.
+    else btn.disabled = zoom === fitZoom() && !panX && !panY;
   }
   // The reset button is a symbol, so the current level lives in its
   // tooltip — otherwise nothing on screen says what zoom you're at.
-  zoomResetBtn.title = zoom === 1 ? "Zoom is 100%" : `Reset zoom to 100% (now ${Math.round(zoom * 100)}%)`;
+  zoomResetBtn.title = `Fit the whole map in view (now ${Math.round(zoom * 100)}%)`;
 }
 
 // Map drag-and-drop is mouse-based, not native HTML5 DnD — canvas has no
@@ -2753,9 +3467,17 @@ function renderZoomControls() {
 // handler below unaffected. mouseup is on window, not canvas, so a drag
 // that ends outside the grid still cleanly cancels instead of getting
 // stuck.
-canvas.addEventListener("mousedown", (event) => {
-  const square = squareFromEvent(event);
-  if (!square) return;
+//
+// Bound to the viewport rather than the canvas so the blank space around
+// the map is a pan handle too — with a small or panned-away map that space
+// is most of the box, and having to hunt for the map to grab it was the
+// gesture's most annoying limitation. squareFromEvent() measures from the
+// canvas's own rect, so it keeps working from a viewport-level event and
+// simply returns null out there.
+mapViewport.addEventListener("mousedown", (event) => {
+  // Left button only. Right-drag has no meaning here, and arming a pan on
+  // it would leave one running underneath the context menu.
+  if (event.button !== 0) return;
   // A roster entity armed for placement suppresses both gestures — the
   // next click is meant to drop it, not to move a token or the view.
   if (armedEntityId) return;
@@ -2763,16 +3485,20 @@ canvas.addEventListener("mousedown", (event) => {
   // The wall tool never drags tokens — a press is either a wall placement
   // (on release, if it didn't move) or a pan, so fall through to the pan
   // arming below regardless of what's on the square.
-  const key = squareKey(square.row, square.col);
-  if (activeTool === TOOL_SELECT && battleState.placements[key]) {
-    dragFromKey = key;
-    dragStartPos = { x: event.clientX, y: event.clientY };
-    dragMoved = false;
-    return;
+  const square = squareFromEvent(event);
+  if (square && activeTool === TOOL_SELECT) {
+    const key = squareKey(square.row, square.col);
+    if (battleState.placements[key]) {
+      dragFromKey = key;
+      dragStartPos = { x: event.clientX, y: event.clientY };
+      dragMoved = false;
+      return;
+    }
   }
 
-  // Empty square (or any square, with the wall tool): grab the map itself.
-  panFromScroll = { left: mapViewport.scrollLeft, top: mapViewport.scrollTop };
+  // Empty square, any square with an edge tool, or the blank space outside
+  // the map entirely: grab the map itself.
+  panFrom = { x: panX, y: panY };
   panStartPos = { x: event.clientX, y: event.clientY };
   panMoved = false;
 });
@@ -2782,7 +3508,7 @@ canvas.addEventListener("mousedown", (event) => {
 // Redraws only when the previewed action actually changes, not on every
 // pixel of movement.
 canvas.addEventListener("mousemove", (event) => {
-  if (!isEdgeTool() || panFromScroll) {
+  if (!isEdgeTool() || panFrom) {
     clearWallHover();
     return;
   }
@@ -2795,29 +3521,50 @@ canvas.addEventListener("mousemove", (event) => {
 
 canvas.addEventListener("mouseleave", clearWallHover);
 
+// Wheel zooms rather than scrolling the viewport. Panning is already
+// covered by dragging empty space, so the wheel is free for the thing
+// there's otherwise no quick gesture for. Bound to the viewport, not the
+// canvas, so it still works over the empty space around a small map.
+//
+// passive: false because the handler calls preventDefault() — wheel
+// listeners default to passive, where preventDefault() is ignored and the
+// whole page would scroll underneath the zoom.
+mapViewport.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  // Sign only: trackpads and mice report wildly different magnitudes, so
+  // one notch is one ZOOM_STEP either way rather than something
+  // proportional that flies off at a flick.
+  const direction = event.deltaY < 0 ? 1 : -1;
+  setZoom(zoom + direction * ZOOM_STEP, event);
+}, { passive: false });
+
 // On window, not the canvas: a pan that wanders outside the grid (very
 // easy, since panning is how you reach off-screen parts of it) should keep
 // tracking rather than freezing at the edge.
 window.addEventListener("mousemove", (event) => {
-  if (!panFromScroll) return;
+  if (!panFrom) return;
   const dx = event.clientX - panStartPos.x;
   const dy = event.clientY - panStartPos.y;
   if (!panMoved) {
     if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
     panMoved = true;
-    canvas.style.cursor = "grabbing";
+    // A class, not an inline style: the canvas has cursor rules of its own
+    // (pointer, or crosshair under an edge tool) that an inline style on
+    // the viewport wouldn't beat, since it isn't their element.
+    mapViewport.classList.add("panning");
   }
-  // Scroll moves opposite the cursor, so the map follows the hand: drag
-  // right and the view travels left, revealing what was off the left edge.
-  mapViewport.scrollLeft = panFromScroll.left - dx;
-  mapViewport.scrollTop = panFromScroll.top - dy;
+  // The map travels with the hand — drag right and what was off the left
+  // edge comes into view. Note this is the opposite sign to the scroll
+  // offset this replaced, where moving the viewport right moved the map
+  // left.
+  setPan(panFrom.x + dx, panFrom.y + dy);
 });
 
 window.addEventListener("mouseup", () => {
-  if (!panFromScroll) return;
-  panFromScroll = null;
+  if (!panFrom) return;
+  panFrom = null;
   panStartPos = null;
-  canvas.style.cursor = "";
+  mapViewport.classList.remove("panning");
   // Same one-tick backstop as the token drag: the click that follows this
   // mouseup needs to still see panMoved === true to suppress itself, and
   // if the release happened off-canvas no click fires at all, so this is
@@ -2969,18 +3716,98 @@ function isTextEntry(target) {
   return !["checkbox", "radio", "color", "range", "button", "submit", "reset"].includes(target.type);
 }
 
+// Which side of the map each WASD key grows, matching the four +/- grid
+// controls around the box. Shift shrinks instead.
+const GRID_KEYS = { w: "top", a: "left", s: "bottom", d: "right" };
+
+// Removes the selected square's occupant from the field — the same action
+// as the × in the Character tab, which is where the alternative is.
+function deleteSelectedToken() {
+  const key = selectedSquareKey;
+  const entityId = key ? battleState.placements[key] : null;
+  const entity = entityId ? findEntity(entityId) : null;
+  if (!entity) return false;
+  dispatch("remove-token", `Removed ${entity.name} from the field`, (state) => {
+    delete state.placements[key];
+    delete state.hp[entityId];
+    delete state.tempHp[entityId];
+    delete state.conditions[entityId];
+    delete state.initiative[entityId];
+    state.initiativeOrder = state.initiativeOrder.filter((id) => id !== entityId);
+  });
+  raisedShieldIds.delete(entityId);
+  selectedSquareKey = null;
+  render();
+  return true;
+}
+
+// Unmodified letters and Delete are only map shortcuts when nothing else
+// could want them: not while typing, and not while a dialog is open. A
+// modal traps focus but keydown still bubbles to document, so without the
+// dialog check, tabbing to a dialog button and pressing "d" would silently
+// grow the board behind the backdrop.
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+  if (isTextEntry(event.target)) return;
+  if (document.querySelector("dialog[open]")) return;
+
+  if (event.key === "Delete") {
+    if (deleteSelectedToken()) event.preventDefault();
+    return;
+  }
+
+  // Digits pick an instrument by its POSITION in the palette, not from a
+  // key-to-tool table: the row of keys then maps onto the row of buttons
+  // by construction, and adding or reordering a tool can't leave the two
+  // disagreeing. Out-of-range digits fall through to nothing.
+  if (event.key >= "1" && event.key <= "9") {
+    const btn = toolButtons[Number(event.key) - 1];
+    if (btn) {
+      event.preventDefault();
+      selectTool(btn.dataset.tool);
+    }
+    return;
+  }
+
+  const side = GRID_KEYS[event.key.toLowerCase()];
+  if (side) {
+    event.preventDefault();
+    resizeGrid(side, event.shiftKey ? -1 : 1);
+  }
+});
+
 document.addEventListener("keydown", (event) => {
   if (!event.ctrlKey) return;
   const key = event.key.toLowerCase();
-  if (key !== "z" && key !== "y") return;
+  if (!["z", "y", "c", "v"].includes(key)) return;
 
   // Returns BEFORE preventDefault, which is the whole point: the browser's
-  // native undo has to still fire so half-typed text can be taken back.
-  // Battle undo would otherwise reach past the field and revert the last
-  // real action instead — the typing isn't in eventLog (staging a value
-  // isn't a battle change, per Rule 1), so there'd be nothing on screen to
-  // connect the keystroke to what it did.
+  // native undo/copy/paste has to still fire so half-typed text can be
+  // taken back and a name can be copied out of a field. Battle undo would
+  // otherwise reach past the field and revert the last real action instead
+  // — the typing isn't in eventLog (staging a value isn't a battle change,
+  // per Rule 1), so there'd be nothing on screen to connect the keystroke
+  // to what it did.
   if (isTextEntry(event.target)) return;
+
+  // Same deference for a text selection anywhere on the page: if the DM
+  // has highlighted a monster's name to paste elsewhere, Ctrl+C means that
+  // and not "copy the armed token". Only Ctrl+C — a selection says nothing
+  // about what a paste was meant to do.
+  if (key === "c" && !window.getSelection().isCollapsed) return;
+
+  // preventDefault only once the shortcut is actually going to do
+  // something. A Ctrl+V with an empty clipboard, or a Ctrl+C with nothing
+  // selected on the board, falls through to the browser rather than
+  // becoming a key that silently does nothing anywhere on the page.
+  if (key === "c") {
+    if (copyEntity()) event.preventDefault();
+    return;
+  }
+  if (key === "v") {
+    if (pasteEntity()) event.preventDefault();
+    return;
+  }
 
   event.preventDefault();
   if (key === "y" || event.shiftKey) redo();
@@ -2994,3 +3821,10 @@ battles = stored.battles;
 setActiveBattle(stored.activeBattleId);
 
 render();
+
+// Fetched after the first render, not awaited before it: nothing on screen
+// depends on the monster list until the picker is opened, so the page
+// shouldn't wait on a network round-trip to draw. A re-render follows in
+// case a battle already has monsters placed — their roster rows and stat
+// buttons need the list to resolve a URL.
+loadMonsterList().then(render);

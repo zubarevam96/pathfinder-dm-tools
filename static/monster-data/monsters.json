@@ -1,0 +1,2802 @@
+[
+  {
+    "name": "Skeleton Guard",
+    "archives_of_nexus_id": 3193,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Viper",
+    "archives_of_nexus_id": 3200,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Rat",
+    "archives_of_nexus_id": 3162,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Centipede",
+    "archives_of_nexus_id": 2875,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Animated Broom",
+    "archives_of_nexus_id": 2818,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Flash Beetle",
+    "archives_of_nexus_id": 2852,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Zombie Shambler",
+    "archives_of_nexus_id": 3249,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tooth Fairy",
+    "archives_of_nexus_id": 3216,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Inkdrop",
+    "archives_of_nexus_id": 2761,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Compsognathus",
+    "archives_of_nexus_id": 2914,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mitflit",
+    "archives_of_nexus_id": 3031,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Eagle",
+    "archives_of_nexus_id": 2968,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sprigjack",
+    "archives_of_nexus_id": 3221,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Crawling Hand",
+    "archives_of_nexus_id": 2885,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Halfling Street Watcher",
+    "archives_of_nexus_id": 3044,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sprite",
+    "archives_of_nexus_id": 3210,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Guard Dog",
+    "archives_of_nexus_id": 2924,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Phantasmal Minion",
+    "archives_of_nexus_id": 2750,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Azarketi Crab Catcher",
+    "archives_of_nexus_id": 2838,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bottlenose Dolphin",
+    "archives_of_nexus_id": 2926,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Grindylow",
+    "archives_of_nexus_id": 3038,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Homunculus",
+    "archives_of_nexus_id": 3056,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Animated Kite",
+    "archives_of_nexus_id": 2762,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ort",
+    "archives_of_nexus_id": 2905,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pugwampi",
+    "archives_of_nexus_id": 3032,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stonefish",
+    "archives_of_nexus_id": 3274,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Riding Pony",
+    "archives_of_nexus_id": 3057,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Spider Swarm",
+    "archives_of_nexus_id": 3206,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hardhead Mole",
+    "archives_of_nexus_id": 3288,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hryngar Sharpshooter",
+    "archives_of_nexus_id": 3061,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Arbiter",
+    "archives_of_nexus_id": 2791,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Imp",
+    "archives_of_nexus_id": 3067,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Boggard Scout",
+    "archives_of_nexus_id": 4000,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "War Pony",
+    "archives_of_nexus_id": 3059,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Velociraptor",
+    "archives_of_nexus_id": 2915,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Water Scamp",
+    "archives_of_nexus_id": 2988,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Air Scamp",
+    "archives_of_nexus_id": 2985,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Wolf",
+    "archives_of_nexus_id": 3241,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Gecko",
+    "archives_of_nexus_id": 3087,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hyena",
+    "archives_of_nexus_id": 3065,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hippocampus",
+    "archives_of_nexus_id": 3050,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Goblin Dog",
+    "archives_of_nexus_id": 3028,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Jinkin",
+    "archives_of_nexus_id": 3033,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Riding Dog",
+    "archives_of_nexus_id": 2925,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Earth Scamp",
+    "archives_of_nexus_id": 2986,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Zoaem",
+    "archives_of_nexus_id": 2832,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Xulgath Warrior",
+    "archives_of_nexus_id": 3244,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Reefclaw",
+    "archives_of_nexus_id": 3166,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cacodaemon",
+    "archives_of_nexus_id": 2891,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Caligni Dancer",
+    "archives_of_nexus_id": 2862,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cassisian",
+    "archives_of_nexus_id": 2814,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Lyrakien",
+    "archives_of_nexus_id": 2840,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Magnetic Gecko",
+    "archives_of_nexus_id": 3282,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Merfolk Warrior",
+    "archives_of_nexus_id": 3097,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Naiad",
+    "archives_of_nexus_id": 3111,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Nosoi",
+    "archives_of_nexus_id": 3147,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Fire Scamp",
+    "archives_of_nexus_id": 2987,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hunting Spider",
+    "archives_of_nexus_id": 3207,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Python",
+    "archives_of_nexus_id": 3201,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Halfling Troublemaker",
+    "archives_of_nexus_id": 3045,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hopping Head",
+    "archives_of_nexus_id": 2770,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Voidworm",
+    "archives_of_nexus_id": 3144,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Raktavarna",
+    "archives_of_nexus_id": 3160,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Riding Horse",
+    "archives_of_nexus_id": 3058,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rat Swarm",
+    "archives_of_nexus_id": 3163,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vampire Bat Swarm",
+    "archives_of_nexus_id": 2848,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sewer Ooze",
+    "archives_of_nexus_id": 3125,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Troodon",
+    "archives_of_nexus_id": 3260,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ghoul Stalker",
+    "archives_of_nexus_id": 3009,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hobgoblin Soldier",
+    "archives_of_nexus_id": 3053,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hryngar Bombardier",
+    "archives_of_nexus_id": 3062,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cythnigot",
+    "archives_of_nexus_id": 3154,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Plague Zombie",
+    "archives_of_nexus_id": 3250,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Electric Eel",
+    "archives_of_nexus_id": 2970,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Skeletal Champion",
+    "archives_of_nexus_id": 3194,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Skeletal Horse",
+    "archives_of_nexus_id": 3195,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bugbear Prowler",
+    "archives_of_nexus_id": 2860,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Boggard Warrior",
+    "archives_of_nexus_id": 2857,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "War Horse",
+    "archives_of_nexus_id": 3060,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Warg",
+    "archives_of_nexus_id": 3230,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Fey Dragonet",
+    "archives_of_nexus_id": 2957,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Viper",
+    "archives_of_nexus_id": 3202,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Bat",
+    "archives_of_nexus_id": 2849,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Monitor Lizard",
+    "archives_of_nexus_id": 3088,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Ant",
+    "archives_of_nexus_id": 2824,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Orchid Mantis",
+    "archives_of_nexus_id": 2777,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hippogriff",
+    "archives_of_nexus_id": 3052,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Deinonychus",
+    "archives_of_nexus_id": 2916,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dero Stalker",
+    "archives_of_nexus_id": 2902,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Herexen",
+    "archives_of_nexus_id": 3049,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Animated Bamboo Figure",
+    "archives_of_nexus_id": 2763,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Animated Armor",
+    "archives_of_nexus_id": 2819,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Zyss Serpentfolk",
+    "archives_of_nexus_id": 3181,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Zombie Brute",
+    "archives_of_nexus_id": 3251,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Xulgath Skulker",
+    "archives_of_nexus_id": 3245,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sinspawn",
+    "archives_of_nexus_id": 3192,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Boar",
+    "archives_of_nexus_id": 2854,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Caligni Skulker",
+    "archives_of_nexus_id": 2863,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stony Goat",
+    "archives_of_nexus_id": 3313,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Crocodile",
+    "archives_of_nexus_id": 2887,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Wererat",
+    "archives_of_nexus_id": 3235,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Leopard",
+    "archives_of_nexus_id": 2865,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Merfolk Wavecaller",
+    "archives_of_nexus_id": 3098,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Soulbound Doll",
+    "archives_of_nexus_id": 3204,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pusk",
+    "archives_of_nexus_id": 2895,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Protoceratops",
+    "archives_of_nexus_id": 3261,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pteranodon",
+    "archives_of_nexus_id": 3151,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sedacthy Scout",
+    "archives_of_nexus_id": 3178,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Slurk",
+    "archives_of_nexus_id": 3199,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stonefish Swarm",
+    "archives_of_nexus_id": 3275,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pipefox",
+    "archives_of_nexus_id": 3138,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Harbor Seal",
+    "archives_of_nexus_id": 3305,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ghoul Soldier",
+    "archives_of_nexus_id": 3010,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Kholo Hunter",
+    "archives_of_nexus_id": 3069,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hryngar Taskmaster",
+    "archives_of_nexus_id": 3063,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Shotalashu",
+    "archives_of_nexus_id": 3309,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Skeletal Giant",
+    "archives_of_nexus_id": 3196,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hell Hound",
+    "archives_of_nexus_id": 3047,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aapoph Serpentfolk",
+    "archives_of_nexus_id": 3182,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Athamaru Hunter",
+    "archives_of_nexus_id": 2837,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bugbear Tormentor",
+    "archives_of_nexus_id": 2861,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aurochs",
+    "archives_of_nexus_id": 3753,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Boggard Swampseer",
+    "archives_of_nexus_id": 2858,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "String Slime",
+    "archives_of_nexus_id": 3126,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Zephyr Hawk",
+    "archives_of_nexus_id": 2973,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Werewolf",
+    "archives_of_nexus_id": 3236,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Wasp",
+    "archives_of_nexus_id": 3233,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Mantis",
+    "archives_of_nexus_id": 3094,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Eagle",
+    "archives_of_nexus_id": 2969,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Scorpion",
+    "archives_of_nexus_id": 3175,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hyaenodon",
+    "archives_of_nexus_id": 3066,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gorilla",
+    "archives_of_nexus_id": 2827,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Grothlut",
+    "archives_of_nexus_id": 2997,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sod Hound",
+    "archives_of_nexus_id": 2977,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dero Strangler",
+    "archives_of_nexus_id": 2903,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Draxie",
+    "archives_of_nexus_id": 3211,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dryad",
+    "archives_of_nexus_id": 3112,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Unicorn",
+    "archives_of_nexus_id": 3223,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Animated Statue",
+    "archives_of_nexus_id": 2820,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Animated Wine Vessel",
+    "archives_of_nexus_id": 2764,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Xulgath Leader",
+    "archives_of_nexus_id": 3246,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rift Chameleon",
+    "archives_of_nexus_id": 3271,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stony Bat",
+    "archives_of_nexus_id": 3285,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Fantooth School",
+    "archives_of_nexus_id": null,
+    "archives_of_nexus_page": null
+  },
+  {
+    "name": "Cockatrice",
+    "archives_of_nexus_id": 2883,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Snapping Flytrap",
+    "archives_of_nexus_id": 2999,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Lion",
+    "archives_of_nexus_id": 2866,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Twigjack",
+    "archives_of_nexus_id": 3222,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Weremoose",
+    "archives_of_nexus_id": 3323,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Grizzly Bear",
+    "archives_of_nexus_id": 2850,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sea Hag",
+    "archives_of_nexus_id": 3040,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ogre Warrior",
+    "archives_of_nexus_id": 3118,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pachycephalosaurus",
+    "archives_of_nexus_id": 2917,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pegasus",
+    "archives_of_nexus_id": 3134,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Brine Shark",
+    "archives_of_nexus_id": 2989,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Crying Cicada",
+    "archives_of_nexus_id": 3258,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Changeling Exile",
+    "archives_of_nexus_id": 2877,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Floodslain Orc",
+    "archives_of_nexus_id": 3755,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "River Drake",
+    "archives_of_nexus_id": 2958,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Swordfish",
+    "archives_of_nexus_id": 3277,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dire Wolf",
+    "archives_of_nexus_id": 3242,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tooth Fairy Swarm",
+    "archives_of_nexus_id": 3217,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Centipede Swarm",
+    "archives_of_nexus_id": 2876,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cinder Rat",
+    "archives_of_nexus_id": 2981,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Wight",
+    "archives_of_nexus_id": 3239,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Flynkett",
+    "archives_of_nexus_id": 3279,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Kholo Bonekeeper",
+    "archives_of_nexus_id": 3070,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Jiidon",
+    "archives_of_nexus_id": 2773,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Chupacabra",
+    "archives_of_nexus_id": 2880,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bristle Boar",
+    "archives_of_nexus_id": 3754,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ankhrav",
+    "archives_of_nexus_id": 2822,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Wereshark",
+    "archives_of_nexus_id": 3324,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Almiraj",
+    "archives_of_nexus_id": 3253,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Barghest",
+    "archives_of_nexus_id": 2846,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Great White Shark",
+    "archives_of_nexus_id": 3188,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vampire Servitor",
+    "archives_of_nexus_id": 3224,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hadrosaurid",
+    "archives_of_nexus_id": 2918,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gancanagh",
+    "archives_of_nexus_id": 2841,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gargoyle",
+    "archives_of_nexus_id": 3001,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gau Cho Rong",
+    "archives_of_nexus_id": 2768,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Stag Beetle",
+    "archives_of_nexus_id": 2853,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Fangtooth",
+    "archives_of_nexus_id": 3278,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Griffon",
+    "archives_of_nexus_id": 3034,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Daeodon",
+    "archives_of_nexus_id": 2855,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Jann",
+    "archives_of_nexus_id": 3002,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Caligni Hunter",
+    "archives_of_nexus_id": 2864,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Qarna",
+    "archives_of_nexus_id": 2833,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Arboreal Warden",
+    "archives_of_nexus_id": 2829,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Larval Ofalth",
+    "archives_of_nexus_id": 3116,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Marp",
+    "archives_of_nexus_id": 3301,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Werebear",
+    "archives_of_nexus_id": 3237,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mythic Griffon",
+    "archives_of_nexus_id": 3403,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Leopard Seal",
+    "archives_of_nexus_id": 3306,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Morthak",
+    "archives_of_nexus_id": 3267,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mjolgat",
+    "archives_of_nexus_id": 3302,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rhinoceros",
+    "archives_of_nexus_id": 3168,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ogre Glutton",
+    "archives_of_nexus_id": 3119,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pixie",
+    "archives_of_nexus_id": 3212,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Poracha",
+    "archives_of_nexus_id": 3143,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ghost Commoner",
+    "archives_of_nexus_id": 3007,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ghost Ape",
+    "archives_of_nexus_id": 3272,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sweet Hag",
+    "archives_of_nexus_id": 3041,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Scarecrow",
+    "archives_of_nexus_id": 3174,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Wasp Swarm",
+    "archives_of_nexus_id": 3234,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Skinslough",
+    "archives_of_nexus_id": 3759,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Satyr",
+    "archives_of_nexus_id": 3173,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sedacthy Marauder",
+    "archives_of_nexus_id": 3179,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Scorpion Swarm",
+    "archives_of_nexus_id": 3176,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Shadow",
+    "archives_of_nexus_id": 3186,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tiger",
+    "archives_of_nexus_id": 2867,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Weretiger",
+    "archives_of_nexus_id": 3238,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ugothol",
+    "archives_of_nexus_id": 2812,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Phantom Knight",
+    "archives_of_nexus_id": 3135,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Holdfast",
+    "archives_of_nexus_id": 3291,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hobgoblin Archer",
+    "archives_of_nexus_id": 3054,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Kholo Sergeant",
+    "archives_of_nexus_id": 3071,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hexworm",
+    "archives_of_nexus_id": 3289,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Coil Spy",
+    "archives_of_nexus_id": 3183,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Azuretzi",
+    "archives_of_nexus_id": 3145,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Goblin Shark",
+    "archives_of_nexus_id": 3307,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Brimorak",
+    "archives_of_nexus_id": 2896,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bogwid",
+    "archives_of_nexus_id": 2859,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Basilisk",
+    "archives_of_nexus_id": 2847,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Witchwarg",
+    "archives_of_nexus_id": 3231,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Venedaemon",
+    "archives_of_nexus_id": 2892,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vordine",
+    "archives_of_nexus_id": 2906,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Harpy",
+    "archives_of_nexus_id": 3046,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Moray Eel",
+    "archives_of_nexus_id": 2971,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Frilled Lizard",
+    "archives_of_nexus_id": 3089,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Crawling Hand",
+    "archives_of_nexus_id": 2886,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Great Ironbill",
+    "archives_of_nexus_id": 3769,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Globster",
+    "archives_of_nexus_id": 3019,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dero Magister",
+    "archives_of_nexus_id": 2904,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Jaathoom",
+    "archives_of_nexus_id": 3003,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Living Whirlwind",
+    "archives_of_nexus_id": 2974,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Living Waterfall",
+    "archives_of_nexus_id": 2990,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Living Landslide",
+    "archives_of_nexus_id": 2978,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Living Wildfire",
+    "archives_of_nexus_id": 2982,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Yeti",
+    "archives_of_nexus_id": 3247,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Orca",
+    "archives_of_nexus_id": 2927,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Army Ant Swarm",
+    "archives_of_nexus_id": 2825,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Redcap",
+    "archives_of_nexus_id": 3165,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Forest Troll",
+    "archives_of_nexus_id": 3219,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sporeback Frog",
+    "archives_of_nexus_id": 3280,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tomb Jelly",
+    "archives_of_nexus_id": 3127,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Flame Drake",
+    "archives_of_nexus_id": 2959,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Scroungefeather",
+    "archives_of_nexus_id": 3304,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Poltergeist",
+    "archives_of_nexus_id": 3142,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vescavor Swarm",
+    "archives_of_nexus_id": 3227,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Taldan Cave Squirrel",
+    "archives_of_nexus_id": 3315,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hooplamander",
+    "archives_of_nexus_id": 3292,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cyclops",
+    "archives_of_nexus_id": 2889,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Storm Snake",
+    "archives_of_nexus_id": 3314,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Shui Gui",
+    "archives_of_nexus_id": 2784,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ankylosaurus",
+    "archives_of_nexus_id": 2919,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aapoph Granitescale",
+    "archives_of_nexus_id": 3184,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Will-O'-Wisp",
+    "archives_of_nexus_id": 3240,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "War Pig",
+    "archives_of_nexus_id": 3766,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vampire Count",
+    "archives_of_nexus_id": 3225,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Wyvern",
+    "archives_of_nexus_id": 2961,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Virtuosic Lyrebird",
+    "archives_of_nexus_id": 3322,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Tarantula",
+    "archives_of_nexus_id": 3208,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hydra",
+    "archives_of_nexus_id": 3064,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Jungle Drake",
+    "archives_of_nexus_id": 2960,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Drthak",
+    "archives_of_nexus_id": 3268,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Iron Hag",
+    "archives_of_nexus_id": 3042,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Zecui",
+    "archives_of_nexus_id": 3248,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Wraith",
+    "archives_of_nexus_id": 3243,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Zombie Hulk",
+    "archives_of_nexus_id": 3252,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Lamia",
+    "archives_of_nexus_id": 3077,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sublime Breath",
+    "archives_of_nexus_id": 3408,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Magnegor",
+    "archives_of_nexus_id": 3297,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Majungasaurus",
+    "archives_of_nexus_id": 3262,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Manticore",
+    "archives_of_nexus_id": 3093,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Nightmare",
+    "archives_of_nexus_id": 3105,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mummy Guardian",
+    "archives_of_nexus_id": 3101,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cave Bear",
+    "archives_of_nexus_id": 2851,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Awakened Tree",
+    "archives_of_nexus_id": 2830,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Revenant",
+    "archives_of_nexus_id": 3167,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rhu-Chalik",
+    "archives_of_nexus_id": 2928,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sargassum Heap",
+    "archives_of_nexus_id": 3171,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sedacthy Speaker",
+    "archives_of_nexus_id": 3180,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Smilodon",
+    "archives_of_nexus_id": 2868,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Orchid Mantis Swarm",
+    "archives_of_nexus_id": 2778,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "One Eye Phantom",
+    "archives_of_nexus_id": 3763,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hobgoblin General",
+    "archives_of_nexus_id": 3055,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Choral",
+    "archives_of_nexus_id": 2815,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Woolly Rhinoceros",
+    "archives_of_nexus_id": 3169,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Elananx",
+    "archives_of_nexus_id": 2972,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Azarketi Tide Tamer",
+    "archives_of_nexus_id": 2839,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Blisterwell Oathrisen",
+    "archives_of_nexus_id": 3762,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stormblood Tiger",
+    "archives_of_nexus_id": 3760,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bull of Zagresh",
+    "archives_of_nexus_id": 3770,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vanth",
+    "archives_of_nexus_id": 3148,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Greater Shadow",
+    "archives_of_nexus_id": 3187,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Animated Statue",
+    "archives_of_nexus_id": 2821,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Coppermouth",
+    "archives_of_nexus_id": 3283,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Jabali",
+    "archives_of_nexus_id": 3004,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dullahan",
+    "archives_of_nexus_id": 2964,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Yeongno",
+    "archives_of_nexus_id": 2785,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Living Tar",
+    "archives_of_nexus_id": 3128,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Imugi",
+    "archives_of_nexus_id": 2772,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Phade",
+    "archives_of_nexus_id": 2975,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Kanya",
+    "archives_of_nexus_id": 2842,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Karkadann",
+    "archives_of_nexus_id": 3318,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Carnotaurus",
+    "archives_of_nexus_id": 3263,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Quatoid",
+    "archives_of_nexus_id": 2991,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Quetzalcoatlus",
+    "archives_of_nexus_id": 3152,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Coarti",
+    "archives_of_nexus_id": 2907,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Con Rit",
+    "archives_of_nexus_id": 2884,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Naiad Queen",
+    "archives_of_nexus_id": 3113,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Moonstalker",
+    "archives_of_nexus_id": 3764,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Medusa",
+    "archives_of_nexus_id": 3096,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mythic Ogre Boss",
+    "archives_of_nexus_id": 3401,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Omen Dragon",
+    "archives_of_nexus_id": 2953,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Frost Drake",
+    "archives_of_nexus_id": 2962,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ogre Boss",
+    "archives_of_nexus_id": 3120,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mirror Wolf",
+    "archives_of_nexus_id": 3312,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pukwudgie",
+    "archives_of_nexus_id": 3153,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Apothecary Bee",
+    "archives_of_nexus_id": 3254,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Skeletal Hulk",
+    "archives_of_nexus_id": 3197,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Elephant",
+    "archives_of_nexus_id": 2993,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Smaranava",
+    "archives_of_nexus_id": 3103,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aurochs Herd",
+    "archives_of_nexus_id": 3761,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stegosaurus",
+    "archives_of_nexus_id": 2920,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Succubus",
+    "archives_of_nexus_id": 2897,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mist Bear",
+    "archives_of_nexus_id": 3273,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aesra",
+    "archives_of_nexus_id": 2834,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Axiomite",
+    "archives_of_nexus_id": 2792,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Balisse",
+    "archives_of_nexus_id": 2816,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Marsh Giant",
+    "archives_of_nexus_id": 3011,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Anaconda",
+    "archives_of_nexus_id": 3203,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Hippocampus",
+    "archives_of_nexus_id": 3051,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Octopus",
+    "archives_of_nexus_id": 3115,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mountain Oni",
+    "archives_of_nexus_id": 3121,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Decapod Dinghy",
+    "archives_of_nexus_id": 3259,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Jah-Tohl",
+    "archives_of_nexus_id": 2930,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Xoarian",
+    "archives_of_nexus_id": 2929,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stone Giant",
+    "archives_of_nexus_id": 3012,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ankhrav Hive Mother",
+    "archives_of_nexus_id": 2823,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bone Prophet",
+    "archives_of_nexus_id": 3185,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Krooth",
+    "archives_of_nexus_id": 3076,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Lamia Matriarch",
+    "archives_of_nexus_id": 3078,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Arboreal Regent",
+    "archives_of_nexus_id": 2831,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Manananggal",
+    "archives_of_nexus_id": 2775,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Megaprimatus",
+    "archives_of_nexus_id": 2828,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Conspirator Dragon",
+    "archives_of_nexus_id": 2935,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Horned Dragon",
+    "archives_of_nexus_id": 2947,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mammoth Land Star",
+    "archives_of_nexus_id": 3298,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pixiu",
+    "archives_of_nexus_id": 2781,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Desert Drake",
+    "archives_of_nexus_id": 2963,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sarglagon",
+    "archives_of_nexus_id": 2908,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Charnel Creation",
+    "archives_of_nexus_id": 2878,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sphinx",
+    "archives_of_nexus_id": 3205,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Trighoul",
+    "archives_of_nexus_id": 3765,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Triceratops",
+    "archives_of_nexus_id": 2921,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Phantom Beast",
+    "archives_of_nexus_id": 3136,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Chimera",
+    "archives_of_nexus_id": 2879,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Concert Frog",
+    "archives_of_nexus_id": 3281,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Hexmoth",
+    "archives_of_nexus_id": 3290,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Deathless Zealot of Zagresh",
+    "archives_of_nexus_id": 3767,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "War Aurochs",
+    "archives_of_nexus_id": 3771,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vampire Mastermind",
+    "archives_of_nexus_id": 3226,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Greater Hell Hound",
+    "archives_of_nexus_id": 3048,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Tardigrade",
+    "archives_of_nexus_id": 3316,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Deinosuchus",
+    "archives_of_nexus_id": 2888,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Doldrums Heap",
+    "archives_of_nexus_id": 3172,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stargut Hydra",
+    "archives_of_nexus_id": 3293,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Irnakurse",
+    "archives_of_nexus_id": 2998,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ifrit",
+    "archives_of_nexus_id": 3006,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stone Mauler",
+    "archives_of_nexus_id": 2979,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vescavor Queen",
+    "archives_of_nexus_id": 3228,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Leukodaemon",
+    "archives_of_nexus_id": 2893,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Megalodon",
+    "archives_of_nexus_id": 3189,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Adamantine Dragon",
+    "archives_of_nexus_id": 2932,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Mirage Dragon",
+    "archives_of_nexus_id": 2950,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Frost Giant",
+    "archives_of_nexus_id": 3013,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mummy Pharaoh",
+    "archives_of_nexus_id": 3102,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Nuckelavee",
+    "archives_of_nexus_id": 3110,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cuckoo Hag",
+    "archives_of_nexus_id": 3043,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Firewyrm",
+    "archives_of_nexus_id": 2983,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Noxious Needler",
+    "archives_of_nexus_id": 3109,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Roc",
+    "archives_of_nexus_id": 3170,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Five-Color Orchid Mantis",
+    "archives_of_nexus_id": 2779,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Soniphak",
+    "archives_of_nexus_id": 3269,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Therizinosaurus",
+    "archives_of_nexus_id": 3264,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Faydhaan",
+    "archives_of_nexus_id": 3005,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dragon Turtle",
+    "archives_of_nexus_id": 2956,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aoyin",
+    "archives_of_nexus_id": 2765,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Brontosaurus",
+    "archives_of_nexus_id": 2922,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vicharamuni",
+    "archives_of_nexus_id": 3104,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Heliocoprion",
+    "archives_of_nexus_id": 3308,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giant Flytrap",
+    "archives_of_nexus_id": 3000,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Clay Effigy",
+    "archives_of_nexus_id": 2881,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dezullon",
+    "archives_of_nexus_id": 2912,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Quetz Coatl",
+    "archives_of_nexus_id": 2882,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mammoth",
+    "archives_of_nexus_id": 2994,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Graveknight",
+    "archives_of_nexus_id": 3030,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Fortune Dragon",
+    "archives_of_nexus_id": 2944,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Empyreal Dragon",
+    "archives_of_nexus_id": 2941,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Nilith",
+    "archives_of_nexus_id": 3107,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Fire Giant",
+    "archives_of_nexus_id": 3014,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ofalth",
+    "archives_of_nexus_id": 3117,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ghost Mage",
+    "archives_of_nexus_id": 3008,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Raja-Krodha",
+    "archives_of_nexus_id": 3161,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rekhep",
+    "archives_of_nexus_id": 2835,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Chaos Falcon",
+    "archives_of_nexus_id": 3270,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tyrannosaurus",
+    "archives_of_nexus_id": 2923,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Troll Warleader",
+    "archives_of_nexus_id": 3220,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Phistophilus",
+    "archives_of_nexus_id": 2909,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rage Rider",
+    "archives_of_nexus_id": 3371,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Immortal Trickster",
+    "archives_of_nexus_id": 3405,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Omen Dragon",
+    "archives_of_nexus_id": 2954,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ascendant Griffon",
+    "archives_of_nexus_id": 3287,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Greater Nightmare",
+    "archives_of_nexus_id": 3106,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Deadly Mantis",
+    "archives_of_nexus_id": 3095,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gosreg",
+    "archives_of_nexus_id": 2931,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gongorinan",
+    "archives_of_nexus_id": 3155,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Stone Bulwark",
+    "archives_of_nexus_id": 3213,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pale Horse",
+    "archives_of_nexus_id": 3319,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Young Diabolic Dragon",
+    "archives_of_nexus_id": 2938,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sky Fisher",
+    "archives_of_nexus_id": 3310,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Nue",
+    "archives_of_nexus_id": 2776,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cloud Giant",
+    "archives_of_nexus_id": 3015,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Palpares",
+    "archives_of_nexus_id": 3768,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Goliath Spider",
+    "archives_of_nexus_id": 3209,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vibrant Pup Swarm",
+    "archives_of_nexus_id": 3321,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tyrafdir",
+    "archives_of_nexus_id": 3294,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Elemental Avalanche",
+    "archives_of_nexus_id": 2980,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Elemental Inferno",
+    "archives_of_nexus_id": 2984,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Elemental Tsunami",
+    "archives_of_nexus_id": 2992,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Elemental Hurricane",
+    "archives_of_nexus_id": 2976,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aso Berang",
+    "archives_of_nexus_id": 2766,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Akhana",
+    "archives_of_nexus_id": 2799,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Great Cyclops",
+    "archives_of_nexus_id": 2890,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Conspirator Dragon",
+    "archives_of_nexus_id": 2936,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Horned Dragon",
+    "archives_of_nexus_id": 2948,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gimmerling",
+    "archives_of_nexus_id": 3018,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gogiteth",
+    "archives_of_nexus_id": 3029,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gorumite Veteran",
+    "archives_of_nexus_id": 3373,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gorumite Warpriest",
+    "archives_of_nexus_id": 3374,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cauthooj",
+    "archives_of_nexus_id": 2870,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Lich",
+    "archives_of_nexus_id": 3082,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mythic Gogiteth",
+    "archives_of_nexus_id": 3400,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mythic Lich",
+    "archives_of_nexus_id": 3402,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sea Serpent",
+    "archives_of_nexus_id": 3177,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Omox",
+    "archives_of_nexus_id": 2898,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Paleohemoth",
+    "archives_of_nexus_id": 3133,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Plated Python",
+    "archives_of_nexus_id": 3286,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Desert Manticore",
+    "archives_of_nexus_id": 3299,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Peng",
+    "archives_of_nexus_id": 2780,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Shining Child",
+    "archives_of_nexus_id": 3190,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tardigrade Swarm",
+    "archives_of_nexus_id": 3317,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Shuln",
+    "archives_of_nexus_id": 3191,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Lightning Turtle",
+    "archives_of_nexus_id": 3284,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aeolaeka",
+    "archives_of_nexus_id": 2843,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Warcat of Rull",
+    "archives_of_nexus_id": 3772,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Adamantine Dragon",
+    "archives_of_nexus_id": 2933,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Mirage Dragon",
+    "archives_of_nexus_id": 2951,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Greater Chimera",
+    "archives_of_nexus_id": 3257,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Iron Warden",
+    "archives_of_nexus_id": 3068,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Quai Dau To",
+    "archives_of_nexus_id": 3158,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dryad Queen",
+    "archives_of_nexus_id": 3114,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Royal Basilisk",
+    "archives_of_nexus_id": 3255,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Frostripper",
+    "archives_of_nexus_id": 3375,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Cave Worm",
+    "archives_of_nexus_id": 2871,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Snow Oni",
+    "archives_of_nexus_id": 3122,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Shadow Giant",
+    "archives_of_nexus_id": 3016,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bul-Gae",
+    "archives_of_nexus_id": 2767,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Fortune Dragon",
+    "archives_of_nexus_id": 2945,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Empyreal Dragon",
+    "archives_of_nexus_id": 2942,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vidileth",
+    "archives_of_nexus_id": 2813,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gylou",
+    "archives_of_nexus_id": 2910,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Grikkitog",
+    "archives_of_nexus_id": 3035,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ijhyeojin",
+    "archives_of_nexus_id": 2783,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Caldera Oni",
+    "archives_of_nexus_id": 3123,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Kun",
+    "archives_of_nexus_id": 2774,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Frost Roc",
+    "archives_of_nexus_id": 3392,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Roc Rider",
+    "archives_of_nexus_id": 3372,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Augnagar",
+    "archives_of_nexus_id": 3156,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Gorumite Infantry",
+    "archives_of_nexus_id": 3376,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Crag Linnorm",
+    "archives_of_nexus_id": 3083,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Sunscale Serpent",
+    "archives_of_nexus_id": 3311,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tabellia",
+    "archives_of_nexus_id": 2817,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Joseung Saja",
+    "archives_of_nexus_id": 2782,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Alicorn",
+    "archives_of_nexus_id": 3320,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Adult Diabolic Dragon",
+    "archives_of_nexus_id": 2939,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Einherji Host",
+    "archives_of_nexus_id": 3390,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Dybbuk",
+    "archives_of_nexus_id": 2967,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Benthic Worm",
+    "archives_of_nexus_id": 2872,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Quelaunt",
+    "archives_of_nexus_id": 3159,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Morrigna",
+    "archives_of_nexus_id": 3149,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mukradi",
+    "archives_of_nexus_id": 3100,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "The First Blade",
+    "archives_of_nexus_id": 3391,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rumindrol",
+    "archives_of_nexus_id": 3303,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Seraptis",
+    "archives_of_nexus_id": 2899,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Weaver Of Webs",
+    "archives_of_nexus_id": 3410,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Phoenix",
+    "archives_of_nexus_id": 3137,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Blooming Guardian",
+    "archives_of_nexus_id": 3256,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Astradaemon",
+    "archives_of_nexus_id": 2894,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vatumledor",
+    "archives_of_nexus_id": 3398,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vilderavn",
+    "archives_of_nexus_id": 3229,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Giylea",
+    "archives_of_nexus_id": 2836,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Omen Dragon",
+    "archives_of_nexus_id": 2955,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bloody Hands",
+    "archives_of_nexus_id": 3393,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Lesser Death",
+    "archives_of_nexus_id": 3037,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Niesha",
+    "archives_of_nexus_id": 3385,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ordulf Bladecaller",
+    "archives_of_nexus_id": 3377,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Warsworn",
+    "archives_of_nexus_id": 3232,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Prismhydra",
+    "archives_of_nexus_id": 3295,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Rune Giant",
+    "archives_of_nexus_id": 3017,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Titanosaur",
+    "archives_of_nexus_id": 3265,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Shemhazian",
+    "archives_of_nexus_id": 2900,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Banshee",
+    "archives_of_nexus_id": 2845,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bandersnatch",
+    "archives_of_nexus_id": 2844,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Valkyrie Tempest",
+    "archives_of_nexus_id": 3397,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Conspirator Dragon",
+    "archives_of_nexus_id": 2937,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Horned Dragon",
+    "archives_of_nexus_id": 2949,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Keketar",
+    "archives_of_nexus_id": 3146,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Bloodfog",
+    "archives_of_nexus_id": 3389,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ice Linnorm",
+    "archives_of_nexus_id": 3084,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Island Oni",
+    "archives_of_nexus_id": 3124,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Thruneosaurus Rex",
+    "archives_of_nexus_id": 3266,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Aolaz",
+    "archives_of_nexus_id": 2826,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Barded Manticore",
+    "archives_of_nexus_id": 3300,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Adamantine Dragon",
+    "archives_of_nexus_id": 2934,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Mirage Dragon",
+    "archives_of_nexus_id": 2952,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Kraken",
+    "archives_of_nexus_id": 3075,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Magma Worm",
+    "archives_of_nexus_id": 2873,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Mocking Chorus",
+    "archives_of_nexus_id": 3296,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "The Caterpillar Carriage",
+    "archives_of_nexus_id": 2771,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Saint Fang",
+    "archives_of_nexus_id": 3394,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Silver Saber",
+    "archives_of_nexus_id": 3396,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Temperbrand",
+    "archives_of_nexus_id": 3395,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Thulgant",
+    "archives_of_nexus_id": 3157,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Skulltaker",
+    "archives_of_nexus_id": 3198,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Alktherisa and Omprisgor",
+    "archives_of_nexus_id": 3388,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Guthallath",
+    "archives_of_nexus_id": 3039,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Fortune Dragon",
+    "archives_of_nexus_id": 2946,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Empyreal Dragon",
+    "archives_of_nexus_id": 2943,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Terotricus",
+    "archives_of_nexus_id": 3215,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "The Great Flood",
+    "archives_of_nexus_id": 2769,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vrolikai",
+    "archives_of_nexus_id": 2901,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Ancient Diabolic Dragon",
+    "archives_of_nexus_id": 2940,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Nessari",
+    "archives_of_nexus_id": 2911,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Norn",
+    "archives_of_nexus_id": 3108,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tarn Linnorm",
+    "archives_of_nexus_id": 3085,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Pleroma",
+    "archives_of_nexus_id": 2811,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Yamaraj",
+    "archives_of_nexus_id": 3150,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Tor Linnorm",
+    "archives_of_nexus_id": 3086,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Vulot",
+    "archives_of_nexus_id": 3404,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Grim Reaper",
+    "archives_of_nexus_id": 3036,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Warden of Peaks and Skies",
+    "archives_of_nexus_id": 3328,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Warden of Forests and Meadows",
+    "archives_of_nexus_id": 3326,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Warden of Caverns and Burrows",
+    "archives_of_nexus_id": 3325,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Warden of Ocean and Rivers",
+    "archives_of_nexus_id": 3327,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Agyra",
+    "archives_of_nexus_id": 3406,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Verax-That-Was",
+    "archives_of_nexus_id": null,
+    "archives_of_nexus_page": null
+  },
+  {
+    "name": "Treerazer",
+    "archives_of_nexus_id": 3218,
+    "archives_of_nexus_page": "Monsters.aspx"
+  },
+  {
+    "name": "Oliphaunt Of Jandelay",
+    "archives_of_nexus_id": 3407,
+    "archives_of_nexus_page": "Monsters.aspx"
+  }
+]

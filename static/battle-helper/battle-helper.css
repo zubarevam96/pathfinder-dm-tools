@@ -236,10 +236,9 @@
 
 /* position: relative anchors the four resize controls; the generous
    padding is the gutter they sit in, so they never cover grid squares.
-   overflow: hidden (with the scrolling moved to .battle-map-viewport
-   inside) is what keeps them pinned to the BOX rather than scrolling away
-   with the map — an absolutely positioned child of a scrolling container
-   scrolls along with its content. */
+   overflow: hidden keeps a panned or zoomed-in map from spilling out over
+   the rest of the page, and keeps the controls pinned to the BOX rather
+   than travelling with the map. */
 .battle-box-map {
   position: relative;
   flex: 1;
@@ -247,29 +246,49 @@
   overflow: hidden;
 }
 
+/* overflow: hidden, not auto: panning is a transform on the canvas rather
+   than a scroll of this box (see panX/panY in battle-helper.js), because a
+   map smaller than its viewport has no scroll range to pan through — and
+   dragging a small map around is exactly what has to work. Nothing here
+   scrolls any more, so the scrollbars would only ever be dead weight.
+
+   grab is the resting cursor because every blank pixel of this box is a
+   pan handle; the canvas overrides it with its own cursor, and .panning
+   below takes over from both while a drag is actually running. */
 .battle-map-viewport {
   flex: 1;
   display: flex;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
+  cursor: grab;
+}
+
+/* Wins over .battle-grid and .battle-grid.tool-edit on specificity (three
+   classes to their one and two), so the whole box reads as grabbed mid-pan
+   instead of the canvas keeping its pointer/crosshair. */
+.battle-map-viewport.panning,
+.battle-map-viewport.panning .battle-grid {
+  cursor: grabbing;
 }
 
 /* margin: auto (not the parent's justify/align-content) centres the canvas
-   in the viewport — the flexbox way that still lets an oversized item
-   overflow scrollably in both directions instead of being clipped at the
-   start edge.
+   in the viewport — the flexbox way, which also degrades sanely once the
+   canvas outgrows the box (negative free space makes flexbox treat the
+   auto margins as 0, anchoring it at the start edge; panning is what
+   reaches the rest).
 
    The centring is load-bearing, not cosmetic: because the canvas grows
    from its centre, adding a column on the LEFT pushes the existing map
    half a square right while the pinned +/- button stays put, which is what
    produces the "the map slides away from the side I clicked" feel. Anchor
    the canvas to a corner instead and the effect disappears on two of the
-   four sides. */
+   four sides. It's also the zero point panX/panY offset from, and what
+   "fit map to view" resets to. */
 /* No max-width/max-height: the canvas is sized explicitly in px by
    drawGrid() from the current zoom, so it must be free to exceed the
-   viewport and scroll (that overflow is what panning drags around).
-   Auto-shrinking it to fit would silently override the zoom level. */
+   viewport (that overflow is what panning drags around). Auto-shrinking it
+   to fit would silently override the zoom level. */
 /* No border-radius: it clips canvas content, and the grid's outermost
    lines run right along the edge, so rounding shaved the corners off them.
    A battlefield grid wants square corners anyway. */
@@ -619,6 +638,65 @@
 
 .battle-add-object-form button {
   flex-shrink: 0;
+}
+
+/* Their own row below the custom-object form: that form is a text field
+   that wants the width, while these two open pickers with nothing to type
+   here. Equal halves so neither reads as the primary way in. */
+.battle-roster-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  flex-shrink: 0;
+}
+
+.battle-roster-actions button {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+}
+
+/* Copied to the clipboard and waiting for a paste. A dashed outline rather
+   than the solid one .armed uses — armed means "the next map click places
+   this", which is a different, stronger state that can be active at the
+   same time. */
+.battle-roster-item.copied {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+/* Opens the monster's Archives of Nethys page. Sized and shaped like the
+   roster's delete button so the two sit level in the row, but outlined
+   rather than solid — this one is a detour, not a destructive action. */
+.battle-roster-stats {
+  flex-shrink: 0;
+  width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.battle-roster-stats:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* The armed row turns solid accent, and this button sits on top of it —
+   re-declared so it stays legible instead of a grey-on-accent smudge. */
+.battle-roster-item.armed .battle-roster-stats {
+  background: transparent;
+  border-color: var(--accent-contrast);
+  color: var(--accent-contrast);
 }
 
 /* Left-aligned in reading order (Clear, then the title, then Undo/Redo
@@ -1251,6 +1329,142 @@
 .battle-condition-option.applied {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+/* --- Monster picker --- */
+
+.battle-monster-dialog {
+  width: min(30rem, 92vw);
+}
+
+.battle-monster-dialog input[type="search"] {
+  width: 100%;
+  margin-bottom: 0.5rem;
+}
+
+.battle-monster-options {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* Two sibling buttons per row — add, and preview the statblock. A row, not
+   a column like the condition options: a monster entry is just a name,
+   with no summary line under it. */
+.battle-monster-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.battle-monster-option {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  text-align: left;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.battle-monster-option:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.battle-monster-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Already in this battle. Outlined rather than filled, unlike the
+   condition picker's .applied — a count isn't a toggle state, and clicking
+   again adds another rather than taking one away. */
+.battle-monster-option.added {
+  border-color: var(--accent);
+}
+
+.battle-monster-count {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Already in this battle. Reuses the condition picker's .applied look,
+   since it means the same thing there — clicking again takes it back off. */
+.battle-monster-option.applied {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* An added character who's standing on the map: un-picking them here would
+   silently pull their token off, so the row says so instead. The global
+   button:hover has no :disabled guard, so the reset is what stops a
+   control that can't be clicked from lighting up as though it could. */
+.battle-monster-option:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.battle-monster-option:disabled:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* A group heading in the character picker — a plain <li>, not a row, so it
+   can't be clicked or tabbed into. */
+.battle-character-group {
+  margin-top: 0.4rem;
+  padding: 0.2rem 0.5rem 0.1rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.battle-character-group:first-child {
+  margin-top: 0;
+}
+
+.battle-monster-preview {
+  flex-shrink: 0;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.battle-monster-preview:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* The Character tab's statblock button, for a placed monster. Sits where
+   the "no additional stats" placeholder does for a plain custom object, so
+   the panel keeps the same shape either way. */
+.battle-monster-stats {
+  margin: 0 0 0.6rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
 }
 
 .battle-condition-option.applied .battle-condition-option-name::after {

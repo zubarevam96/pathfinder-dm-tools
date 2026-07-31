@@ -13,3 +13,4 @@ data/
 scripts/build_spell_data.py
 scripts/build_spell_entities.py
 scripts/build_item_entities.py
+scripts/build_monster_entities.py

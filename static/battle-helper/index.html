@@ -29,6 +29,10 @@
             <input type="text" id="battle-add-object-name" placeholder="Custom object name" maxlength="60" />
             <button type="submit" class="subtle">Add</button>
           </form>
+          <div class="battle-roster-actions">
+            <button type="button" id="battle-add-character" class="subtle">Add characters</button>
+            <button type="button" id="battle-add-monster" class="subtle">Add monster</button>
+          </div>
         </div>
         <div class="battle-box-section">
           <div class="battle-log-header">
@@ -49,31 +53,31 @@
             <canvas id="battle-grid" class="battle-grid"></canvas>
           </div>
           <div class="battle-tool-palette">
-            <button type="button" class="battle-tool-btn" data-tool="select" title="Select and move (drag tokens, drag empty space to pan)" aria-label="Select and move tool">&#8598;</button>
-            <button type="button" class="battle-tool-btn" data-tool="wall" title="Place walls (click near a cell edge to add or remove)" aria-label="Wall placer tool">&#9473;</button>
-            <button type="button" class="battle-tool-btn" data-tool="door" title="Place doors (click near a cell edge; two doors on neighbouring cells form a double door)" aria-label="Door placer tool">&#9647;</button>
-            <button type="button" class="battle-tool-btn" data-tool="terrain" title="Difficult terrain (click a square to toggle; entering one costs 5 extra feet)" aria-label="Difficult terrain tool">&#9652;</button>
+            <button type="button" class="battle-tool-btn" data-tool="select" title="Select and move — 1 (drag tokens, drag anywhere else to pan the map)" aria-label="Select and move tool">&#8598;</button>
+            <button type="button" class="battle-tool-btn" data-tool="wall" title="Place walls — 2 (click near a cell edge to add or remove; click the middle for a diagonal)" aria-label="Wall placer tool">&#9473;</button>
+            <button type="button" class="battle-tool-btn" data-tool="door" title="Place doors — 3 (click near a cell edge; two doors on neighbouring cells form a double door)" aria-label="Door placer tool">&#9647;</button>
+            <button type="button" class="battle-tool-btn" data-tool="terrain" title="Difficult terrain — 4 (click a square to toggle; entering one costs 5 extra feet)" aria-label="Difficult terrain tool">&#9652;</button>
           </div>
           <div class="battle-zoom-palette">
-            <button type="button" class="battle-zoom-btn" data-zoom="in" title="Zoom in" aria-label="Zoom in">+</button>
-            <button type="button" id="battle-zoom-reset" class="battle-zoom-btn" data-zoom="reset" title="Reset zoom to 100%" aria-label="Reset zoom to 100%">&#9678;</button>
-            <button type="button" class="battle-zoom-btn" data-zoom="out" title="Zoom out" aria-label="Zoom out">&minus;</button>
+            <button type="button" class="battle-zoom-btn" data-zoom="in" title="Zoom in (mouse wheel)" aria-label="Zoom in">+</button>
+            <button type="button" id="battle-zoom-reset" class="battle-zoom-btn" data-zoom="reset" title="Fit the whole map in view" aria-label="Fit the whole map in view">&#9678;</button>
+            <button type="button" class="battle-zoom-btn" data-zoom="out" title="Zoom out (mouse wheel)" aria-label="Zoom out">&minus;</button>
           </div>
           <div class="battle-grid-control battle-grid-control-top">
-            <button type="button" class="battle-grid-btn" data-side="top" data-delta="1" title="Add a row at the top" aria-label="Add a row at the top">+</button>
-            <button type="button" class="battle-grid-btn" data-side="top" data-delta="-1" title="Remove the top row" aria-label="Remove the top row">&minus;</button>
+            <button type="button" class="battle-grid-btn" data-side="top" data-delta="1" title="Add a row at the top (W)" aria-label="Add a row at the top">+</button>
+            <button type="button" class="battle-grid-btn" data-side="top" data-delta="-1" title="Remove the top row (Shift+W)" aria-label="Remove the top row">&minus;</button>
           </div>
           <div class="battle-grid-control battle-grid-control-bottom">
-            <button type="button" class="battle-grid-btn" data-side="bottom" data-delta="1" title="Add a row at the bottom" aria-label="Add a row at the bottom">+</button>
-            <button type="button" class="battle-grid-btn" data-side="bottom" data-delta="-1" title="Remove the bottom row" aria-label="Remove the bottom row">&minus;</button>
+            <button type="button" class="battle-grid-btn" data-side="bottom" data-delta="1" title="Add a row at the bottom (S)" aria-label="Add a row at the bottom">+</button>
+            <button type="button" class="battle-grid-btn" data-side="bottom" data-delta="-1" title="Remove the bottom row (Shift+S)" aria-label="Remove the bottom row">&minus;</button>
           </div>
           <div class="battle-grid-control battle-grid-control-left">
-            <button type="button" class="battle-grid-btn" data-side="left" data-delta="1" title="Add a column on the left" aria-label="Add a column on the left">+</button>
-            <button type="button" class="battle-grid-btn" data-side="left" data-delta="-1" title="Remove the left column" aria-label="Remove the left column">&minus;</button>
+            <button type="button" class="battle-grid-btn" data-side="left" data-delta="1" title="Add a column on the left (A)" aria-label="Add a column on the left">+</button>
+            <button type="button" class="battle-grid-btn" data-side="left" data-delta="-1" title="Remove the left column (Shift+A)" aria-label="Remove the left column">&minus;</button>
           </div>
           <div class="battle-grid-control battle-grid-control-right">
-            <button type="button" class="battle-grid-btn" data-side="right" data-delta="1" title="Add a column on the right" aria-label="Add a column on the right">+</button>
-            <button type="button" class="battle-grid-btn" data-side="right" data-delta="-1" title="Remove the right column" aria-label="Remove the right column">&minus;</button>
+            <button type="button" class="battle-grid-btn" data-side="right" data-delta="1" title="Add a column on the right (D)" aria-label="Add a column on the right">+</button>
+            <button type="button" class="battle-grid-btn" data-side="right" data-delta="-1" title="Remove the right column (Shift+D)" aria-label="Remove the right column">&minus;</button>
           </div>
         </section>
 
@@ -140,6 +144,55 @@
     <div class="dialog-actions">
       <button type="button" id="battle-condition-close">Close</button>
     </div>
+  </dialog>
+
+  <!-- Characters are picked into a battle rather than all being in the
+       roster at once, and are listed under the groups they belong to on the
+       main page. -->
+  <dialog id="battle-character-dialog" class="battle-monster-dialog">
+    <h2>Add characters</h2>
+    <input type="search" id="battle-character-filter" placeholder="Filter characters…" autocomplete="off" />
+    <ul id="battle-character-options" class="battle-monster-options"></ul>
+    <div class="dialog-actions">
+      <button type="button" id="battle-character-close">Close</button>
+    </div>
+  </dialog>
+
+  <dialog id="battle-monster-dialog" class="battle-monster-dialog">
+    <h2>Add monster</h2>
+    <input type="search" id="battle-monster-filter" placeholder="Filter monsters…" autocomplete="off" />
+    <ul id="battle-monster-options" class="battle-monster-options"></ul>
+    <div class="dialog-actions">
+      <button type="button" id="battle-monster-close">Close</button>
+    </div>
+  </dialog>
+
+  <!-- Renames a creature on the initiative track. Battle-local entities only
+       (custom objects and monsters) — a character's name belongs to their
+       sheet, and this page never writes to the character store. -->
+  <dialog id="battle-entity-rename-dialog">
+    <h2>Rename</h2>
+    <form id="battle-entity-rename-form" class="battle-rename-form">
+      <input type="text" id="battle-entity-rename-input" maxlength="60" required />
+      <button type="submit" class="subtle">Rename</button>
+    </form>
+    <div class="dialog-actions">
+      <button type="button" id="battle-entity-rename-close">Cancel</button>
+    </div>
+  </dialog>
+
+  <!-- Statblocks are read from Archives of Nethys in an iframe rather than
+       copied into this repo — same popup the main page uses for spells and
+       items, styled by ../style.css. -->
+  <dialog id="aon-dialog" class="aon-dialog">
+    <div class="aon-dialog-header">
+      <span id="aon-dialog-title"></span>
+      <div class="aon-dialog-actions">
+        <a id="aon-dialog-open-tab" href="#" target="_blank" rel="noopener">Open in new tab</a>
+        <button type="button" id="aon-dialog-close">Close</button>
+      </div>
+    </div>
+    <div id="aon-dialog-body"></div>
   </dialog>
 
   <dialog id="battle-rename-dialog">

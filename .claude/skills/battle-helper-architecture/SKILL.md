@@ -43,7 +43,8 @@ Everything `emptyBattleState()` returns, and nothing else:
 | `placements` | `squareKey -> entityId` | one entity per square |
 | `hp`, `tempHp` | `entityId -> number` | never max HP — see "State separation" |
 | `conditions` | `entityId -> { conditionId: { active, value } }` | |
-| `customObjects` | `id -> { name }` | |
+| `customObjects` | `id -> { name, monster? }` | `monster` = bestiary entry, for monsters |
+| `characterIds` | `characterId[]` | which characters are in THIS battle |
 | `initiative` | `entityId -> number` | the *number* |
 | `initiativeOrder` | `entityId[]` | the *display order*, independent |
 | `appearance` | `entityId -> { shape, letters, textColor, shapeColor }` | survives removal |
@@ -87,9 +88,9 @@ than leaving a half-undone board.
 
 Anything that only changes *what the UI is showing*: selection
 (`selectedSquareKey`), the active tool, zoom, pan, hover previews, which
-panel tab is open (`selectedObjectTab`), and Raise a Shield
-(`raisedShieldIds`). These set a plain module-level variable and call
-`render()` directly.
+panel tab is open (`selectedObjectTab`), Raise a Shield
+(`raisedShieldIds`), and the copy/paste `clipboard`. These set a plain
+module-level variable and call `render()` directly.
 
 The test: **if it wouldn't surprise a player to see it silently reappear
 after an undo, it's not an event.** Raise a Shield is the interesting case
@@ -118,7 +119,30 @@ none) is the only state undo/redo needs:
 The buttons are **hidden**, not disabled, when there's nothing in that
 direction.
 
-### The keyboard shortcut must yield to text fields
+### Keyboard shortcuts, and what they must yield to
+
+Two `keydown` listeners at `document` level: one for the Ctrl combos
+(undo/redo, copy/paste), one for the unmodified map keys — **Delete** to
+take the selected token off the field, **WASD** to grow the board on that
+side, **Shift+WASD** to shrink it, and the **digits** to pick an instrument
+by its position in the tool palette (see `references/map.md`).
+
+Every shortcut here has to get out of the way of something:
+
+- **Text fields.** Both listeners return early on `isTextEntry()`. Bare
+  letters make this critical rather than merely polite — without it,
+  typing "a" into the monster filter would grow the board.
+- **Open dialogs.** A modal traps focus but `keydown` still bubbles to
+  `document`, so the map keys also bail on `dialog[open]`. Otherwise
+  tabbing to a dialog button and pressing "d" silently resizes the board
+  behind the backdrop.
+- **Modifier combos.** The map listener ignores anything with Ctrl/Meta/
+  Alt held, so it can't shadow a browser shortcut.
+
+`Delete` and the Character tab's × both call `deleteSelectedToken()` —
+one event type, one piece of cleanup, no chance of the two drifting.
+
+### Ctrl+Z must yield to text fields
 
 Ctrl+Z is wired at `document` level, but it returns early — **before**
 `preventDefault()` — when the event target is a text-entry control, so the
@@ -318,6 +342,30 @@ why **max HP is never stored** — it's recomputed live every render, so if
 the sheet changes, the bar's max follows. (Drained complicates this; see
 "Conditions".)
 
+**Which characters are in a battle is battle state**, though —
+`characterIds`, filled from a picker that lists them under the same groups
+`renderSidebar()` uses on the main page (groups in store order, then
+"Ungrouped" for anything with no group *or* a group id that no longer
+resolves; keep the two in step). The roster shows only those, not everyone
+in the store — a DM running one encounter shouldn't scroll past three
+other parties.
+
+Removing a character from a battle is `remove-character`, and it only
+touches `characterIds` and their battle progress; the sheet is untouched
+and they can be re-picked. This is why the roster's × means two different
+things and spells out which in its `title`: for a battle-local entity it
+deletes the thing outright, for a character it just takes them out of this
+encounter.
+
+`battleCharacterIds()` reconciles the stored list against the store on
+read, dropping ids for characters deleted on the main page — the same
+read-time-only fixup as `initiativeOrderIds()`, returning a corrected list
+without writing one back. A save from before `characterIds` existed is
+seeded in `normalizeState()` from the characters *actually placed* in that
+battle, not from the whole store: anything else would refill every old
+battle's roster with people who were never in it, which is the mess the
+change was made to avoid.
+
 HP, temp HP, initiative and conditions are keyed by **entity id, not
 square**, so they survive a move. All are cleared on `remove-token` and
 `place-token` — leaving the field is a full reset. `currentHp()` /
@@ -330,32 +378,116 @@ mutate outside `dispatch()`.
 **Appearance is the exception** — it survives `remove-token` (see
 `references/map.md`).
 
-## Custom objects
+## Custom objects and monsters
 
-Name-only entities the DM adds on this page (a trap, a hazard, a prop),
-living in `battleState.customObjects` rather than the character store,
-since they have no existence outside this battle.
+Battle-local entities the DM adds on this page, living in
+`battleState.customObjects` rather than the character store, since they
+have no existence outside this battle. Two flavours, one storage:
 
-**`findEntity(id)` is the one place that resolves either kind**, returning
-a uniform `{ id, name, build, isCustom }` with `build: null` for custom
-objects. Everything generic — token drawing, initiative, roster, the
-object panel, placement — goes through it rather than
-`loadCharacters().find(...)`, so a custom object behaves exactly like a
-character everywhere without a parallel set of code paths. The one
-exception is the HP dialog, which only ever opens from the full character
-panel, so `hpDialogCharacterId` can never hold a custom object's id.
+- **Custom objects** — name only (a trap, a hazard, a prop).
+- **Monsters** — the same, plus `monster`, the bestiary entry they came
+  from. Deliberately **not** a third entity kind: everything custom
+  objects already do — placement, initiative, conditions, appearance,
+  removal, deletion, renaming — then works for monsters with no parallel
+  code paths.
 
-`renderCharacterTab()` branches on `!entity.build`: a custom object (or,
-defensively, a character missing sheet data) gets name + remove button +
-conditions, no HP bar or stat grid. Both branches share
-`bindRemoveButton()` so removal behaves identically.
+`monster` is the *statblock reference*, which is not the same as `name`:
+renaming "Goblin Warrior 2" to "Sneaky Pete" must keep pointing at the
+same statblock, so rename spreads the existing object rather than
+replacing it, and the monster count in the picker tallies by `monster`,
+not by name.
 
-**Deleting** a custom object (the red × in the roster) is distinct from
-removing it from the field: removal un-places it but keeps the definition
-so it reappears in the roster; deletion erases it for good. Only custom
-objects get this — real characters are managed on the main page. Its
-handler calls `stopPropagation()`, since it's nested inside the `<li>`
-whose own click arms the entity for placement.
+**`findEntity(id)` is the one place that resolves any of them**, returning
+a uniform `{ id, name, build, isCustom, monsterName }` with `build: null`
+for battle-local entities. Everything generic — token drawing, initiative,
+roster, the object panel, placement — goes through it rather than
+`loadCharacters().find(...)`. The one exception is the HP dialog, which
+only ever opens from the full character panel, so `hpDialogCharacterId`
+can never hold a battle-local id.
+
+`renderCharacterTab()` branches on `!entity.build`: name + remove button +
+conditions, no HP bar or stat grid, plus a statblock button when
+`monsterName` is set. Both branches share `bindRemoveButton()`.
+
+**Naming.** `uniqueEntityName(base)` gives the first of a kind the bare
+name and only numbers subsequent ones ("Goblin Warrior", "Goblin Warrior
+2"), so a lone monster doesn't read as one of a set. It checks against
+*every* name in the battle, characters included, so a monster can't
+collide with one. Freed numbers get reused rather than counting ever
+upward.
+
+**Copy/paste** (Ctrl+C / Ctrl+V over the roster or the initiative track)
+copies a *description* — base name plus statblock reference — not an
+entity id, so copying something and then deleting it still pastes. The
+base comes from `baseEntityName()`, which strips a trailing number, so
+pasting "Goblin Warrior 4" continues the series instead of producing
+"Goblin Warrior 4 2"; for a monster the base is its statblock name, so a
+renamed one still pastes as its own kind.
+
+Characters aren't duplicable — there is one Tumb, his sheet lives in the
+main store, and a battle-local "Tumb 2" would be a name with no stats
+behind it. Pasting a copied character instead **adds them to the current
+battle**, which makes Ctrl+C/Ctrl+V the way to carry someone between
+battle tabs; the clipboard deliberately survives `setActiveBattle()` for
+exactly that, while the "copied" row highlight doesn't.
+
+The shortcut only calls `preventDefault()` once it's actually going to do
+something, so a Ctrl+V with an empty clipboard falls through to the
+browser instead of becoming a dead key. It also defers to a non-collapsed
+text selection on Ctrl+C — if the DM highlighted a name to copy, that's
+what they meant.
+
+**Renaming** works for battle-local entities only, by double-clicking a
+row in the initiative track. A character's name belongs to their sheet,
+and this page never writes to the character store — the row's `title`
+says which case it is, so a double-click that does nothing isn't a
+mystery. The listener is delegated to the `<ul>` for the same reason the
+battle tabs' rename is; see "Avoiding a broken dblclick" below.
+
+**Deleting** (the red × in the roster) is distinct from removing from the
+field: removal un-places an entity but keeps the definition so it
+reappears in the roster; deletion erases it for good. Its handler calls
+`stopPropagation()`, since it's nested inside the `<li>` whose own click
+arms the entity for placement — the monster statblock button beside it
+needs the same guard for the same reason.
+
+### Statblocks come from Archives of Nethys, not from here
+
+`static/monster-data/monsters.json` (built by
+`scripts/build_monster_entities.py`, gitignored like the other data build
+scripts) maps a monster name to an AoN page. Clicking a monster opens that
+page in an iframe popup — the same `openAonPopup()` the main app uses for
+spells and items, with the dialog markup and CSS shared via `style.css`.
+
+Two things differ from the item pipeline:
+
+- **Creatures aren't all on one page type.** Items resolve to a fixed page
+  per category (armor → `Armor.aspx`), so the app stores only an id.
+  Creatures are split across `Monsters.aspx` and `NPCs.aspx` with nothing
+  in the name to say which, so the page is stored per monster. Id and page
+  are always written together — a half-resolved entry would build a broken
+  URL.
+- **Picking the right AoN document is harder.** A creature name routinely
+  matches the legacy Bestiary entry, its Monster Core replacement, and
+  sometimes an adventure reprint. "Prefer no `remaster_id`" narrows it but
+  doesn't finish — an adventure reprint has none either. The build script
+  then filters on the source table's level/HP/AC, and finally prefers a
+  core rulebook over an adventure module.
+
+No statblock numbers are copied into this repo, so a monster token
+currently carries no HP or AC of its own. That's a deliberate deferral,
+not an oversight — `data/monsters.txt` has both columns whenever monster
+HP tracking is wanted.
+
+### Avoiding a broken dblclick
+
+Any list whose rows are replaced on every `render()` **cannot** carry its
+own `dblclick` handler. The first click re-renders (selecting an entity,
+switching a battle), so the two clicks land on different nodes and the
+browser dispatches `dblclick` on their nearest common ancestor instead of
+the row. Delegate to the stable parent — `tabList` for battles,
+`initiativeList` for the track — and attach it once, outside the render
+function.
 
 ## Initiative track
 
