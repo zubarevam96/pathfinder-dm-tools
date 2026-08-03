@@ -720,9 +720,23 @@ skill is just the attribute modifier already shown above it, and eighteen
 such rows would bury the handful that matter. That matches what a monster
 statblock lists.
 
-Still TODO by request, though the **data is now present** for both: the
-secondary speeds (in `stats.speedText`, e.g. `"30 feet, climb 30 feet"` —
-shown in the Speed tooltip but not broken out) and Recall Knowledge
+**Secondary speeds are broken out of `stats.speedText`** by `parseSpeeds()`,
+which splits the prose ("20 feet, climb 20 feet, swim 20 feet") on commas
+and reads an optional movement type off the front of each part. The walk
+speed is seeded from `stats.speed`, not the prose, so it stays the value the
+rest of the panel agrees with. Anything not matching an optional type plus a
+number is **dropped** — that's what keeps the trailing special abilities the
+same field carries ("; unfettered movement", "earth glide"), and the one
+creature whose entry caught a page of scraped AoN navigation, from rendering
+as nameless speeds. Across the corpus this yields 557 walk, 171 fly, 104
+swim, 85 climb and 34 burrow, with no unrecognised types.
+
+Condition modifiers apply to **every** speed, not just walking: PF2e's Speed
+penalties hit all your Speeds, and a slowed dragon showing an unmodified fly
+speed beside a modified walk speed would be the panel disagreeing with
+itself.
+
+Still TODO by request, though the **data is now present**: Recall Knowledge
 (`abilities.recallKnowledge`, e.g. `"DC 15 • Animal (Nature)"` — parsed and
 shipped, not yet displayed anywhere).
 
@@ -760,14 +774,23 @@ sit at opposite ends of a `space-between` row inside a box that is only as
 wide as the bottom-left region. It has no spare room; adding a control there
 pushes something else off the end.
 
-- **The level is a `<sup>` on the name**, not a separate "Lvl N" label —
-  the label was spending horizontal space the row doesn't have. Name and
-  `<sup>` share a `.battle-stat-name-wrap` so the identity row's `gap`
-  falls between the name and Speed rather than between the name and its own
-  superscript. That wrapper must **not** be `display: flex`: `vertical-align`
-  is ignored on flex items, which would drop the superscript to the baseline.
-  The `<sup>` is a *sibling* of the name, not a child — inside the monster
-  case's `<button>` it would join the click target.
+- **The level stacks above the name**, centred on it, in a
+  `.battle-stat-name-block` column — not a "Lvl N" label beside it, which
+  was spending horizontal space the row doesn't have. Stacking costs the row
+  no width at all, which is what an earlier `<sup>` on the name was for; the
+  column replaced it and is why `.battle-stat-name-wrap` no longer has to
+  avoid `display: flex`. The level is a *sibling* of the name, never a
+  child — inside the monster case's `<button>` it would join the click
+  target. It carries its own `"lvl "` prefix, because a name that may itself
+  end in a number ("Giant Gecko 4") sits directly beneath it.
+- **`min-width: 0` has to continue down the whole chain** —
+  `.battle-stat-left`, `.battle-stat-identity`, `.battle-stat-name-block`,
+  `.battle-stat-name-wrap`. A flex item's default `min-width` is
+  `min-content`, so the name's ellipsis only works if every step allows
+  shrinking.
+- **Speeds are icon + number chips**, one per movement type
+  (`.battle-stat-speeds` / `.battle-speed`), not the words "Speed 25 ft".
+  All of them are `flex-shrink: 0`; the name is what gives way.
 - **A monster's name IS the statblock link** (`.battle-stat-name-link`, a
   `<button>` styled back down to look like the text it replaces). A separate
   icon button beside Speed used to do this and was crowding the row. Its

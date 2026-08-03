@@ -179,12 +179,16 @@
   align-items: stretch;
 }
 
+/* Tight padding on purpose: these boxes are small and every box on the page
+   was spending most of a line of text on inset before its first control.
+   .battle-box-map overrides this with its own generous gutter, which is
+   holding the resize handles rather than being breathing room. */
 .battle-box {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  padding: 0.85rem 1rem;
+  padding: 0.4rem 0.5rem;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -772,13 +776,16 @@
    the square is occupied, so switching views never resizes the box. */
 .battle-object-tabs {
   display: flex;
-  gap: 0.25rem;
-  margin-bottom: 0.6rem;
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
   border-bottom: 1px solid var(--border);
 }
 
+/* The first tab's own left padding sat on top of the box's inset, so the
+   strip started well inside the box's corner. It's small enough now that
+   the tab label lines up with the content below it. */
 .battle-object-tab {
-  padding: 0.25rem 0.7rem;
+  padding: 0.15rem 0.45rem;
   border: 1px solid transparent;
   border-bottom: 2px solid transparent;
   border-radius: 4px 4px 0 0;
@@ -1089,14 +1096,26 @@
   gap: 0.5rem;
 }
 
-/* Deliberately NOT display:flex — the level is a <sup>, and vertical-align
-   is ignored on a flex item, which would drop the superscript back onto the
-   baseline. Normal inline flow inside this one wrapper is what keeps it
-   raised while .battle-stat-identity stays a flex row around it.
+/* Level over name, both centred on each other. A column rather than the
+   <sup> this replaced: stacking costs the header row no horizontal space,
+   which is the whole reason the level was a superscript before.
 
-   This is also the one thing in the header that gives way: a long name
-   ellipsizes rather than pushing Speed and the HP bar off the end. */
+   min-width: 0 continues the shrink chain from .battle-stat-left through
+   .battle-stat-identity — a flex item's default min-width is min-content,
+   so the ellipsis below only works if every step allows shrinking. */
+.battle-stat-name-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}
+
+/* The one thing in the header that gives way: a long name ellipsizes rather
+   than pushing the speeds and the HP bar off the end. Stays non-flex so the
+   ellipsis applies to its inline content. */
 .battle-stat-name-wrap {
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1133,25 +1152,44 @@
   text-decoration: underline;
 }
 
-/* Level rides as a superscript on the name rather than a separate "Lvl N"
-   label, which was spending horizontal room the header row doesn't have.
-   font-size is set explicitly because <sup>'s default `smaller` compounds
-   awkwardly; the title spells out "Level N" since a bare number next to a
-   name that may itself end in one ("Giant Gecko 4") needs saying. */
+/* Carries its own "lvl " prefix in the markup rather than a bare number: a
+   name that may itself end in one ("Giant Gecko 4") sits directly beneath
+   it, and two loose numbers in a column would read as one thing. */
 .battle-stat-level {
-  margin-left: 0.15rem;
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   font-weight: 600;
-  color: var(--muted);
-}
-
-/* flex-shrink: 0 — Speed is three short words; trimming it buys nothing and
-   reads as broken, so the name absorbs the loss instead. */
-.battle-stat-speed {
-  flex-shrink: 0;
-  font-size: 0.78rem;
+  letter-spacing: 0.04em;
   color: var(--muted);
   white-space: nowrap;
+}
+
+/* flex-shrink: 0 — the speeds are already down to an icon and a number
+   each; trimming them buys almost nothing and would cut a number in half,
+   so the name absorbs the loss instead. */
+.battle-stat-speeds {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.battle-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+}
+
+/* Sized against the number beside it and filled with currentColor, so a
+   speed a condition has moved tints its icon along with its digits — see
+   .stat-value.penalized / .buffed, which .battle-speed also takes. */
+.speed-icon {
+  height: 0.95em;
+  width: auto;
+  fill: currentColor;
+  flex: none;
 }
 
 .battle-remove-btn {
@@ -1624,8 +1662,8 @@
 .battle-stat-grid {
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(66px, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: repeat(2, minmax(46px, 1fr));
+  gap: 0.25rem;
 }
 
 /* --- Abilities panel (bottom-right) ---
@@ -1796,22 +1834,27 @@
   font-size: 0.9rem;
 }
 
+/* Deliberately compact — four of these sit beside the conditions list in a
+   220px-tall box, and at their old size they were the tallest thing in it.
+   The labels are abbreviated in renderCharacterTab() for the same reason;
+   each tile's title carries the full name. */
 .battle-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.35rem;
+  padding: 0.1rem 0.15rem;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 5px;
+  line-height: 1.15;
 }
 
 .battle-stat .stat-label {
-  font-size: 0.62rem;
+  font-size: 0.52rem;
 }
 
 .battle-stat .stat-value {
-  font-size: 1.05rem;
+  font-size: 0.82rem;
 }
 
 /* --- Values conditions have moved ---

@@ -2252,6 +2252,70 @@ function entityAbilities(entity) {
   };
 }
 
+// One icon per movement type, so four speeds fit where "Speed 15 ft" used
+// to sit for one. Same conventions as ACTION_ICONS: a 100-unit viewBox,
+// currentColor, em-sized, <title> for both the accessible name and the
+// tooltip. Default (nonzero) fill rule, not evenodd — the wing's feathers
+// overlap deliberately and evenodd would punch holes where they cross.
+const SPEED_ICON_ART = {
+  walk: "M28 6H60V40C60 49 66 54 75 57L87 62C93 64 96 69 96 76C96 84 90 90 82 90H28Z",
+  climb: "M22 8H34V92H22ZM66 8H78V92H66ZM34 24H66V36H34ZM34 44H66V56H34ZM34 64H66V76H34Z",
+  fly: "M14 26Q56 8 97 20Q56 34 14 37ZM13 33Q52 24 92 42Q52 51 13 44ZM13 41Q47 40 80 63Q45 63 13 51ZM14 49Q41 55 61 80Q36 73 13 57Z",
+  burrow: "M38 6H62V40H78L50 70L22 40H38ZM6 78H94V92H6Z",
+};
+
+// Swim is the one drawn with a stroke: a wave is a line, and outlining one
+// as a closed shape reads as a ribbon rather than water.
+const SPEED_ICON_SWIM =
+  '<path d="M6 42C20 28 34 28 48 42S76 56 92 42" fill="none" stroke="currentColor"'
+  + ' stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>'
+  + '<path d="M6 70C20 56 34 56 48 70S76 84 92 70" fill="none" stroke="currentColor"'
+  + ' stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>';
+
+const SPEED_LABELS = {
+  walk: "Speed",
+  climb: "Climb",
+  fly: "Fly",
+  swim: "Swim",
+  burrow: "Burrow",
+};
+
+const SPEED_ICONS = Object.fromEntries(
+  Object.keys(SPEED_LABELS).map((kind) => [
+    kind,
+    `<svg class="speed-icon" viewBox="0 0 100 100" role="img">`
+      + `<title>${SPEED_LABELS[kind]}</title>`
+      + (kind === "swim" ? SPEED_ICON_SWIM : `<path d="${SPEED_ICON_ART[kind]}"/>`)
+      + `</svg>`,
+  ]),
+);
+
+// AoN publishes every speed as one prose string with the walk speed leading
+// and unlabelled: "20 feet, climb 20 feet, swim 20 feet". Split on commas
+// and read the movement type off the front of each part.
+//
+// Anything that doesn't start with an optional type and a number is
+// dropped, which is what keeps the trailing special abilities the same
+// field carries ("; unfettered movement", "earth glide") — and the one
+// creature whose entry caught a page-full of scraped AoN navigation — from
+// rendering as nameless speeds.
+const SPEED_PART = /^(?:(climb|fly|swim|burrow)\s+)?(\d+)\s*(?:feet|ft\b)/i;
+
+function parseSpeeds(speedText, walkSpeed) {
+  const found = new Map();
+  // Seeded from stats.speed rather than the prose, because that's the value
+  // the rest of the panel agrees with; a duplicate walk speed in the text
+  // is then ignored rather than overwriting it.
+  if (walkSpeed != null) found.set("walk", walkSpeed);
+  for (const part of (speedText ?? "").split(",")) {
+    const match = part.trim().match(SPEED_PART);
+    if (!match) continue;
+    const kind = (match[1] ?? "walk").toLowerCase();
+    if (!found.has(kind)) found.set(kind, Number(match[2]));
+  }
+  return [...found].map(([kind, feet]) => ({ kind, feet }));
+}
+
 // The character or custom object standing on the selected square — sheet
 // numbers and conditions. Not the marker drawn for them; that's
 // renderTokenTab() below.
@@ -2344,27 +2408,30 @@ function renderCharacterTab(objectBody) {
   // the shield is a circumstance bonus, so it and a status penalty from
   // e.g. frightened both count. baseAc here is "AC before conditions".
   const baseAc = stats.ac == null ? null : stats.ac + (shieldRaised ? shieldBonus : 0);
+  // Speed can't go below 0 however much is stacked on it; the clamp lives
+  // with the other speeds further down, where every movement type gets it.
   const baseSpeed = stats.speed;
-  // Speed can't go below 0 however much is stacked on it, and it's shown
-  // as a plain number of feet rather than a signed modifier.
-  const speed = baseSpeed == null ? null : Math.max(0, baseSpeed + mods.speed.total);
 
   // Each save/Perception tile is the same shape, so build them from one
   // list instead of four near-identical lines of template literal. A stat
   // the source didn't publish shows an em dash rather than a plausible
   // "+0" — a monster with no listed Will save has an unknown one, not a
   // zero one, and the difference matters at the table.
+  // `short` is what the tile prints; `label` stays the full name for the
+  // tooltip and the condition breakdown. "PERCEPTION" spelled out is what
+  // was setting the tile width, and these four are the only stats here —
+  // the abbreviations aren't ambiguous against anything.
   const checks = [
-    { label: "Fortitude", base: stats.fortitude, modifier: mods.fortitude },
-    { label: "Reflex", base: stats.reflex, modifier: mods.reflex },
-    { label: "Will", base: stats.will, modifier: mods.will },
-    { label: "Perception", base: stats.perception, modifier: mods.perception },
-  ].map(({ label, base, modifier }) => {
+    { label: "Fortitude", short: "FORT", base: stats.fortitude, modifier: mods.fortitude },
+    { label: "Reflex", short: "REF", base: stats.reflex, modifier: mods.reflex },
+    { label: "Will", short: "WILL", base: stats.will, modifier: mods.will },
+    { label: "Perception", short: "PERC", base: stats.perception, modifier: mods.perception },
+  ].map(({ label, short, base, modifier }) => {
     if (base == null) {
-      return `<div class="battle-stat"><span class="stat-label">${label}</span><span class="stat-value unknown" title="Not published for this creature">&mdash;</span></div>`;
+      return `<div class="battle-stat" title="${label}"><span class="stat-label">${short}</span><span class="stat-value unknown" title="Not published for this creature">&mdash;</span></div>`;
     }
     const hint = modifierHint(label, base, modifier);
-    return `<div class="battle-stat"><span class="stat-label">${label}</span><span class="stat-value ${modifierClass(modifier)}"${hint ? ` title="${escapeHtml(hint)}"` : ""}>${formatMod(base + modifier.total)}</span></div>`;
+    return `<div class="battle-stat" title="${escapeHtml(hint || label)}"><span class="stat-label">${short}</span><span class="stat-value ${modifierClass(modifier)}">${formatMod(base + modifier.total)}</span></div>`;
   }).join("");
 
   const ac = baseAc == null ? null : baseAc + mods.ac.total;
@@ -2379,17 +2446,24 @@ function renderCharacterTab(objectBody) {
   const hpTitle = hasHp
     ? ["Click to adjust HP", maxHpHint].filter(Boolean).join("\n\n")
     : "No published HP for this creature";
-  // A monster's prose speed ("25 feet, fly 40 feet") goes in the tooltip:
-  // the panel shows one number, and one number can't say a dragon flies.
+  // Every movement type the creature has, as an icon and a number each.
+  // A dragon's fly speed used to be readable only by hovering for the prose
+  // tooltip; the panel now shows all of them and still takes less room than
+  // "Speed 25 ft" did, because the word and the unit are gone.
+  //
+  // The condition modifier applies to every speed, not just walking: PF2e's
+  // Speed penalties are penalties to all your Speeds, and showing a slowed
+  // dragon an unmodified fly speed beside a modified walk speed would be
+  // the panel disagreeing with itself.
   const speedTitle = [stats.speedText, speedHint].filter(Boolean).join("\n\n");
-  // Speed and max HP sit in running text rather than in a .stat-value slot
-  // of their own, so they're only wrapped when a condition actually moved
-  // them — otherwise they keep exactly the bare-number markup they had
-  // before conditions existed, with no empty class attribute.
-  let speedText;
-  if (speed == null) speedText = '<span class="unknown" title="Not published for this creature">&mdash;</span>';
-  else if (mods.speed.total || speedTitle) speedText = `<span class="${modifierClass(mods.speed)}" title="${escapeHtml(speedTitle)}">${speed} ft</span>`;
-  else speedText = `${speed} ft`;
+  const speeds = parseSpeeds(stats.speedText, baseSpeed)
+    .map(({ kind, feet }) => ({ kind, feet: Math.max(0, feet + mods.speed.total) }));
+  const speedsHtml = speeds.length
+    ? speeds.map(({ kind, feet }) => {
+      const hint = [`${SPEED_LABELS[kind]} ${feet} feet`, speedHint].filter(Boolean).join("\n\n");
+      return `<span class="battle-speed ${modifierClass(mods.speed)}" title="${escapeHtml(hint)}">${SPEED_ICONS[kind]}${feet}</span>`;
+    }).join("")
+    : `<span class="battle-speed unknown" title="Not published for this creature">${SPEED_ICONS.walk}&mdash;</span>`;
   const maxHpText = mods.maxHp.total
     ? `<span class="${modifierClass(mods.maxHp)} on-fill">${maxHp}</span>`
     : `${maxHp}`;
@@ -2417,13 +2491,16 @@ function renderCharacterTab(objectBody) {
       <div class="battle-stat-left">
         <button id="battle-remove-token" class="battle-remove-btn" title="Remove from field" aria-label="Remove from field">&times;</button>
         <div class="battle-stat-identity">
-          <!-- Name and level share one inline wrapper so the flex gap falls
-               between the name and Speed, not between the name and its own
-               superscript. The <sup> is a sibling, not a child of the name:
-               inside the monster case's <button> it would make the level
-               part of the click target. -->
-          <span class="battle-stat-name-wrap">${nameHtml}<sup class="battle-stat-level" title="Level ${stats.level ?? 1}">${stats.level ?? 1}</sup></span>
-          <span class="battle-stat-speed">Speed ${speedText}</span>
+          <!-- Level stacks above the name rather than riding it as a
+               superscript: a column costs the tight header row no
+               horizontal space at all, which is what the <sup> was there to
+               save. It stays a sibling of the name, never a child — inside
+               the monster case's <button> it would join the click target. -->
+          <div class="battle-stat-name-block">
+            <span class="battle-stat-level">lvl ${stats.level ?? 1}</span>
+            <span class="battle-stat-name-wrap">${nameHtml}</span>
+          </div>
+          <span class="battle-stat-speeds" title="${escapeHtml(speedTitle)}">${speedsHtml}</span>
         </div>
       </div>
       <div class="battle-stat-right">
