@@ -184,11 +184,19 @@
    .battle-box-map overrides this with its own generous gutter, which is
    holding the resize handles rather than being breathing room. */
 .battle-box {
+  /* Exposed as custom properties, not just a padding shorthand, because
+     .battle-object-tabs cancels them with negative margins to sit flush
+     against the box's top and sides. Kept in one place so the two can't
+     drift. (.battle-box-map overrides `padding` without these — it holds no
+     tabs, and its inset is the resize-handle gutter, not padding.) */
+  --box-pad-y: 0.4rem;
+  --box-pad-x: 0.5rem;
+
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  padding: 0.4rem 0.5rem;
+  padding: var(--box-pad-y) var(--box-pad-x);
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -474,10 +482,21 @@
   height: 220px;
 }
 
+/* No top padding, unlike every other box: these two open with the sticky
+   tab strip, which has to be able to sit flush against the border. Any top
+   padding here becomes a band that scrolled content shows through above the
+   strip — the strip can't cover it, because a sticky box is held inside the
+   scrollport by its MARGIN box, so pulling it up with a negative margin
+   just pushes its visible border box back down by the same amount. Removing
+   the padding is the fix; cancelling it is not.
+
+   The placeholder that shows when no square is selected keeps the <p>'s own
+   default margin, so it isn't left flush against the border. */
 .battle-box-bottom-left,
 .battle-box-bottom-right {
   flex: 1;
   min-width: 0;
+  padding-top: 0;
   overflow-y: auto;
 }
 
@@ -774,10 +793,32 @@
    and the token it's drawn as on the map. The strip is rendered whenever a
    square is selected, regardless of which view is showing and of whether
    the square is occupied, so switching views never resizes the box. */
+/* Pinned to the top of its box, which is the element that scrolls (see
+   .battle-box-bottom-left/right's overflow-y) — so a long spell list or
+   ability list scrolls under the tabs instead of taking them off screen.
+   The strip is a direct child of that scroll container, so `top: 0` needs no
+   wrapper.
+
+   The negative margins are HORIZONTAL ONLY, and stretch the strip the full
+   width of the box so scrolled content can't show through beside it; the
+   padding puts that inset back inside the strip, so the tabs still line up
+   with the content below. There is deliberately no negative top margin: a
+   sticky box is held in the scrollport by its margin box, so a negative
+   top margin would push its visible border box down by that much and open
+   a band of scrolled content above it. The box drops its own padding-top
+   instead — see .battle-box-bottom-left/right.
+
+   The opaque background and the z-index are what make this a lid rather
+   than a transparent overlay. */
 .battle-object-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   gap: 0.15rem;
-  margin-bottom: 0.35rem;
+  margin: 0 calc(-1 * var(--box-pad-x)) 0.35rem;
+  padding: 0.15rem var(--box-pad-x) 0;
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
@@ -1855,6 +1896,173 @@
 
 .battle-stat .stat-value {
   font-size: 0.82rem;
+}
+
+/* --- Spells tab (bottom-right) ---
+   A caster block per spellcasting class, then one row per spell level:
+   label, slot pips, spells. Focus spells collapse into a single row keyed
+   "focus", since Focus Points are one pool rather than per-level slots. */
+.battle-spell-caster + .battle-spell-caster {
+  margin-top: 0.45rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--border);
+}
+
+.battle-spell-caster-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-bottom: 0.2rem;
+}
+
+.battle-spell-caster-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+}
+
+.battle-spell-caster-meta {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+/* Tighter than the shared list's spacing, which is set for the Actions
+   tab's multi-line strike entries; a spell level is one line. */
+.battle-spell-caster .battle-ability-list {
+  gap: 0.25rem;
+}
+
+/* One line per level: label, then slots, then the spells. Stacking the
+   spells under the label cost a whole row per level and left cantrips —
+   which have no slots to show — sitting beside a blank one. */
+.battle-spell-level {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+/* Fixed minimum so every row's spells start at the same x, whatever mix of
+   label width and slot count precedes them. flex-shrink: 0 with a min-width
+   rather than a fixed basis: a caster with more slots than this fits grows
+   its own row instead of overlapping its spells. */
+.battle-spell-level-head {
+  flex-shrink: 0;
+  min-width: 5.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.battle-spell-level-label {
+  flex-shrink: 0;
+  min-width: 1.1rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.battle-spell-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.22rem;
+}
+
+/* An unspent slot blooms: filled blue with a soft halo, so a row's
+   remaining resources are countable from across the table. A spent one
+   drops to a flat grey ring — deliberately still visible rather than
+   removed, because "2 of 4 left" is the thing being read, and pips that
+   vanished would make the row change width as they were used.
+
+   Sized in rem, not em: these sit next to 0.68rem labels but need to stay a
+   comfortable click target. */
+.battle-spell-slot {
+  width: 0.72rem;
+  height: 0.72rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.battle-spell-slot.on {
+  background: var(--spell-slot);
+  border-color: var(--spell-slot);
+  box-shadow: 0 0 0 2px var(--spell-slot-glow);
+}
+
+/* Re-declares background AND border-color: style.css's global button:hover
+   sets both, and the cascade resolves per property, so a rule that only
+   brightened would still get the accent wash over the blue. See
+   "Overriding the global button:hover" in the battle-helper-architecture
+   skill. */
+.battle-spell-slot:hover {
+  background: var(--bg);
+  border-color: var(--spell-slot);
+}
+
+.battle-spell-slot.on:hover {
+  background: var(--spell-slot);
+  border-color: var(--spell-slot);
+  filter: brightness(1.15);
+}
+
+.battle-spell-chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.battle-spell-chip {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.66rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.battle-spell-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Pushed to the far right of the tab strip — the panel's top-right corner
+   — so refreshing costs no vertical room in a 220px box. Kept shorter than
+   the tabs beside it so it can't be what sets the strip's height, which is
+   what stops it nudging the layout when the Spells tab appears. */
+.battle-spell-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-left: auto;
+  align-self: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.battle-spell-refresh:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent);
+}
+
+.refresh-icon {
+  height: 0.8rem;
+  width: 0.8rem;
+  fill: currentColor;
 }
 
 /* --- Values conditions have moved ---

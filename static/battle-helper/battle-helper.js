@@ -359,7 +359,7 @@ function fitMapToView() {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, spellSlots: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -664,6 +664,42 @@ async function loadMonsterList() {
     // Non-fatal: the roster's "Add monster" button just finds nothing to
     // offer, and every other feature on the page is unaffected.
   }
+}
+
+// Spell name -> AoN id, from the committed static/spell-data/*.json the
+// main app already ships. Loaded lazily on the first render of a Spells
+// tab, memoised so N renders cause one load, and re-rendering once it
+// arrives — the same shape as loadMonsterAbilities(), and for the same
+// reason: a session that never selects a caster never fetches it.
+//
+// Until it lands (or if it fails) every chip falls back to AoN search,
+// which resolves a spell by name reliably enough to be a real fallback
+// rather than a broken link. That's why nothing here needs a loading state.
+let spellIdMap = {};
+let spellIdPromise = null;
+
+function loadSpellIds() {
+  if (spellIdPromise) return spellIdPromise;
+  spellIdPromise = Promise.all(
+    ["cantrips", "spells", "focals"].map((file) => fetch(`../spell-data/${file}.json`)
+      .then((response) => (response.ok ? response.json() : []))
+      .catch(() => [])),
+  ).then((lists) => {
+    for (const entities of lists) {
+      for (const entity of entities) {
+        if (entity.archives_of_nexus_id != null) spellIdMap[entity.name] = entity.archives_of_nexus_id;
+      }
+    }
+    render();
+  });
+  return spellIdPromise;
+}
+
+function spellUrl(name) {
+  const id = spellIdMap[name];
+  return id != null
+    ? `${AON_BASE}/Spells.aspx?ID=${id}`
+    : `${AON_BASE}/Search.aspx?q=${encodeURIComponent(name)}`;
 }
 
 // A monster AoN had nothing for has a null id and falls back to AoN's search
@@ -1635,6 +1671,7 @@ function renderRoster() {
           delete state.initiative[id];
           delete state.appearance[id];
           delete state.conditions[id];
+          delete state.spellSlots[id];
         });
       } else {
         removeCharacterFromBattle(id, entity.name);
@@ -1664,6 +1701,7 @@ function placeEntity(entityId, key) {
     else delete state.hp[entityId];
     delete state.tempHp[entityId];
     delete state.conditions[entityId];
+    delete state.spellSlots[entityId];
     state.initiativeOrder.push(entityId);
   });
   return true;
@@ -1699,6 +1737,7 @@ function removeCharacterFromBattle(characterId, name) {
     delete state.hp[characterId];
     delete state.tempHp[characterId];
     delete state.conditions[characterId];
+    delete state.spellSlots[characterId];
     delete state.initiative[characterId];
   });
   raisedShieldIds.delete(characterId);
@@ -1910,21 +1949,121 @@ function renderSquareTab(objectBody) {
   });
 }
 
-// Bottom-right box: what the selected creature can DO, as opposed to what
-// it is. Two tabs, split the way a DM reaches for them: Actions is the
-// in-combat page (strikes, then special abilities), Proficiencies is the
-// out-of-combat one (attribute modifiers and skills).
+// A character's spells, in the same shape static/app.js reads them from a
+// Pathbuilder build — one entry per caster, each with the levels that
+// actually hold spells. Returns null for anything with no spells at all,
+// which is what hides the Spells tab.
 //
-// TODO, deliberately left for now: the secondary speeds (climb, fly, swim —
-// present unparsed in stats.speedText) and Recall Knowledge DCs.
+// Monsters never reach here: the build script parses strikes and special
+// abilities out of a statblock but not spell lists, so a monster's spells
+// aren't in the data at all. entity.build is the gate.
+//
+// `perDay` is indexed by spell level, so perDay[3] is how many level-3
+// slots per day. Cantrips (level 0) are unlimited and deliberately get no
+// slot row — a cantrip you can cast all day has nothing to count down.
+function entitySpells(entity) {
+  const build = entity?.build;
+  if (!build) return null;
+
+  const casters = (build.spellCasters ?? []).map((caster, index) => ({
+    // The index, not the name, keys the slots: two casters can share a
+    // name, and renaming one in Pathbuilder shouldn't silently hand its
+    // spent slots to the other.
+    key: String(index),
+    name: caster.name || "Spells",
+    meta: [caster.magicTradition, caster.spellcastingType].filter(Boolean).join(" · "),
+    levels: (caster.spells ?? [])
+      .filter((entry) => entry.list?.length)
+      .map((entry) => ({
+        level: entry.spellLevel,
+        spells: entry.list,
+        slots: entry.spellLevel > 0 ? (caster.perDay?.[entry.spellLevel] ?? 0) : 0,
+      })),
+  })).filter((caster) => caster.levels.length);
+
+  // Focus spells are one shared pool of Focus Points rather than per-level
+  // slots, so they collapse to a single row however many traditions grant
+  // them — which is also how the character sheet presents them.
+  const focusSpells = [];
+  for (const byAbility of Object.values(build.focus ?? {})) {
+    for (const data of Object.values(byAbility)) {
+      focusSpells.push(...(data.focusCantrips ?? []), ...(data.focusSpells ?? []));
+    }
+  }
+  if (focusSpells.length) {
+    casters.push({
+      key: "focus",
+      name: "Focus Spells",
+      meta: "",
+      levels: [{ level: "focus", spells: focusSpells, slots: build.focusPoints ?? 0 }],
+    });
+  }
+
+  return casters.length ? casters : null;
+}
+
+// Spent slots are battle progress, so they live in battleState and move
+// through dispatch() like HP — one Ctrl+Z puts a slot back. Stored as
+// entityId -> "casterKey:level" -> [bool], true meaning spent.
+//
+// Read with a clamp rather than being written back into shape: a character
+// who levels up gains slots, and reconciling on read is the same
+// "don't write outside dispatch()" pattern initiativeOrderIds() uses.
+function spellSlotKey(casterKey, level) {
+  return `${casterKey}:${level}`;
+}
+
+function spellSlotsSpent(entityId, casterKey, level, count) {
+  const spent = battleState.spellSlots?.[entityId]?.[spellSlotKey(casterKey, level)] ?? [];
+  return Array.from({ length: count }, (_, i) => spent[i] === true);
+}
+
+function toggleSpellSlot(entityId, entityName, casterKey, level, index, levelLabel) {
+  const key = spellSlotKey(casterKey, level);
+  const wasSpent = battleState.spellSlots?.[entityId]?.[key]?.[index] === true;
+  dispatch(
+    "toggle-spell-slot",
+    `${entityName} ${wasSpent ? "regained" : "spent"} a ${levelLabel} slot`,
+    (state) => {
+      const forEntity = (state.spellSlots[entityId] ??= {});
+      const slots = (forEntity[key] ??= []);
+      slots[index] = !wasSpent;
+    },
+  );
+}
+
+// Deleting the entity's whole record IS the refresh: an absent record reads
+// as every slot unspent, so there's nothing to rebuild from the character's
+// current slot counts — which also means a refresh can't bake in a stale
+// count from before they levelled.
+function refreshSpellSlots(entityId, entityName) {
+  dispatch("refresh-spell-slots", `${entityName} regained all spell slots`, (state) => {
+    delete state.spellSlots[entityId];
+  });
+}
+
+// Bottom-right box: what the selected creature can DO, as opposed to what
+// it is. Three tabs, split the way a DM reaches for them: Actions is the
+// in-combat page (strikes, then special abilities), Spells is the other
+// in-combat one and appears only for a creature that has any, and
+// Proficiencies is the out-of-combat page (attribute modifiers and skills).
+//
+// TODO, deliberately left for now: Recall Knowledge DCs.
 const ABILITY_TAB_ACTIONS = "actions";
+const ABILITY_TAB_SPELLS = "spells";
 const ABILITY_TAB_PROFICIENCIES = "proficiencies";
 let selectedAbilityTab = ABILITY_TAB_ACTIONS;
 
-const ABILITY_TABS = [
-  { id: ABILITY_TAB_ACTIONS, label: "Actions" },
-  { id: ABILITY_TAB_PROFICIENCIES, label: "Proficiencies" },
-];
+// Built per entity rather than being a constant, because the Spells tab is
+// only there for a spellcaster. Order is fixed: Spells sits between the two
+// tabs that are always present, so neither of them moves when it appears.
+function abilityTabsFor(spells) {
+  return [
+    { id: ABILITY_TAB_ACTIONS, label: "Actions" },
+    ...(spells ? [{ id: ABILITY_TAB_SPELLS, label: "Spells" }] : []),
+    { id: ABILITY_TAB_PROFICIENCIES, label: "Proficiencies" },
+  ];
+}
 
 function renderAbilitiesPanel() {
   if (!selectedSquareKey) {
@@ -1952,12 +2091,28 @@ function renderAbilitiesPanel() {
     return;
   }
 
+  const spells = entitySpells(entity);
+  const tabs = abilityTabsFor(spells);
+  // Stepping from a caster to a fighter with Spells showing would otherwise
+  // leave a tab selected that isn't in the strip — no tab looks active and
+  // the body falls through to Actions anyway. Fall back explicitly.
+  const activeTab = tabs.some((t) => t.id === selectedAbilityTab)
+    ? selectedAbilityTab
+    : ABILITY_TAB_ACTIONS;
+
   // Same tab markup and classes as the bottom-left box, so the two boxes
-  // read as one pattern rather than two inventions.
+  // read as one pattern rather than two inventions. The refresh control is
+  // pushed to the far right of the same strip, so it sits in the panel's
+  // top-right corner without costing a row of its own in a 220px box; it's
+  // rendered only on the Spells tab, and being last with margin-left:auto
+  // means adding it moves none of the tabs.
   abilitiesPanel.innerHTML = `
     <div class="battle-object-tabs" role="tablist">
-      ${ABILITY_TABS.map(({ id, label }) => `
-        <button type="button" class="battle-object-tab${selectedAbilityTab === id ? " active" : ""}" data-ability-tab="${id}" role="tab" aria-selected="${selectedAbilityTab === id}">${label}</button>`).join("")}
+      ${tabs.map(({ id, label }) => `
+        <button type="button" class="battle-object-tab${activeTab === id ? " active" : ""}" data-ability-tab="${id}" role="tab" aria-selected="${activeTab === id}">${label}</button>`).join("")}
+      ${activeTab === ABILITY_TAB_SPELLS
+        ? `<button type="button" id="battle-refresh-spells" class="battle-spell-refresh" title="Refresh all spell slots (daily preparations)" aria-label="Refresh all spell slots">${REFRESH_ICON}</button>`
+        : ""}
     </div>
     <div id="battle-ability-body" class="battle-object-body"></div>
   `;
@@ -1971,8 +2126,91 @@ function renderAbilitiesPanel() {
   }
 
   const body = document.getElementById("battle-ability-body");
-  if (selectedAbilityTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities);
+  if (activeTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities);
+  else if (activeTab === ABILITY_TAB_SPELLS) renderSpellsTab(body, entity, spells);
   else renderActionsTab(body, abilities);
+
+  if (activeTab === ABILITY_TAB_SPELLS) {
+    document.getElementById("battle-refresh-spells").addEventListener("click", () => {
+      refreshSpellSlots(entityId, entity.name);
+    });
+  }
+}
+
+// Circular arrow. Same conventions as the action and speed icons: a
+// 100-unit viewBox, currentColor, em-sized. The arrowhead is deliberately
+// oversized against the ring — at the ~16px this renders at, a
+// proportionate one disappears and the icon reads as a plain circle.
+const REFRESH_ICON =
+  '<svg class="refresh-icon" viewBox="0 0 100 100" role="img" aria-hidden="true">'
+  + '<path d="M64 30A29 29 0 1 1 36 26" fill="none" stroke="currentColor" stroke-width="15"/>'
+  + '<path d="M62 6L60 46L26 22Z"/></svg>';
+
+// One row per spell level: the level's name, its slot pips, then the spells
+// themselves. Clicking a pip spends or regains that slot.
+//
+// Slots are per caster AND per level, so a sorcerer/wizard multiclass burns
+// each independently — hence the caster key in every slot id.
+function renderSpellsTab(body, entity, spells) {
+  const entityId = entity.id;
+  loadSpellIds();
+  const casterBlocks = spells.map((caster) => {
+    const rows = caster.levels.map(({ level, spells: list, slots }) => {
+      // Bare number in the column, spelled out in the tooltips: the column
+      // is a list of levels and repeating the word in every row was what
+      // made it wide. Cantrips and Focus keep their names — they aren't
+      // numbered, so there's nothing to read them as.
+      const label = level === "focus" ? "Focus" : level === 0 ? "Cantrips" : String(level);
+      const longLabel = level === "focus" ? "Focus spells" : level === 0 ? "Cantrips" : `Level ${level}`;
+      const spent = spellSlotsSpent(entityId, caster.key, level, slots);
+      // Cantrips get no pips at all rather than an empty row — the absence
+      // is the point, and a lone label reads as "no cost" better than zero
+      // pips would.
+      const pips = slots > 0
+        ? `<span class="battle-spell-slots">${spent.map((isSpent, i) => `
+            <button type="button" class="battle-spell-slot${isSpent ? "" : " on"}"
+              data-caster="${escapeHtml(caster.key)}" data-level="${escapeHtml(String(level))}" data-index="${i}"
+              title="${longLabel} slot ${i + 1} of ${slots} — ${isSpent ? "spent, click to regain" : "available, click to spend"}"
+              aria-pressed="${!isSpent}"></button>`).join("")}</span>`
+        : "";
+      const chips = list.map((name) => `<button type="button" class="battle-spell-chip" data-spell="${escapeHtml(name)}" title="${escapeHtml(name)} on Archives of Nethys">${escapeHtml(name)}</button>`).join("");
+      return `
+        <li class="battle-spell-level">
+          <span class="battle-spell-level-head">
+            <span class="battle-spell-level-label" title="${longLabel}">${label}</span>
+            ${pips}
+          </span>
+          <span class="battle-spell-chips">${chips}</span>
+        </li>`;
+    }).join("");
+
+    return `
+      <div class="battle-spell-caster">
+        <div class="battle-spell-caster-head">
+          <span class="battle-spell-caster-name">${escapeHtml(caster.name)}</span>
+          ${caster.meta ? `<span class="battle-spell-caster-meta">${escapeHtml(caster.meta)}</span>` : ""}
+        </div>
+        <ul class="battle-ability-list">${rows}</ul>
+      </div>`;
+  }).join("");
+
+  body.innerHTML = `<div class="battle-ability-body">${casterBlocks}</div>`;
+
+  for (const pip of body.querySelectorAll(".battle-spell-slot")) {
+    pip.addEventListener("click", () => {
+      const { caster, level, index } = pip.dataset;
+      const label = level === "focus" ? "Focus" : `level ${level}`;
+      toggleSpellSlot(entityId, entity.name, caster, level, Number(index), label);
+    });
+  }
+
+  // Same AoN popup a monster's name opens, so a spell's rules are one click
+  // away rather than a switch to the other app.
+  for (const chip of body.querySelectorAll(".battle-spell-chip")) {
+    chip.addEventListener("click", () => {
+      openAonPopup(spellUrl(chip.dataset.spell), chip.dataset.spell);
+    });
+  }
 }
 
 function renderActionsTab(body, { strikes, special }) {
@@ -4042,6 +4280,7 @@ function resizeGrid(side, delta) {
       delete state.hp[entityId];
       delete state.tempHp[entityId];
       delete state.conditions[entityId];
+      delete state.spellSlots[entityId];
       delete state.initiative[entityId];
       // Appearance deliberately survives, exactly as it does for a normal
       // remove-token — it's the entity's visual identity, not battle
@@ -4428,6 +4667,7 @@ function deleteSelectedToken() {
     delete state.hp[entityId];
     delete state.tempHp[entityId];
     delete state.conditions[entityId];
+    delete state.spellSlots[entityId];
     delete state.initiative[entityId];
     state.initiativeOrder = state.initiativeOrder.filter((id) => id !== entityId);
   });

@@ -43,6 +43,7 @@ Everything `emptyBattleState()` returns, and nothing else:
 | `placements` | `squareKey -> entityId` | one entity per square |
 | `hp`, `tempHp` | `entityId -> number` | never max HP — see "State separation" |
 | `conditions` | `entityId -> { conditionId: { active, value } }` | |
+| `spellSlots` | `entityId -> { "casterKey:level": bool[] }` | `true` = spent; read with a clamp, never written back into shape |
 | `customObjects` | `id -> { name, monster? }` | `monster` = bestiary entry, for monsters |
 | `characterIds` | `characterId[]` | which characters are in THIS battle |
 | `initiative` | `entityId -> number` | the *number* |
@@ -217,12 +218,34 @@ inside this structure rather than adding top-level regions.
     shape says nothing about a creature's Fortitude save. Only the Square
     tab has no "empty square" state; an empty square is still a square.
   - **Bottom-right, `#battle-abilities-panel`** (`renderAbilitiesPanel()`)
-    — what that creature can *do*, as two tabs split by when a DM reaches
-    for them. **Actions** (`renderActionsTab()`): strikes, then named
-    special abilities — the in-combat page. **Proficiencies**
-    (`renderProficienciesTab()`): attribute modifiers and skills — the
-    out-of-combat one. It reuses the left box's `.battle-object-tabs`
-    markup and classes deliberately: one tab pattern on the page, not two.
+    — what that creature can *do*, as tabs split by when a DM reaches for
+    them. **Actions** (`renderActionsTab()`): strikes, then named special
+    abilities — the in-combat page. **Spells** (`renderSpellsTab()`): spell
+    levels, slots and lists — also in-combat, and **present only when
+    `entitySpells()` finds any**, which makes it the one conditional tab on
+    the page. **Proficiencies** (`renderProficienciesTab()`): attribute
+    modifiers and skills — the out-of-combat one. Its tab list is built per
+    entity by `abilityTabsFor()`, with Spells fixed *between* the two
+    always-present tabs so neither moves when it appears; when the selection
+    changes to something with no spells, the active tab falls back to
+    Actions explicitly rather than leaving nothing selected. It reuses the
+    left box's `.battle-object-tabs` markup and classes deliberately: one
+    tab pattern on the page, not two.
+
+**The `.battle-object-tabs` strip is sticky** in both bottom boxes, which
+are themselves the scroll containers. Two things about that are easy to get
+wrong and were both hit:
+
+- A sticky box is held in the scrollport by its **margin box**, so a
+  negative `margin-top` (to close the gap under the box's padding) pushes
+  its *visible* border box down by the same amount and opens a band that
+  scrolled content shows through. The fix is for the box to drop its
+  `padding-top`, not for the strip to cancel it. Hence
+  `.battle-box-bottom-left/right { padding-top: 0 }`.
+- The strip's negative margins are **horizontal only**, cancelling
+  `--box-pad-x` so it spans the full width — without that, content scrolls
+  visibly through the padding gutters beside it. `--box-pad-x`/`--box-pad-y`
+  exist on `.battle-box` for exactly this, so the two can't drift.
 
 The bottom boxes split by **is vs. does**, which is what decides where new
 UI goes. Anything describing the selection — the creature, its token, the
@@ -739,6 +762,34 @@ itself.
 Still TODO by request, though the **data is now present**: Recall Knowledge
 (`abilities.recallKnowledge`, e.g. `"DC 15 • Animal (Nature)"` — parsed and
 shipped, not yet displayed anywhere).
+
+### Spells are a character-only tab
+
+`entitySpells()` reads `build.spellCasters` / `build.focus` in the same shape
+`static/app.js` does, and returns `null` — hiding the tab — for anything with
+no spells. **Monsters never have any**: the build script parses strikes and
+special abilities out of a statblock but not spell lists, so `entity.build`
+is the gate.
+
+Slots are keyed `"casterKey:level"`, where the caster key is its **index**,
+not its name: two casters can share a name, and renaming one in Pathbuilder
+must not hand its spent slots to the other. `perDay` is indexed by spell
+level. Cantrips (level 0) deliberately get **no** slot pips — unlimited
+casting has nothing to count down — and focus spells collapse to one row
+keyed `focus`, because Focus Points are a single pool rather than per-level
+slots.
+
+Spending a slot is a `dispatch()`ed event like HP, so Ctrl+Z puts it back,
+and `spellSlots` is cleared everywhere the other per-entity progress is
+(place, remove, delete, remove-from-battle, resize eviction). **Refresh
+deletes the entity's whole record** rather than rebuilding it full: an absent
+record already reads as all-unspent, so a refresh can't bake in a slot count
+from before the character levelled.
+
+Spell names open the AoN popup via `spellUrl()`, backed by a lazily loaded,
+memoised map from the committed `static/spell-data/*.json`. Until it arrives
+— or if it fails — chips fall back to AoN search, which resolves a spell by
+name well enough that no loading state is needed.
 
 ### One stat block, two kinds of entity
 

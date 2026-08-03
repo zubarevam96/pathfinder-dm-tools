@@ -14,6 +14,12 @@
   --success: #2e7d32;
   --danger: #b00020;
   --shadow: 0 1px 3px #0002;
+
+  /* An unspent spell slot. Deliberately NOT --accent: a slot is a resource
+     you are counting down, not a control, and against this palette's warm
+     crimson a cool blue is the one hue that can't be mistaken for it. */
+  --spell-slot: #2563eb;
+  --spell-slot-glow: #2563eb59;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -30,6 +36,11 @@
     --success: #66bb6a;
     --danger: #ef5350;
     --shadow: 0 1px 3px #0006;
+
+    /* Lifted well above the light theme's blue: the same #2563eb on this
+       near-black surface reads as a dark hole rather than a lit pip. */
+    --spell-slot: #60a5fa;
+    --spell-slot-glow: #60a5fa4d;
   }
 }
 
