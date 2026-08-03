@@ -1982,26 +1982,29 @@ function renderActionsTab(body, { strikes, special }) {
   const strikeRows = strikes.map((s) => `
     <li class="battle-ability-strike">
       <span class="battle-ability-strike-head">
-        ${s.action ? `<span class="battle-ability-action" title="${escapeHtml(s.action)}">${actionGlyph(s.action)}</span>` : ""}
+        ${s.action ? `<span class="battle-ability-action">${actionIcon(s.action)}</span>` : ""}
         ${s.kind ? `<span class="battle-ability-kind">${escapeHtml(s.kind)}</span>` : ""}
         <span class="battle-ability-name">${escapeHtml(s.name)}</span>
         <span class="battle-ability-bonus">${formatMod(s.bonus)}</span>
         ${s.map ? `<span class="battle-ability-map" title="Multiple attack penalty: second and third attacks this round">[${s.map.map(formatMod).join(" / ")}]</span>` : ""}
       </span>
       ${s.traits?.length ? `<span class="battle-ability-traits">${s.traits.map((t) => `<span class="battle-ability-trait">${escapeHtml(t)}</span>`).join("")}</span>` : ""}
-      ${s.damage ? `<span class="battle-ability-damage">${escapeHtml(s.damage)}</span>` : ""}
+      ${s.damage ? `<span class="battle-ability-damage">${withActionIcons(escapeHtml(s.damage))}</span>` : ""}
     </li>
   `).join("");
 
-  const specialRows = special.map((a) => `
+  const specialRows = special.map((a) => {
+    const { name, action } = splitActionFromName(a.name, a.action);
+    return `
     <li class="battle-ability-special">
       <span class="battle-ability-special-head">
-        ${a.action ? `<span class="battle-ability-action" title="${escapeHtml(a.action)}">${actionGlyph(a.action)}</span>` : ""}
-        <span class="battle-ability-name">${escapeHtml(a.name)}</span>
+        ${action ? `<span class="battle-ability-action">${actionIcon(action)}</span>` : ""}
+        <span class="battle-ability-name">${escapeHtml(name)}</span>
       </span>
       ${a.text ? `<span class="battle-ability-text">${abilityText(a.text)}</span>` : ""}
     </li>
-  `).join("");
+  `;
+  }).join("");
 
   body.innerHTML = `
     <div class="battle-ability-body">
@@ -2044,28 +2047,113 @@ function renderProficienciesTab(body, { attributes, skills }) {
   `;
 }
 
-// AoN writes the sub-headings inside an ability's text as **bold** runs
-// ("**Trigger** ... **Effect** ..."). Rendered rather than shown literally,
-// but through an explicit escape-then-replace: the text is third-party
-// data, so it goes through escapeHtml() first and only the bold markers are
-// promoted back to tags afterwards.
-function abilityText(text) {
-  return escapeHtml(text).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-}
-
-// PF2e's action symbols. The font Archives of Nethys uses isn't available
-// here, so these are the closest stable glyphs: one/two/three pips for
-// actions, an arrow for a reaction, an infinity for free.
-const ACTION_GLYPHS = {
-  "Single Action": "◆",
-  "Two Actions": "◆◆",
-  "Three Actions": "◆◆◆",
-  "Reaction": "↺",
-  "Free Action": "◇",
+// PF2e's action symbols as SVG. AoN's action font isn't available here, and
+// the Unicode stand-ins these replace ("◆◆◆", "↺") read as arbitrary
+// decoration beside the symbols a PF2e player already knows.
+//
+// Traced from the Pathfinder action-card artwork rather than drawn by hand:
+// a diamond pip followed by one chevron per action, a looping arrow for a
+// reaction, and a knocked-out diamond for a free action.
+//
+// Every icon is a 100-unit-tall viewBox with only the width changing, and
+// all five share one scale taken from the source sheet — which is why the
+// reaction is drawn shorter than the chevrons here, exactly as it is on the
+// cards, and is centred in its box rather than stretched to fill it.
+//
+// One <path> each, with fill-rule evenodd. The source art builds the free
+// action from white shapes painted over a black diamond; evenodd turns
+// those into real holes instead, so the icon works on any background.
+//
+// Filled with currentColor rather than a fixed colour, so an icon takes the
+// colour of whatever text it sits in — which is what keeps them right in
+// both themes without a second set of rules.
+//
+// The sheet has no three-action card. Its third chevron is the second one
+// carried through the same affine that maps the first chevron onto the
+// second (the art steps each one down slightly and to the right), so the
+// progression continues instead of a third copy sitting at a guessed size.
+const ACTION_ICON_ART = {
+  "one-action": [100, "M 25.79,23.78 L 51.58,49.57 L 25.79,75.36 L 50.43,100 L 76.22,74.21 L 82.5,67.93 L 100,50.43 L 49.57-0 Z M 0,49.57 L 17.76,31.81 L 35.53,49.57 L 17.76,67.34 Z"],
+  "two-actions": [153.28, "M 25.79,23.78 L 51.58,49.57 L 25.79,75.36 L 50.43,100 C 66.95,83.48 83.48,66.95 100,50.43 L 49.57-0 Z M 89.55,27.49 L 111.62,49.57 L 89.78,71.41 L 110.52,92.15 C 126.09,76.58 137.71,64.96 153.28,49.4 L 110.46,6.58 Z M 0,49.57 L 17.76,31.81 L 35.53,49.57 L 17.76,67.33 Z"],
+  "three-actions": [198.83, "M 25.79,23.78 L 51.58,49.57 L 25.79,75.36 L 50.43,100 C 66.95,83.48 83.48,66.95 100,50.43 L 49.57-0 Z M 89.55,27.49 L 111.62,49.57 L 89.78,71.41 L 110.52,92.15 C 126.09,76.58 137.71,64.96 153.28,49.4 L 110.46,6.58 Z M 144.13,29.46 L 163.18,47.88 L 144.63,66.99 L 162.53,84.3 C 175.75,70.68 185.61,60.51 198.83,46.89 L 161.88,11.16 Z M 0,49.57 L 17.76,31.81 L 35.53,49.57 L 17.76,67.33 Z"],
+  reaction: [97.77, "M 0,35.01 C 0,35.01 9.72,10.21 52.92,10.21 C 81.44,10.21 97.77,27.47 97.77,47 C 97.77,74.49 52.61,76.77 52.61,76.77 C 49.46,77.96 58.6,85.28 61.5,89.79 L 13.44,80.28 L 57.26,54.03 C 55.59,60.9 48.82,73.39 52.3,73.15 C 52.3,73.15 75.45,65.09 75.45,48.35 C 75.45,34.08 54.78,23.13 40.93,23.13 C 11.16,23.13 0,35.01 0,35.01 Z"],
+  "free-action": [99.99, "M 0,49.58 L 49.57,0 L 99.99,50.42 L 50.42,100 Z M 35.42,25.48 L 50.26,10.64 L 90.01,50.39 L 51.12,89.27 L 35.44,73.59 L 59.48,49.55 Z M 11.39,49.56 L 25.05,35.9 L 38.71,49.56 L 25.05,63.23 Z"],
 };
 
-function actionGlyph(action) {
-  return ACTION_GLYPHS[action] ?? escapeHtml(action);
+const ACTION_LABELS = {
+  "one-action": "Single Action",
+  "two-actions": "Two Actions",
+  "three-actions": "Three Actions",
+  reaction: "Reaction",
+  "free-action": "Free Action",
+};
+
+// <title> rather than an aria-label: it gives the icon an accessible name
+// AND a native hover tooltip, which is the pair the old markup needed a
+// separate title attribute on the wrapping span to get.
+const ACTION_ICONS = Object.fromEntries(
+  Object.entries(ACTION_ICON_ART).map(([key, [width, d]]) => [
+    key,
+    `<svg class="action-icon" viewBox="0 0 ${width} 100" role="img">`
+      + `<title>${ACTION_LABELS[key]}</title>`
+      + `<path fill-rule="evenodd" d="${d}"/></svg>`,
+  ]),
+);
+
+// The `action` field on a strike or special ability, spelled as AoN spells
+// it. Anything unrecognised falls through to its own text rather than
+// silently rendering no icon at all.
+const ACTION_ICON_KEYS = {
+  "Single Action": "one-action",
+  "Two Actions": "two-actions",
+  "Three Actions": "three-actions",
+  Reaction: "reaction",
+  "Free Action": "free-action",
+};
+
+// Takes either spelling: an AoN `action` field ("Two Actions") or the token
+// key used in its text ("two-actions"). Anything unrecognised falls through
+// to its own text rather than silently rendering nothing.
+function actionIcon(action) {
+  const key = ACTION_ICON_KEYS[action] ?? (ACTION_ICONS[action] ? action : null);
+  return key ? ACTION_ICONS[key] : escapeHtml(action);
+}
+
+// AoN writes an action cost mid-text as a bracketed token — "[reaction]",
+// "[one-action]". Square brackets aren't touched by escaping, so this runs
+// on already-escaped text and the pattern still matches: the input is
+// third-party data and must never reach innerHTML unescaped.
+const ACTION_TOKEN = /\[(one-action|two-actions|three-actions|reaction|free-action)\]/g;
+const ACTION_TOKEN_ONCE = /\[(one-action|two-actions|three-actions|reaction|free-action)\]/;
+
+function withActionIcons(escaped) {
+  return escaped.replace(ACTION_TOKEN, (_, key) => ACTION_ICONS[key]);
+}
+
+// AoN encodes an ability's cost two different ways and never both: a
+// separate `action` field on some, and a token stuck on the end of the name
+// on others ("Slink [reaction]"). The second is much the commoner — 249 of
+// the 269 tokens in the data arrive that way, every one of them with a null
+// `action`. Lifting the token out of the name lets both kinds put the same
+// icon in the same slot, instead of one of them printing a literal
+// "[reaction]" in the middle of a heading.
+function splitActionFromName(name, action) {
+  const match = name?.match(ACTION_TOKEN_ONCE);
+  if (!match) return { name, action };
+  return {
+    name: name.replace(ACTION_TOKEN_ONCE, "").replace(/\s{2,}/g, " ").trim(),
+    action: action ?? match[1],
+  };
+}
+
+// AoN also writes the sub-headings inside an ability's text as **bold**
+// runs ("**Trigger** ... **Effect** ..."). Rendered rather than shown
+// literally, but through the same explicit escape-then-replace: escapeHtml()
+// first, and only these two known markers promoted back to markup after.
+function abilityText(text) {
+  return withActionIcons(
+    escapeHtml(text).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>"),
+  );
 }
 
 // Monster abilities live in their own file, loaded on first use rather than

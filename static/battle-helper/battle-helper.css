@@ -1666,14 +1666,36 @@
   gap: 0.35rem;
 }
 
-/* The PF2e action cost. AoN's own action font isn't available here, so
-   these are plain glyphs — the title carries the full name for anyone who
-   doesn't read the pips. */
+/* The PF2e action cost, drawn as SVG — see ACTION_ICONS in
+   battle-helper.js. The icon's own <title> carries the full name, so this
+   no longer sets a font-size: nothing here is text anymore, and the size
+   comes from .action-icon's em height instead. */
 .battle-ability-action {
   flex-shrink: 0;
   color: var(--accent);
-  font-size: 0.7rem;
-  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+/* Sized in em and filled with currentColor, so the same markup works as a
+   0.72em symbol in a heading row and inline at prose size mid-sentence,
+   picking up the accent or body colour of wherever it lands. width:auto
+   against a fixed height is what lets one/two/three-action icons keep their
+   different aspect ratios instead of being squashed to a common box. */
+.action-icon {
+  height: 0.72em;
+  width: auto;
+  fill: currentColor;
+  vertical-align: -0.02em;
+  flex: none;
+}
+
+/* Inline in an ability's prose the icon replaces a word, so it needs the
+   word spacing a glyph would have had, and the accent colour to read as a
+   symbol rather than a smudge in the middle of a sentence. */
+.battle-ability-text .action-icon {
+  height: 0.8em;
+  margin: 0 0.12em;
+  color: var(--accent);
 }
 
 .battle-ability-kind {
