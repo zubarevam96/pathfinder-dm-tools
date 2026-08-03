@@ -610,14 +610,55 @@ function battleCharacterIds() {
 // That does mean a monster token carries no HP or AC of its own yet — the
 // source table has both columns whenever that's wanted.
 const AON_BASE = "https://2e.aonprd.com";
-let monsterList = []; // [{ name, archives_of_nexus_id, archives_of_nexus_page }]
+// Every creature in the bestiary list lives on Monsters.aspx, so the page is
+// a constant rather than a field repeated 558 times. The build script warns
+// if a rebuild ever resolves one somewhere else (AoN also has NPCs.aspx) —
+// see EXPECTED_PAGE in local/scripts/build_monster_entities.py.
+const AON_MONSTER_PAGE = "Monsters.aspx";
+let monsterList = []; // [{ name, archives_of_nexus_id }] — stats too, in local dev
 let monsterByName = new Map();
+
+// Monster data files are build output — they change only when the build
+// script is re-run — so a repeat visit shouldn't pay to download them
+// again. The Cache API holds them rather than localStorage: it's built for
+// whole HTTP responses, and its quota is separate from the ~5 MB origin
+// budget that characters, rolls and battle state already share.
+//
+// Stale-while-revalidate. A cached copy is returned at once and the network
+// copy replaces it in the background, so a local rebuild shows up on the
+// next load instead of never, without any page load waiting on a file that
+// rarely changes. Returns null when there's nothing to be had.
+const MONSTER_CACHE = "monster-data-v1";
+
+async function fetchMonsterData(path) {
+  // Absent on insecure origins — opening this page over file://, say. The
+  // fetch still works there, it just isn't cached between visits.
+  if (typeof caches === "undefined") {
+    const response = await fetch(path);
+    return response.ok ? response.json() : null;
+  }
+
+  const cache = await caches.open(MONSTER_CACHE);
+  const cached = await cache.match(path);
+  const fresh = fetch(path)
+    .then((response) => {
+      if (response.ok) cache.put(path, response.clone());
+      return response;
+    })
+    // A failed revalidation isn't an error when a cached copy already
+    // answered; the miss path below handles having neither.
+    .catch(() => null);
+
+  if (cached) return cached.json();
+  const response = await fresh;
+  return response?.ok ? response.json() : null;
+}
 
 async function loadMonsterList() {
   try {
-    const response = await fetch("../monster-data/monsters.json");
-    if (!response.ok) return;
-    monsterList = await response.json();
+    const list = await fetchMonsterData("../monster-data/monsters.json");
+    if (!list) return;
+    monsterList = list;
     monsterByName = new Map(monsterList.map((m) => [m.name, m]));
   } catch {
     // Non-fatal: the roster's "Add monster" button just finds nothing to
@@ -625,15 +666,13 @@ async function loadMonsterList() {
   }
 }
 
-// Unlike items, creatures aren't all on one AoN page type — some live on
-// Monsters.aspx and some on NPCs.aspx — so the page is stored per monster
-// rather than derived from a category. An unresolved monster falls back to
-// AoN's search page, the same fallback the main app uses for an item it
-// doesn't recognise.
+// A monster AoN had nothing for has a null id and falls back to AoN's search
+// page — the same fallback the main app uses for an item it doesn't
+// recognise, and the only case the null check is guarding.
 function monsterUrl(monsterName) {
   const monster = monsterByName.get(monsterName);
-  if (monster?.archives_of_nexus_id != null && monster.archives_of_nexus_page) {
-    return `${AON_BASE}/${monster.archives_of_nexus_page}?ID=${monster.archives_of_nexus_id}`;
+  if (monster?.archives_of_nexus_id != null) {
+    return `${AON_BASE}/${AON_MONSTER_PAGE}?ID=${monster.archives_of_nexus_id}`;
   }
   return `${AON_BASE}/Search.aspx?q=${encodeURIComponent(monsterName)}`;
 }
@@ -686,15 +725,23 @@ function findEntity(id) {
   return null;
 }
 
-// A monster's published stats, or null. They ship in monsters.json rather
-// than being fetched, because Archives of Nethys is unreachable from a
-// browser on this origin: its elasticsearch backend allowlists exactly one
-// Origin (2e.aonprd.com) and 403s everything else, and its HTML pages send
-// no CORS header at all. A browser can't suppress the Origin header, so no
-// amount of client-side caching would have made a runtime fetch work. See
-// local/scripts/build_monster_entities.py, which takes these out of the same
-// response that already resolved the statblock link — so the app makes
-// zero requests to AoN for stats, however many battles are opened.
+// A monster's stats, or null when this build of monsters.json carries none.
+//
+// Stats are baked into the file rather than fetched, because Archives of
+// Nethys is unreachable from a browser on this origin: its elasticsearch
+// backend allowlists exactly one Origin (2e.aonprd.com) and 403s everything
+// else, and its HTML pages send no CORS header at all. A browser can't
+// suppress the Origin header, so no amount of client-side caching would
+// make a runtime fetch work. See local/scripts/build_monster_entities.py,
+// which takes these out of the same response that already resolved the
+// statblock link — the app makes zero requests to AoN for stats, however
+// many battles are opened.
+//
+// Which is why null is the normal case on the deployed site and not a bug:
+// only the stats-free index is committed and published, so GitHub Pages
+// serves entries with no `stats` key. Local dev gets the full file from
+// app.py. Callers already fall back to the minimal panel on null, so the
+// difference needs no branch beyond this one.
 function monsterStats(monsterName) {
   return monsterByName.get(monsterName)?.stats ?? null;
 }
@@ -2035,10 +2082,9 @@ let monsterAbilitiesPromise = null;
 
 function loadMonsterAbilities() {
   if (monsterAbilitiesPromise) return monsterAbilitiesPromise;
-  monsterAbilitiesPromise = fetch("../monster-data/monster-abilities.json")
-    .then((response) => (response.ok ? response.json() : []))
+  monsterAbilitiesPromise = fetchMonsterData("../monster-data/monster-abilities.json")
     .then((list) => {
-      monsterAbilitiesByName = new Map(list.map((m) => [m.name, m.abilities]));
+      monsterAbilitiesByName = new Map((list ?? []).map((m) => [m.name, m.abilities]));
       // Repaints the panel that asked for this. Safe against a loop: the
       // memoised promise means the next render finds the Map and returns.
       render();

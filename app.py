@@ -24,12 +24,18 @@ DATA_DIR = LOCAL_DIR / "data"
 LEGACY_STORE_FILE = DATA_DIR / "store.json"
 LEGACY_CHARACTERS_FILE = DATA_DIR / "characters.json"
 
-# Monster data is generated from Archives of Nethys and deliberately kept
-# out of the committed site, so it can't live in static/ and GitHub Pages
-# never sees it. Serving it here keeps the battle helper's stat panels
-# working in local dev, where the fetch resolves to the same
-# /monster-data/... URL it would have had before the move.
+# Monster stats and abilities are generated from Archives of Nethys and
+# deliberately kept out of the committed site, so they can't live in static/
+# and GitHub Pages never sees them. Serving them here keeps the battle
+# helper's stat panels working in local dev, where the fetch resolves to the
+# same /monster-data/... URL it would have had before the move.
+#
+# static/monster-data/ holds the committed half — the same monsters with no
+# stats — which IS published. Local dev prefers the richer local copy and
+# falls back to the committed one, so a fresh clone that has never run the
+# build still gets a working roster instead of an empty picker.
 MONSTER_DATA_DIR = LOCAL_DIR / "static" / "monster-data"
+PUBLIC_MONSTER_DATA_DIR = Path(app.static_folder) / "monster-data"
 
 
 def extract_character_id(link_or_id: str) -> str | None:
@@ -61,10 +67,14 @@ def battle_helper():
 @app.get("/monster-data/<path:filename>")
 def monster_data(filename):
     # More specific than the catch-all static route, so Werkzeug matches it
-    # first. 404s cleanly when the data hasn't been built yet — the battle
-    # helper already treats a failed fetch as "no monsters available"
-    # rather than breaking the page.
-    return send_from_directory(MONSTER_DATA_DIR, filename)
+    # first. Local build output wins where it exists, because it's the same
+    # records plus the stats; otherwise this falls through to the committed
+    # index. 404s cleanly when neither has the file — the battle helper
+    # already treats a failed fetch as "no monsters available" rather than
+    # breaking the page.
+    if (MONSTER_DATA_DIR / filename).is_file():
+        return send_from_directory(MONSTER_DATA_DIR, filename)
+    return send_from_directory(PUBLIC_MONSTER_DATA_DIR, filename)
 
 
 @app.post("/api/fetch")
