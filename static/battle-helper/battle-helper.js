@@ -51,6 +51,20 @@ const entityRenameForm = document.getElementById("battle-entity-rename-form");
 const entityRenameInput = document.getElementById("battle-entity-rename-input");
 const entityRenameCloseBtn = document.getElementById("battle-entity-rename-close");
 
+const inventoryDialog = document.getElementById("battle-inventory-dialog");
+const inventoryDialogName = document.getElementById("battle-inventory-dialog-name");
+const inventoryAddForm = document.getElementById("battle-inventory-add-form");
+const inventoryItemInput = document.getElementById("battle-inventory-item");
+const inventoryQtyInput = document.getElementById("battle-inventory-qty");
+const inventoryMoneyForm = document.getElementById("battle-inventory-money-form");
+const inventoryCoinInputs = {
+  pp: document.getElementById("battle-inventory-pp"),
+  gp: document.getElementById("battle-inventory-gp"),
+  sp: document.getElementById("battle-inventory-sp"),
+  cp: document.getElementById("battle-inventory-cp"),
+};
+const inventoryCloseBtn = document.getElementById("battle-inventory-close");
+
 const aonDialog = document.getElementById("aon-dialog");
 const aonDialogTitle = document.getElementById("aon-dialog-title");
 const aonDialogBody = document.getElementById("aon-dialog-body");
@@ -359,7 +373,7 @@ function fitMapToView() {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, spellSlots: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, spellSlots: {}, inventory: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -1714,6 +1728,7 @@ function renderRoster() {
           delete state.appearance[id];
           delete state.conditions[id];
           delete state.spellSlots[id];
+          delete state.inventory[id];
         });
       } else {
         removeCharacterFromBattle(id, entity.name);
@@ -1780,6 +1795,7 @@ function removeCharacterFromBattle(characterId, name) {
     delete state.tempHp[characterId];
     delete state.conditions[characterId];
     delete state.spellSlots[characterId];
+    delete state.inventory[characterId];
     delete state.initiative[characterId];
   });
   raisedShieldIds.delete(characterId);
@@ -2098,26 +2114,78 @@ function refreshSpellSlots(entityId, entityName) {
 // objects — the same shape the main app's inventoryTable() destructures.
 // Anything that isn't a populated triple is skipped rather than rendered as
 // a blank row.
+// A monster carries whatever the DM has given it, so battle-local items and
+// coin sit alongside a character's sheet gear rather than replacing it.
+// Everything placed has an inventory, including a plain custom object — a
+// chest with loot in it is the same idea as a monster with loot on it.
 function entityInventory(entity) {
-  const build = entity?.build;
-  if (!build) return null;
+  if (!entity) return null;
+  const build = entity.build;
 
-  const gear = (build.equipment ?? [])
+  const gear = (build?.equipment ?? [])
     .filter((row) => Array.isArray(row) && row[0])
     .map(([name, qty, note]) => ({ name, qty: qty ?? 1, note: note ?? "" }));
-  const weapons = (build.weapons ?? [])
+  const weapons = (build?.weapons ?? [])
     .filter((w) => w?.name)
     .map((w) => ({ name: w.name, display: w.display || w.name, qty: w.qty ?? 1, note: "" }));
-  const armor = (build.armor ?? [])
+  const armor = (build?.armor ?? [])
     .filter((a) => a?.name)
     .map((a) => ({ name: a.name, display: a.display || a.name, qty: a.qty ?? 1, note: a.worn ? "worn" : "" }));
 
-  const money = build.money ?? {};
-  const coins = COIN_ORDER.filter(({ key }) => (money[key] ?? 0) > 0)
-    .map(({ key, label, color }) => ({ key, label, color, amount: money[key] }));
+  // Items the DM added in this battle. Removable, unlike the sheet's own
+  // gear, which belongs to the character sheet this page never writes to.
+  const carried = (battleState.inventory?.[entity.id]?.items ?? [])
+    .filter((item) => item?.name)
+    .map((item) => ({ name: item.name, qty: item.qty ?? 1, note: "" }));
 
-  if (!gear.length && !weapons.length && !armor.length && !coins.length) return null;
-  return { gear, weapons, armor, coins };
+  return { gear, weapons, armor, carried, coins: entityMoney(entity) };
+}
+
+// Always all four denominations, zeros included: a coin row that hid empty
+// denominations made "no silver" and "silver not tracked" look identical,
+// and left the row changing width as money was spent.
+//
+// Battle-local coin REPLACES the sheet's once the DM has set any — someone
+// who spent their gold this fight shouldn't keep showing the sheet's total
+// — and a monster, having no sheet, simply starts from zero.
+function entityMoney(entity) {
+  const local = battleState.inventory?.[entity?.id]?.money;
+  const base = entity?.build?.money ?? {};
+  return COIN_ORDER.map(({ key, label, color }) => ({
+    key,
+    label,
+    color,
+    amount: Math.max(0, Math.trunc(Number(local?.[key] ?? base[key] ?? 0)) || 0),
+  }));
+}
+
+// Adding the same item twice stacks it rather than growing a second chip,
+// which is what a DM handing out three potions one at a time expects.
+function addInventoryItem(entityId, entityName, name, qty) {
+  dispatch("add-item", `Gave ${entityName} ${qty > 1 ? `${qty} × ` : ""}${name}`, (state) => {
+    const entry = (state.inventory[entityId] ??= {});
+    const items = (entry.items ??= []);
+    const existing = items.find((item) => item.name === name);
+    if (existing) existing.qty = (existing.qty ?? 1) + qty;
+    else items.push({ name, qty });
+  });
+}
+
+function removeInventoryItem(entityId, entityName, name) {
+  dispatch("remove-item", `Took ${name} from ${entityName}`, (state) => {
+    const entry = state.inventory[entityId];
+    if (!entry?.items) return;
+    entry.items = entry.items.filter((item) => item.name !== name);
+  });
+}
+
+function setInventoryMoney(entityId, entityName, money) {
+  const summary = COIN_ORDER.filter(({ key }) => money[key] > 0)
+    .map(({ key, label }) => `${money[key]} ${label}`).join(", ");
+  dispatch("set-money", `Set ${entityName}'s coin to ${summary || "nothing"}`, (state) => {
+    const entry = (state.inventory[entityId] ??= {});
+    entry.money = money;
+  });
 }
 
 // Highest denomination first, matching the main app's coin row. The colours
@@ -2144,15 +2212,15 @@ const ABILITY_TAB_PROFICIENCIES = "proficiencies";
 const ABILITY_TAB_INVENTORY = "inventory";
 let selectedAbilityTab = ABILITY_TAB_ACTIONS;
 
-// Built per entity rather than being a constant, because two of the four
-// are conditional. Order is fixed and the conditional ones never displace
-// an always-present tab: Spells sits between Actions and Proficiencies,
-// Inventory goes last, so no tab moves as the selection changes.
-function abilityTabsFor(spells, inventory) {
+// Built per entity, because every tab here is conditional now. Actions and
+// Proficiencies both read the parsed abilities, so they go together and are
+// absent for a creature that has none. Order is fixed, so a tab never
+// changes position as the selection moves — only appears or disappears.
+function abilityTabsFor(abilities, spells, inventory) {
   return [
-    { id: ABILITY_TAB_ACTIONS, label: "Actions" },
+    ...(abilities ? [{ id: ABILITY_TAB_ACTIONS, label: "Actions" }] : []),
     ...(spells ? [{ id: ABILITY_TAB_SPELLS, label: "Spells" }] : []),
-    { id: ABILITY_TAB_PROFICIENCIES, label: "Proficiencies" },
+    ...(abilities ? [{ id: ABILITY_TAB_PROFICIENCIES, label: "Proficiencies" }] : []),
     ...(inventory ? [{ id: ABILITY_TAB_INVENTORY, label: "Inventory" }] : []),
   ];
 }
@@ -2174,38 +2242,44 @@ function renderAbilitiesPanel() {
     abilitiesPanel.innerHTML = '<p class="placeholder">Loading&hellip;</p>';
     return;
   }
-  if (!abilities) {
-    abilitiesPanel.innerHTML = `<p class="placeholder">${
-      entity.isCustom && !entity.monsterName
-        ? "Custom object — nothing to do."
-        : "No abilities recorded for this creature."
-    }</p>`;
-    return;
-  }
-
+  // No early return for missing abilities any more: a creature with none
+  // still has an Inventory tab, and bailing here would make loot
+  // unreachable for exactly the cases that need it most — a plain custom
+  // object (a chest), and every monster on the deployed site, where the
+  // abilities file isn't published.
   const spells = entitySpells(entity);
   const inventory = entityInventory(entity);
-  const tabs = abilityTabsFor(spells, inventory);
+  const tabs = abilityTabsFor(abilities, spells, inventory);
+  if (!tabs.length) {
+    abilitiesPanel.innerHTML = '<p class="placeholder">Nothing to show for this creature.</p>';
+    return;
+  }
   // Stepping from a caster to a fighter with Spells showing would otherwise
   // leave a tab selected that isn't in the strip — no tab looks active and
-  // the body falls through to Actions anyway. Fall back explicitly.
+  // the body falls through to whatever the last branch is. Falls back to the
+  // first tab that IS present rather than to Actions, which a creature with
+  // no parsed abilities doesn't have.
   const activeTab = tabs.some((t) => t.id === selectedAbilityTab)
     ? selectedAbilityTab
-    : ABILITY_TAB_ACTIONS;
+    : tabs[0].id;
 
   // Same tab markup and classes as the bottom-left box, so the two boxes
-  // read as one pattern rather than two inventions. The refresh control is
+  // read as one pattern rather than two inventions. The corner control is
   // pushed to the far right of the same strip, so it sits in the panel's
-  // top-right corner without costing a row of its own in a 220px box; it's
-  // rendered only on the Spells tab, and being last with margin-left:auto
-  // means adding it moves none of the tabs.
+  // top-right corner without costing a row of its own in a 220px box; being
+  // last with margin-left:auto means it moves none of the tabs. Which
+  // control it is depends on the tab — refresh slots on Spells, edit
+  // contents on Inventory — and there is none on the read-only tabs.
+  const cornerControl = {
+    [ABILITY_TAB_SPELLS]: `<button type="button" id="battle-refresh-spells" class="battle-panel-corner-btn" title="Refresh all spell slots (daily preparations)" aria-label="Refresh all spell slots">${REFRESH_ICON}</button>`,
+    [ABILITY_TAB_INVENTORY]: `<button type="button" id="battle-edit-inventory" class="battle-panel-corner-btn" title="Add an item or set coin" aria-label="Add an item or set coin">${PLUS_ICON}</button>`,
+  }[activeTab] ?? "";
+
   abilitiesPanel.innerHTML = `
     <div class="battle-object-tabs" role="tablist">
       ${tabs.map(({ id, label }) => `
         <button type="button" class="battle-object-tab${activeTab === id ? " active" : ""}" data-ability-tab="${id}" role="tab" aria-selected="${activeTab === id}">${label}</button>`).join("")}
-      ${activeTab === ABILITY_TAB_SPELLS
-        ? `<button type="button" id="battle-refresh-spells" class="battle-spell-refresh" title="Refresh all spell slots (daily preparations)" aria-label="Refresh all spell slots">${REFRESH_ICON}</button>`
-        : ""}
+      ${cornerControl}
     </div>
     <div id="battle-ability-body" class="battle-object-body"></div>
   `;
@@ -2221,7 +2295,7 @@ function renderAbilitiesPanel() {
   const body = document.getElementById("battle-ability-body");
   if (activeTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities);
   else if (activeTab === ABILITY_TAB_SPELLS) renderSpellsTab(body, entity, spells);
-  else if (activeTab === ABILITY_TAB_INVENTORY) renderInventoryTab(body, inventory);
+  else if (activeTab === ABILITY_TAB_INVENTORY) renderInventoryTab(body, entity, inventory);
   else renderActionsTab(body, abilities);
 
   if (activeTab === ABILITY_TAB_SPELLS) {
@@ -2229,7 +2303,19 @@ function renderAbilitiesPanel() {
       refreshSpellSlots(entityId, entity.name);
     });
   }
+  if (activeTab === ABILITY_TAB_INVENTORY) {
+    document.getElementById("battle-edit-inventory").addEventListener("click", () => {
+      openInventoryDialog(entityId, entity.name);
+    });
+  }
 }
+
+// Matches REFRESH_ICON's conventions — 100-unit viewBox, currentColor,
+// em-sized. A plain cross rather than a glyph, so it lines up with the
+// refresh icon that occupies the same corner on the Spells tab.
+const PLUS_ICON =
+  '<svg class="refresh-icon" viewBox="0 0 100 100" role="img" aria-hidden="true">'
+  + '<path d="M42 10H58V42H90V58H58V90H42V58H10V42H42Z"/></svg>';
 
 // Circular arrow. Same conventions as the action and speed icons: a
 // 100-unit viewBox, currentColor, em-sized. The arrowhead is deliberately
@@ -2311,10 +2397,13 @@ function renderSpellsTab(body, entity, spells) {
 // read as one pattern. Empty groups are dropped rather than shown with a
 // "None" placeholder: this tab only exists when there's something in it,
 // and four rows of "None" would bury the one that isn't.
-function renderInventoryTab(body, inventory) {
+function renderInventoryTab(body, entity, inventory) {
   loadItemIds();
 
-  const group = (label, items) => (items.length ? `
+  // `removable` marks the DM's own additions. Sheet gear has no × because
+  // it belongs to the character sheet, which this page never writes to —
+  // the same reason a character can't be renamed here.
+  const group = (label, items, removable = false) => (items.length ? `
     <li class="battle-inv-row">
       <span class="battle-inv-label">${label}</span>
       <span class="battle-inv-items">${items.map((item) => {
@@ -2323,25 +2412,32 @@ function renderInventoryTab(body, inventory) {
         const shown = item.display ?? item.name;
         const qty = item.qty > 1 ? ` <span class="battle-inv-qty">&times;${item.qty}</span>` : "";
         const note = item.note ? ` <span class="battle-inv-note">${escapeHtml(item.note)}</span>` : "";
-        return `<button type="button" class="battle-inv-chip" data-item="${escapeHtml(item.name)}" title="${escapeHtml(item.name)} on Archives of Nethys">${escapeHtml(shown)}${qty}${note}</button>`;
+        const drop = removable
+          ? `<button type="button" class="battle-inv-drop" data-drop="${escapeHtml(item.name)}" title="Take ${escapeHtml(item.name)} away" aria-label="Take ${escapeHtml(item.name)} away">&times;</button>`
+          : "";
+        return `<span class="battle-inv-entry"><button type="button" class="battle-inv-chip" data-item="${escapeHtml(item.name)}" title="${escapeHtml(item.name)} on Archives of Nethys">${escapeHtml(shown)}${qty}${note}</button>${drop}</span>`;
       }).join("")}</span>
     </li>` : "");
 
-  const coins = inventory.coins.length ? `
+  // Always rendered, always all four denominations. A zero is information —
+  // "this creature has no silver" — and a row that only showed non-zero
+  // coins changed width every time one ran out.
+  const coins = `
     <li class="battle-inv-row">
       <span class="battle-inv-label">Coin</span>
       <span class="battle-inv-items">${inventory.coins.map(({ label, color, amount }) => `
-        <span class="battle-inv-coin" style="--coin-color: ${color}">${amount} ${label}</span>`).join("")}</span>
-    </li>` : "";
+        <span class="battle-inv-coin${amount ? "" : " empty"}" style="--coin-color: ${color}" title="${amount} ${label}">${amount} ${label}</span>`).join("")}</span>
+    </li>`;
+
+  const rows = group("Weapons", inventory.weapons)
+    + group("Armor", inventory.armor)
+    + group("Gear", inventory.gear)
+    + group("Carried", inventory.carried, true)
+    + coins;
 
   body.innerHTML = `
     <div class="battle-ability-body">
-      <ul class="battle-ability-list battle-inv-list">
-        ${group("Weapons", inventory.weapons)}
-        ${group("Armor", inventory.armor)}
-        ${group("Gear", inventory.gear)}
-        ${coins}
-      </ul>
+      <ul class="battle-ability-list battle-inv-list">${rows}</ul>
     </div>
   `;
 
@@ -2350,7 +2446,64 @@ function renderInventoryTab(body, inventory) {
       openAonPopup(itemUrl(chip.dataset.item), chip.dataset.item);
     });
   }
+  for (const drop of body.querySelectorAll(".battle-inv-drop")) {
+    drop.addEventListener("click", () => {
+      removeInventoryItem(entity.id, entity.name, drop.dataset.drop);
+    });
+  }
 }
+
+// ---------------------------------------------------------------------------
+// Inventory dialog. Opened from the Inventory tab's corner button. Adding an
+// item and setting coin are the two battle-state changes, so they're the two
+// that dispatch; opening and closing are UI-only, the same split the HP and
+// initiative dialogs make.
+//
+// It's a dialog rather than controls inside the tab because the panel is
+// rebuilt on every render() — an input living there would lose a half-typed
+// item name to any unrelated dispatch.
+let inventoryDialogEntityId = null;
+
+function openInventoryDialog(entityId, name) {
+  inventoryDialogEntityId = entityId;
+  inventoryDialogName.textContent = name;
+  // Coin fields are seeded with what the creature has now, so "set" edits
+  // the current amount rather than starting from a blank the DM has to
+  // retype.
+  for (const { key, amount } of entityMoney(findEntity(entityId))) {
+    inventoryCoinInputs[key].value = String(amount);
+  }
+  inventoryItemInput.value = "";
+  inventoryQtyInput.value = "1";
+  inventoryDialog.showModal();
+  inventoryItemInput.focus();
+}
+
+inventoryAddForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entity = findEntity(inventoryDialogEntityId);
+  const name = inventoryItemInput.value.trim();
+  const qty = Math.max(1, Math.trunc(Number(inventoryQtyInput.value)) || 1);
+  if (entity && name) addInventoryItem(entity.id, entity.name, name, qty);
+  // Stays open and clears: handing over three different things in a row is
+  // the common case, and reopening the dialog each time is friction.
+  inventoryItemInput.value = "";
+  inventoryQtyInput.value = "1";
+  inventoryItemInput.focus();
+});
+
+inventoryMoneyForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entity = findEntity(inventoryDialogEntityId);
+  if (!entity) return;
+  const money = {};
+  for (const { key } of COIN_ORDER) {
+    money[key] = Math.max(0, Math.trunc(Number(inventoryCoinInputs[key].value)) || 0);
+  }
+  setInventoryMoney(entity.id, entity.name, money);
+});
+
+inventoryCloseBtn.addEventListener("click", () => inventoryDialog.close());
 
 function renderActionsTab(body, { strikes, special }) {
   // The multiple-attack penalty beside each strike, because a DM reads it

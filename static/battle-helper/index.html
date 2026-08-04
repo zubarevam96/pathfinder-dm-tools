@@ -182,6 +182,37 @@
     </div>
   </dialog>
 
+  <!-- Adds loose items and sets coin on whatever is selected — a monster's
+       loot, a prop's contents, a potion handed to a character mid-fight.
+       A dialog rather than controls inside the Inventory tab because that
+       panel is rebuilt on every render(), which would wipe a half-typed
+       item name; the same reason the roster's add-object form is static
+       markup. Item names are free text: they're looked up against the
+       item data and fall back to an Archives of Nethys search, so a name
+       that isn't a catalogued item still leads somewhere. -->
+  <dialog id="battle-inventory-dialog">
+    <h2>Inventory — <span id="battle-inventory-dialog-name"></span></h2>
+    <form id="battle-inventory-add-form" class="battle-inventory-add-form">
+      <input type="text" id="battle-inventory-item" placeholder="Add item…" maxlength="80" autocomplete="off" required />
+      <input type="number" id="battle-inventory-qty" value="1" min="1" max="999" aria-label="Quantity" />
+      <button type="submit" class="subtle">Add</button>
+    </form>
+    <form id="battle-inventory-money-form" class="battle-inventory-money-form">
+      <label for="battle-inventory-pp">pp</label>
+      <input type="number" id="battle-inventory-pp" min="0" max="999999" value="0" />
+      <label for="battle-inventory-gp">gp</label>
+      <input type="number" id="battle-inventory-gp" min="0" max="999999" value="0" />
+      <label for="battle-inventory-sp">sp</label>
+      <input type="number" id="battle-inventory-sp" min="0" max="999999" value="0" />
+      <label for="battle-inventory-cp">cp</label>
+      <input type="number" id="battle-inventory-cp" min="0" max="999999" value="0" />
+      <button type="submit" class="subtle">Set coin</button>
+    </form>
+    <div class="dialog-actions">
+      <button type="button" id="battle-inventory-close">Close</button>
+    </div>
+  </dialog>
+
   <!-- Statblocks are read from Archives of Nethys in an iframe rather than
        copied into this repo — same popup the main page uses for spells and
        items, styled by ../style.css. -->

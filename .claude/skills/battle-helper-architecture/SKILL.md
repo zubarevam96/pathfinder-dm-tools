@@ -44,6 +44,7 @@ Everything `emptyBattleState()` returns, and nothing else:
 | `hp`, `tempHp` | `entityId -> number` | never max HP — see "State separation" |
 | `conditions` | `entityId -> { conditionId: { active, value } }` | |
 | `spellSlots` | `entityId -> { "casterKey:level": bool[] }` | `true` = spent; read with a clamp, never written back into shape |
+| `inventory` | `entityId -> { items: [{name, qty}], money }` | DM-added loot and coin; **survives leaving the field**, like `appearance` |
 | `customObjects` | `id -> { name, monster? }` | `monster` = bestiary entry, for monsters |
 | `characterIds` | `characterId[]` | which characters are in THIS battle |
 | `initiative` | `entityId -> number` | the *number* |
@@ -810,6 +811,38 @@ category (`Armor.aspx`, `Weapons.aspx`, …), so the map stores category and
 id together. A weapon or armor's `display` name can carry a material or rune
 prefix that resolves against nothing, so the base `name` is what's looked
 up — the same split `itemNameLink()` makes in the main app.
+
+**Anything placed can carry loot**, not just characters: `battleState
+.inventory` holds DM-added items and coin for monsters, custom objects (a
+chest with loot is the same idea) and characters alike. Adds, removals and
+coin changes all `dispatch()`; adding the same item twice **stacks** it
+rather than growing a second chip. Sheet gear has no remove control, because
+this page never writes to the character store — only the DM's own additions
+are removable, the same boundary that stops a character being renamed here.
+
+Unlike HP and conditions, **`inventory` survives `remove-token`** — loot is
+what a creature carries, not battle progress, so moving it off the board and
+back must not empty its pockets. It is cleared only where the entity itself
+goes away: outright deletion, and a character leaving the battle.
+
+The coin row **always renders all four denominations, zeros included**.
+Hiding empty ones made "no silver" and "silver not tracked" identical, and
+changed the row's width whenever a purse ran out. Battle-local coin
+*replaces* the sheet's once set, rather than adding to it.
+
+Editing happens in `#battle-inventory-dialog`, **not** in the tab: the panel
+is rebuilt on every `render()`, so an input living there would lose a
+half-typed item name to any unrelated dispatch — the same reason the
+roster's add-object form is static markup.
+
+`renderAbilitiesPanel()` therefore **no longer returns early** when a
+creature has no parsed abilities. It used to print "Custom object — nothing
+to do." and stop, which would now make loot unreachable for exactly the
+cases that need it: custom objects, and every monster on the deployed site,
+where the abilities file isn't published. Actions and Proficiencies simply
+don't appear; the fallback tab is the first one that *is* present, not
+Actions. The strip's corner slot holds a per-tab control —
+refresh on Spells, add on Inventory, nothing on the read-only tabs.
 
 ### One stat block, two kinds of entity
 

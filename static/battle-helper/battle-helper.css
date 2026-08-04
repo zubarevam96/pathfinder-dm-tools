@@ -2092,6 +2092,38 @@
   color: var(--text);
 }
 
+/* Chip and its × are one unit, so the × can sit flush against the chip
+   without the flex gap between entries opening up between them. */
+.battle-inv-entry {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.battle-inv-entry .battle-inv-chip {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Only the DM's own additions get one — sheet gear belongs to the character
+   sheet, which this page never writes to. */
+.battle-inv-drop {
+  padding: 0 0.22rem;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 3px 3px 0;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.battle-inv-drop:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: white;
+}
+
 .battle-inv-qty,
 .battle-inv-note {
   color: var(--muted);
@@ -2125,11 +2157,46 @@
   background: var(--coin-color);
 }
 
+/* A denomination they hold none of stays in the row — "no silver" is worth
+   saying, and dropping it would change the row's width every time a purse
+   ran out — but recedes so the amounts they DO have are what's read. */
+.battle-inv-coin.empty {
+  color: var(--muted);
+  opacity: 0.55;
+}
+
+/* --- Inventory dialog --- */
+.battle-inventory-add-form,
+.battle-inventory-money-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.battle-inventory-add-form input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.battle-inventory-add-form input[type="number"] {
+  width: 4rem;
+}
+
+.battle-inventory-money-form label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.battle-inventory-money-form input {
+  width: 4.5rem;
+}
+
 /* Pushed to the far right of the tab strip — the panel's top-right corner
    — so refreshing costs no vertical room in a 220px box. Kept shorter than
    the tabs beside it so it can't be what sets the strip's height, which is
    what stops it nudging the layout when the Spells tab appears. */
-.battle-spell-refresh {
+.battle-panel-corner-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2145,7 +2212,7 @@
   cursor: pointer;
 }
 
-.battle-spell-refresh:hover {
+.battle-panel-corner-btn:hover {
   background: var(--accent-soft);
   border-color: transparent;
   color: var(--accent);
