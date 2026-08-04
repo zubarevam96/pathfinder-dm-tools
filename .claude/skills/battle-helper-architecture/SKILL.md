@@ -791,6 +791,26 @@ memoised map from the committed `static/spell-data/*.json`. Until it arrives
 — or if it fails — chips fall back to AoN search, which resolves a spell by
 name well enough that no loading state is needed.
 
+### Inventory is what they're carrying, not what it does
+
+`entityInventory()` reads `build.equipment` / `weapons` / `armor` / `money`.
+**Weapons and armor appear here as well as elsewhere** on purpose: a weapon
+is a strike on Actions and armor is folded into AC, but those show what the
+item *does*, and this tab answers "what is on them" — the question a disarm,
+a loot or a hand-off raises.
+
+Pathbuilder writes loose gear as `[name, qty, note]` **triples, not
+objects**, the same shape the main app's `inventoryTable()` destructures;
+anything that isn't a populated triple is skipped rather than drawn as a
+blank row. Empty groups are dropped entirely instead of showing "None".
+
+Item names resolve through `itemUrl()` and a lazily loaded map over
+`static/item-data/*.json`. Unlike spells, an item's AoN *page* varies by
+category (`Armor.aspx`, `Weapons.aspx`, …), so the map stores category and
+id together. A weapon or armor's `display` name can carry a material or rune
+prefix that resolves against nothing, so the base `name` is what's looked
+up — the same split `itemNameLink()` makes in the main app.
+
 ### One stat block, two kinds of entity
 
 `entityStatBlock(entity)` normalises a character's Pathbuilder build and a

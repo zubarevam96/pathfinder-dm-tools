@@ -1977,6 +1977,8 @@
    Sized in rem, not em: these sit next to 0.68rem labels but need to stay a
    comfortable click target. */
 .battle-spell-slot {
+  --slot-color: var(--spell-slot);
+  --slot-glow: var(--spell-slot-glow);
   width: 0.72rem;
   height: 0.72rem;
   padding: 0;
@@ -1986,10 +1988,20 @@
   cursor: pointer;
 }
 
+/* Focus Points are their own currency — one pool refilled by Refocus, not
+   per-level slots restored overnight — so they read violet rather than
+   blue. Swapping only these two custom properties re-tints the lit and
+   hover states below without duplicating any of them, and it keys off the
+   data-level the pip already carries rather than needing a second class. */
+.battle-spell-slot[data-level="focus"] {
+  --slot-color: var(--focus-point);
+  --slot-glow: var(--focus-point-glow);
+}
+
 .battle-spell-slot.on {
-  background: var(--spell-slot);
-  border-color: var(--spell-slot);
-  box-shadow: 0 0 0 2px var(--spell-slot-glow);
+  background: var(--slot-color);
+  border-color: var(--slot-color);
+  box-shadow: 0 0 0 2px var(--slot-glow);
 }
 
 /* Re-declares background AND border-color: style.css's global button:hover
@@ -1999,12 +2011,12 @@
    skill. */
 .battle-spell-slot:hover {
   background: var(--bg);
-  border-color: var(--spell-slot);
+  border-color: var(--slot-color);
 }
 
 .battle-spell-slot.on:hover {
-  background: var(--spell-slot);
-  border-color: var(--spell-slot);
+  background: var(--slot-color);
+  border-color: var(--slot-color);
   filter: brightness(1.15);
 }
 
@@ -2031,6 +2043,86 @@
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--text);
+}
+
+/* --- Inventory tab (bottom-right) ---
+   Same row geometry as a spell level: a fixed label column so every row's
+   items start at the same x, then chips that wrap. */
+/* Two classes deep so it beats .battle-ability-list's own gap on
+   specificity rather than on source order, which a later edit could move. */
+.battle-ability-list.battle-inv-list {
+  gap: 0.25rem;
+}
+
+.battle-inv-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+}
+
+.battle-inv-label {
+  flex-shrink: 0;
+  min-width: 3.4rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+.battle-inv-items {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.battle-inv-chip {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.66rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.battle-inv-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.battle-inv-qty,
+.battle-inv-note {
+  color: var(--muted);
+}
+
+.battle-inv-note {
+  font-style: italic;
+}
+
+/* The coin's metal, drawn as a dot rather than colouring the text — gold
+   and silver on a parchment background are the two worst text colours in
+   the palette, and a swatch reads at a glance anyway. */
+.battle-inv-coin {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.battle-inv-coin::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid #0003;
+  border-radius: 50%;
+  background: var(--coin-color);
 }
 
 /* Pushed to the far right of the tab strip — the panel's top-right corner

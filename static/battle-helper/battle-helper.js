@@ -702,6 +702,48 @@ function spellUrl(name) {
     : `${AON_BASE}/Search.aspx?q=${encodeURIComponent(name)}`;
 }
 
+// Items, the same way — but an item's page varies by category, so the map
+// stores both. Later files win on a name collision, matching the main app's
+// loadItemIdMap() rather than inventing a different tie-break here.
+const AON_ITEM_PAGES = { armor: "Armor.aspx", weapon: "Weapons.aspx", equipment: "Equipment.aspx", shield: "Shields.aspx" };
+let itemIdMap = {};
+let itemIdPromise = null;
+
+function loadItemIds() {
+  if (itemIdPromise) return itemIdPromise;
+  itemIdPromise = Promise.all([
+    ["armor", "armor.json"],
+    ["equipment", "alchemical-items.json"],
+    ["weapon", "weapons-melee.json"],
+    ["weapon", "weapons-ranged.json"],
+    ["shield", "shields.json"],
+  ].map(([category, file]) => fetch(`../item-data/${file}`)
+    .then((response) => (response.ok ? response.json() : []))
+    .then((entities) => [category, entities])
+    .catch(() => [category, []])))
+    .then((loaded) => {
+      for (const [category, entities] of loaded) {
+        for (const entity of entities) {
+          if (entity.archives_of_nexus_id != null) {
+            itemIdMap[entity.name] = { category, id: entity.archives_of_nexus_id };
+          }
+        }
+      }
+      render();
+    });
+  return itemIdPromise;
+}
+
+// lookupName is the base item name; a weapon or armor's display name can
+// carry a material or rune prefix ("Cold Iron Clan Dagger") that resolves
+// against nothing. Same split the main app's itemNameLink() makes.
+function itemUrl(lookupName) {
+  const item = itemIdMap[lookupName];
+  return item
+    ? `${AON_BASE}/${AON_ITEM_PAGES[item.category]}?ID=${item.id}`
+    : `${AON_BASE}/Search.aspx?q=${encodeURIComponent(lookupName)}`;
+}
+
 // A monster AoN had nothing for has a null id and falls back to AoN's search
 // page — the same fallback the main app uses for an item it doesn't
 // recognise, and the only case the null check is guarding.
@@ -2042,26 +2084,76 @@ function refreshSpellSlots(entityId, entityName) {
   });
 }
 
+// What a character is carrying: loose gear, weapons, armor and coin. Null
+// — which hides the tab — when they carry nothing at all, and always for a
+// monster, whose statblock has no equipment list to parse.
+//
+// Weapons and armor are here as well as being felt elsewhere (a weapon is
+// a strike on the Actions tab, armor is folded into AC) because those show
+// what the item DOES; this tab answers "what is on them", which is a
+// different question and the one that comes up when someone is disarmed,
+// looted, or handing something over.
+//
+// Pathbuilder writes loose gear as [name, qty, note] triples rather than
+// objects — the same shape the main app's inventoryTable() destructures.
+// Anything that isn't a populated triple is skipped rather than rendered as
+// a blank row.
+function entityInventory(entity) {
+  const build = entity?.build;
+  if (!build) return null;
+
+  const gear = (build.equipment ?? [])
+    .filter((row) => Array.isArray(row) && row[0])
+    .map(([name, qty, note]) => ({ name, qty: qty ?? 1, note: note ?? "" }));
+  const weapons = (build.weapons ?? [])
+    .filter((w) => w?.name)
+    .map((w) => ({ name: w.name, display: w.display || w.name, qty: w.qty ?? 1, note: "" }));
+  const armor = (build.armor ?? [])
+    .filter((a) => a?.name)
+    .map((a) => ({ name: a.name, display: a.display || a.name, qty: a.qty ?? 1, note: a.worn ? "worn" : "" }));
+
+  const money = build.money ?? {};
+  const coins = COIN_ORDER.filter(({ key }) => (money[key] ?? 0) > 0)
+    .map(({ key, label, color }) => ({ key, label, color, amount: money[key] }));
+
+  if (!gear.length && !weapons.length && !armor.length && !coins.length) return null;
+  return { gear, weapons, armor, coins };
+}
+
+// Highest denomination first, matching the main app's coin row. The colours
+// are the metals themselves, which is why they're literals rather than
+// theme tokens — silver is silver in either theme.
+const COIN_ORDER = [
+  { key: "pp", label: "pp", color: "#e5e4e2" },
+  { key: "gp", label: "gp", color: "#d4af37" },
+  { key: "sp", label: "sp", color: "#c0c0c0" },
+  { key: "cp", label: "cp", color: "#cd7f32" },
+];
+
 // Bottom-right box: what the selected creature can DO, as opposed to what
-// it is. Three tabs, split the way a DM reaches for them: Actions is the
+// it is. Four tabs, split the way a DM reaches for them: Actions is the
 // in-combat page (strikes, then special abilities), Spells is the other
-// in-combat one and appears only for a creature that has any, and
-// Proficiencies is the out-of-combat page (attribute modifiers and skills).
+// in-combat one, Proficiencies is the out-of-combat page (attribute
+// modifiers and skills), and Inventory is what they're carrying. Spells and
+// Inventory each appear only when there's something to show.
 //
 // TODO, deliberately left for now: Recall Knowledge DCs.
 const ABILITY_TAB_ACTIONS = "actions";
 const ABILITY_TAB_SPELLS = "spells";
 const ABILITY_TAB_PROFICIENCIES = "proficiencies";
+const ABILITY_TAB_INVENTORY = "inventory";
 let selectedAbilityTab = ABILITY_TAB_ACTIONS;
 
-// Built per entity rather than being a constant, because the Spells tab is
-// only there for a spellcaster. Order is fixed: Spells sits between the two
-// tabs that are always present, so neither of them moves when it appears.
-function abilityTabsFor(spells) {
+// Built per entity rather than being a constant, because two of the four
+// are conditional. Order is fixed and the conditional ones never displace
+// an always-present tab: Spells sits between Actions and Proficiencies,
+// Inventory goes last, so no tab moves as the selection changes.
+function abilityTabsFor(spells, inventory) {
   return [
     { id: ABILITY_TAB_ACTIONS, label: "Actions" },
     ...(spells ? [{ id: ABILITY_TAB_SPELLS, label: "Spells" }] : []),
     { id: ABILITY_TAB_PROFICIENCIES, label: "Proficiencies" },
+    ...(inventory ? [{ id: ABILITY_TAB_INVENTORY, label: "Inventory" }] : []),
   ];
 }
 
@@ -2092,7 +2184,8 @@ function renderAbilitiesPanel() {
   }
 
   const spells = entitySpells(entity);
-  const tabs = abilityTabsFor(spells);
+  const inventory = entityInventory(entity);
+  const tabs = abilityTabsFor(spells, inventory);
   // Stepping from a caster to a fighter with Spells showing would otherwise
   // leave a tab selected that isn't in the strip — no tab looks active and
   // the body falls through to Actions anyway. Fall back explicitly.
@@ -2128,6 +2221,7 @@ function renderAbilitiesPanel() {
   const body = document.getElementById("battle-ability-body");
   if (activeTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities);
   else if (activeTab === ABILITY_TAB_SPELLS) renderSpellsTab(body, entity, spells);
+  else if (activeTab === ABILITY_TAB_INVENTORY) renderInventoryTab(body, inventory);
   else renderActionsTab(body, abilities);
 
   if (activeTab === ABILITY_TAB_SPELLS) {
@@ -2209,6 +2303,51 @@ function renderSpellsTab(body, entity, spells) {
   for (const chip of body.querySelectorAll(".battle-spell-chip")) {
     chip.addEventListener("click", () => {
       openAonPopup(spellUrl(chip.dataset.spell), chip.dataset.spell);
+    });
+  }
+}
+
+// The same label-column-then-chips row the Spells tab uses, so the two
+// read as one pattern. Empty groups are dropped rather than shown with a
+// "None" placeholder: this tab only exists when there's something in it,
+// and four rows of "None" would bury the one that isn't.
+function renderInventoryTab(body, inventory) {
+  loadItemIds();
+
+  const group = (label, items) => (items.length ? `
+    <li class="battle-inv-row">
+      <span class="battle-inv-label">${label}</span>
+      <span class="battle-inv-items">${items.map((item) => {
+        // The display name can carry a material or rune prefix; the base
+        // name is what resolves against AoN, so they're carried separately.
+        const shown = item.display ?? item.name;
+        const qty = item.qty > 1 ? ` <span class="battle-inv-qty">&times;${item.qty}</span>` : "";
+        const note = item.note ? ` <span class="battle-inv-note">${escapeHtml(item.note)}</span>` : "";
+        return `<button type="button" class="battle-inv-chip" data-item="${escapeHtml(item.name)}" title="${escapeHtml(item.name)} on Archives of Nethys">${escapeHtml(shown)}${qty}${note}</button>`;
+      }).join("")}</span>
+    </li>` : "");
+
+  const coins = inventory.coins.length ? `
+    <li class="battle-inv-row">
+      <span class="battle-inv-label">Coin</span>
+      <span class="battle-inv-items">${inventory.coins.map(({ label, color, amount }) => `
+        <span class="battle-inv-coin" style="--coin-color: ${color}">${amount} ${label}</span>`).join("")}</span>
+    </li>` : "";
+
+  body.innerHTML = `
+    <div class="battle-ability-body">
+      <ul class="battle-ability-list battle-inv-list">
+        ${group("Weapons", inventory.weapons)}
+        ${group("Armor", inventory.armor)}
+        ${group("Gear", inventory.gear)}
+        ${coins}
+      </ul>
+    </div>
+  `;
+
+  for (const chip of body.querySelectorAll(".battle-inv-chip")) {
+    chip.addEventListener("click", () => {
+      openAonPopup(itemUrl(chip.dataset.item), chip.dataset.item);
     });
   }
 }

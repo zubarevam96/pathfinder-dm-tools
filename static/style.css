@@ -20,6 +20,14 @@
      crimson a cool blue is the one hue that can't be mistaken for it. */
   --spell-slot: #2563eb;
   --spell-slot-glow: #2563eb59;
+
+  /* Focus Points are a different currency from spell slots — one shared
+     pool, refilled by Refocus rather than by a night's rest — so they get
+     their own hue. Violet is the neighbouring cool tone: near enough to
+     read as the same kind of resource, far enough not to be miscounted as
+     one more slot. */
+  --focus-point: #7c3aed;
+  --focus-point-glow: #7c3aed59;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -37,10 +45,13 @@
     --danger: #ef5350;
     --shadow: 0 1px 3px #0006;
 
-    /* Lifted well above the light theme's blue: the same #2563eb on this
-       near-black surface reads as a dark hole rather than a lit pip. */
+    /* Both lifted well above their light-theme values: #2563eb on this
+       near-black surface reads as a dark hole rather than a lit pip, and
+       the violet has the same problem more severely. */
     --spell-slot: #60a5fa;
     --spell-slot-glow: #60a5fa4d;
+    --focus-point: #a78bfa;
+    --focus-point-glow: #a78bfa4d;
   }
 }
 
