@@ -1696,6 +1696,23 @@
   min-width: 0;
 }
 
+/* Wraps Recall Knowledge and the conditions list so the two stack in the
+   column beside the saves grid, instead of the recall line becoming a third
+   sibling and pushing conditions out of the row. Takes the flex growth that
+   .battle-conditions used to. */
+.battle-stat-side {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The DC to identify a creature, right where a DM looks when a player asks.
+   Muted and small — it's reference, not a live number like a save. */
+.battle-recall {
+  margin: 0 0 0.3rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
 /* Fixed at two columns rather than auto-fit: now that it shares the row
    with conditions, auto-fit would reflow the four saves between 1 and 4
    columns as the panel width changed, moving them around under the cursor.
@@ -1828,10 +1845,37 @@
   color: var(--muted);
 }
 
-/* Six attributes, not the stat grid's two columns — they're a single short
-   row of modifiers and read as one unit. */
+/* Attributes at their natural square size, with languages taking the rest
+   of the row. They used to be a grid stretched across the panel, which made
+   six tiles as wide as the window allowed and left the row mostly empty
+   space between short numbers. */
+.battle-ability-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+/* Six squares, not a stretched grid: a fixed width equal to the tile height
+   is what keeps them square whatever the panel does. flex-shrink: 0 so the
+   languages beside them give way instead. */
 .battle-ability-attrs {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  flex-shrink: 0;
+  display: flex;
+  gap: 0.2rem;
+}
+
+.battle-ability-attrs .battle-stat {
+  width: 1.85rem;
+  padding: 0.08rem 0;
+}
+
+.battle-ability-langs {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
 }
 
 /* Skills are one line each: name, flat modifier, then any conditional
@@ -2073,6 +2117,59 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.2rem;
+}
+
+/* Free text from a statblock or the Info tab, not a chip — it's a sentence
+   or a comma list, and chipping every word of "Common, Goblin" would read as
+   more structure than the data has. */
+.battle-info-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.68rem;
+  color: var(--text);
+}
+
+.battle-info-flavour {
+  margin: 0 0 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* Sits beside the coin row it acts on, rather than in the tab strip's far
+   corner — a control that far away reads as acting on the whole tab. */
+.battle-inv-add {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.battle-inv-add:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.battle-inv-add .refresh-icon {
+  height: 0.55rem;
+  width: 0.55rem;
+}
+
+/* Coin leads the tab, so it carries the separator under it rather than the
+   groups above needing one. */
+.battle-inv-coins {
+  align-items: center;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border);
 }
 
 .battle-inv-chip {

@@ -866,6 +866,11 @@ function entityStatBlock(entity) {
       perception: checkTotal(build, prof.perception ?? 0, "wis"),
       speed: (attrs.speed ?? 0) + (attrs.speedBonus ?? 0),
       speedText: null,
+      // Both are monster-statblock facts. A character's shield comes from
+      // their carried equipment via getAcBonuses() instead, and nobody rolls
+      // Recall Knowledge against a PC.
+      recallKnowledge: null,
+      shieldBonus: 0,
     };
   }
 
@@ -886,6 +891,8 @@ function entityStatBlock(entity) {
     perception: stats.perception ?? null,
     speed: stats.speed ?? null,
     speedText: stats.speedText ?? null,
+    recallKnowledge: stats.recallKnowledge ?? null,
+    shieldBonus: stats.shieldBonus ?? 0,
   };
 }
 
@@ -2118,9 +2125,17 @@ function refreshSpellSlots(entityId, entityName) {
 // coin sit alongside a character's sheet gear rather than replacing it.
 // Everything placed has an inventory, including a plain custom object — a
 // chest with loot in it is the same idea as a monster with loot on it.
-function entityInventory(entity) {
+function entityInventory(entity, abilities) {
   if (!entity) return null;
   const build = entity.build;
+
+  // A monster's Items line, already split into one entry per item at build
+  // time — "wooden shield (Hardness 3, HP 12, BT 6)" is one item, and a
+  // naive comma split would make three. Read-only, like a character's sheet
+  // gear: it's what the statblock says the creature came with.
+  const statblock = (abilities?.items ?? [])
+    .filter(Boolean)
+    .map((name) => ({ name, qty: 1, note: "" }));
 
   const gear = (build?.equipment ?? [])
     .filter((row) => Array.isArray(row) && row[0])
@@ -2138,7 +2153,7 @@ function entityInventory(entity) {
     .filter((item) => item?.name)
     .map((item) => ({ name: item.name, qty: item.qty ?? 1, note: "" }));
 
-  return { gear, weapons, armor, carried, coins: entityMoney(entity) };
+  return { statblock, gear, weapons, armor, carried, coins: entityMoney(entity) };
 }
 
 // Always all four denominations, zeros included: a coin row that hid empty
@@ -2210,18 +2225,21 @@ const ABILITY_TAB_ACTIONS = "actions";
 const ABILITY_TAB_SPELLS = "spells";
 const ABILITY_TAB_PROFICIENCIES = "proficiencies";
 const ABILITY_TAB_INVENTORY = "inventory";
+const ABILITY_TAB_INFO = "info";
 let selectedAbilityTab = ABILITY_TAB_ACTIONS;
 
 // Built per entity, because every tab here is conditional now. Actions and
 // Proficiencies both read the parsed abilities, so they go together and are
 // absent for a creature that has none. Order is fixed, so a tab never
 // changes position as the selection moves — only appears or disappears.
-function abilityTabsFor(abilities, spells, inventory) {
+// Info goes last: it's the one nobody reaches for mid-round.
+function abilityTabsFor(abilities, spells, inventory, info) {
   return [
     ...(abilities ? [{ id: ABILITY_TAB_ACTIONS, label: "Actions" }] : []),
     ...(spells ? [{ id: ABILITY_TAB_SPELLS, label: "Spells" }] : []),
     ...(abilities ? [{ id: ABILITY_TAB_PROFICIENCIES, label: "Proficiencies" }] : []),
     ...(inventory ? [{ id: ABILITY_TAB_INVENTORY, label: "Inventory" }] : []),
+    ...(info ? [{ id: ABILITY_TAB_INFO, label: "Info" }] : []),
   ];
 }
 
@@ -2248,8 +2266,9 @@ function renderAbilitiesPanel() {
   // object (a chest), and every monster on the deployed site, where the
   // abilities file isn't published.
   const spells = entitySpells(entity);
-  const inventory = entityInventory(entity);
-  const tabs = abilityTabsFor(abilities, spells, inventory);
+  const inventory = entityInventory(entity, abilities);
+  const info = entityInfo(abilities);
+  const tabs = abilityTabsFor(abilities, spells, inventory, info);
   if (!tabs.length) {
     abilitiesPanel.innerHTML = '<p class="placeholder">Nothing to show for this creature.</p>';
     return;
@@ -2267,13 +2286,14 @@ function renderAbilitiesPanel() {
   // read as one pattern rather than two inventions. The corner control is
   // pushed to the far right of the same strip, so it sits in the panel's
   // top-right corner without costing a row of its own in a 220px box; being
-  // last with margin-left:auto means it moves none of the tabs. Which
-  // control it is depends on the tab — refresh slots on Spells, edit
-  // contents on Inventory — and there is none on the read-only tabs.
-  const cornerControl = {
-    [ABILITY_TAB_SPELLS]: `<button type="button" id="battle-refresh-spells" class="battle-panel-corner-btn" title="Refresh all spell slots (daily preparations)" aria-label="Refresh all spell slots">${REFRESH_ICON}</button>`,
-    [ABILITY_TAB_INVENTORY]: `<button type="button" id="battle-edit-inventory" class="battle-panel-corner-btn" title="Add an item or set coin" aria-label="Add an item or set coin">${PLUS_ICON}</button>`,
-  }[activeTab] ?? "";
+  // last with margin-left:auto means it moves none of the tabs.
+  //
+  // Only Spells uses it. Inventory's add button lives beside the coin row
+  // instead — it acts on what's directly under it, and a control in the
+  // far corner reads as acting on the whole tab.
+  const cornerControl = activeTab === ABILITY_TAB_SPELLS
+    ? `<button type="button" id="battle-refresh-spells" class="battle-panel-corner-btn" title="Refresh all spell slots (daily preparations)" aria-label="Refresh all spell slots">${REFRESH_ICON}</button>`
+    : "";
 
   abilitiesPanel.innerHTML = `
     <div class="battle-object-tabs" role="tablist">
@@ -2296,6 +2316,7 @@ function renderAbilitiesPanel() {
   if (activeTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities);
   else if (activeTab === ABILITY_TAB_SPELLS) renderSpellsTab(body, entity, spells);
   else if (activeTab === ABILITY_TAB_INVENTORY) renderInventoryTab(body, entity, inventory);
+  else if (activeTab === ABILITY_TAB_INFO) renderInfoTab(body, info);
   else renderActionsTab(body, abilities);
 
   if (activeTab === ABILITY_TAB_SPELLS) {
@@ -2303,11 +2324,36 @@ function renderAbilitiesPanel() {
       refreshSpellSlots(entityId, entity.name);
     });
   }
-  if (activeTab === ABILITY_TAB_INVENTORY) {
-    document.getElementById("battle-edit-inventory").addEventListener("click", () => {
-      openInventoryDialog(entityId, entity.name);
-    });
-  }
+}
+
+// What the creature IS, in the bestiary's own words: the flavour paragraph
+// AoN puts above the statblock, plus the identity facts that aren't numbers.
+// Null — hiding the tab — when the page carried none of it, which is every
+// character (a PC's description isn't in a Pathbuilder build) and any
+// creature whose page didn't have a description meta tag.
+function entityInfo(abilities) {
+  if (!abilities) return null;
+  const facts = [
+    ["Traits", abilities.traits],
+    ["Senses", abilities.senses],
+    ["Languages", abilities.languages],
+  ].filter(([, value]) => value);
+  if (!abilities.flavour && !facts.length) return null;
+  return { flavour: abilities.flavour ?? null, facts };
+}
+
+function renderInfoTab(body, info) {
+  const facts = info.facts.map(([label, value]) => `
+    <li class="battle-inv-row">
+      <span class="battle-inv-label">${label}</span>
+      <span class="battle-info-value">${escapeHtml(value)}</span>
+    </li>`).join("");
+  body.innerHTML = `
+    <div class="battle-ability-body">
+      ${info.flavour ? `<p class="battle-info-flavour">${escapeHtml(info.flavour)}</p>` : ""}
+      ${facts ? `<ul class="battle-ability-list battle-inv-list">${facts}</ul>` : ""}
+    </div>
+  `;
 }
 
 // Matches REFRESH_ICON's conventions — 100-unit viewBox, currentColor,
@@ -2419,27 +2465,37 @@ function renderInventoryTab(body, entity, inventory) {
       }).join("")}</span>
     </li>` : "");
 
-  // Always rendered, always all four denominations. A zero is information —
-  // "this creature has no silver" — and a row that only showed non-zero
-  // coins changed width every time one ran out.
+  // Coin leads the tab rather than trailing it: it's the line a DM edits
+  // and reads most, and putting the edit control beside it keeps the two
+  // together instead of the button living a tab-width away in the corner.
+  //
+  // Always all four denominations. A zero is information — "this creature
+  // has no silver" — and a row that only showed non-zero coins changed width
+  // every time one ran out.
   const coins = `
-    <li class="battle-inv-row">
+    <li class="battle-inv-row battle-inv-coins">
       <span class="battle-inv-label">Coin</span>
       <span class="battle-inv-items">${inventory.coins.map(({ label, color, amount }) => `
         <span class="battle-inv-coin${amount ? "" : " empty"}" style="--coin-color: ${color}" title="${amount} ${label}">${amount} ${label}</span>`).join("")}</span>
+      <button type="button" id="battle-edit-inventory" class="battle-inv-add" title="Add an item or set coin" aria-label="Add an item or set coin">${PLUS_ICON}</button>
     </li>`;
 
-  const rows = group("Weapons", inventory.weapons)
+  const rows = coins
+    + group("Items", inventory.statblock)
+    + group("Weapons", inventory.weapons)
     + group("Armor", inventory.armor)
     + group("Gear", inventory.gear)
-    + group("Carried", inventory.carried, true)
-    + coins;
+    + group("Carried", inventory.carried, true);
 
   body.innerHTML = `
     <div class="battle-ability-body">
       <ul class="battle-ability-list battle-inv-list">${rows}</ul>
     </div>
   `;
+
+  document.getElementById("battle-edit-inventory").addEventListener("click", () => {
+    openInventoryDialog(entity.id, entity.name);
+  });
 
   for (const chip of body.querySelectorAll(".battle-inv-chip")) {
     chip.addEventListener("click", () => {
@@ -2454,7 +2510,7 @@ function renderInventoryTab(body, entity, inventory) {
 }
 
 // ---------------------------------------------------------------------------
-// Inventory dialog. Opened from the Inventory tab's corner button. Adding an
+// Inventory dialog. Opened from the + beside the coin row. Adding an
 // item and setting coin are the two battle-state changes, so they're the two
 // that dispatch; opening and closing are UI-only, the same split the HP and
 // initiative dialogs make.
@@ -2546,7 +2602,7 @@ function renderActionsTab(body, { strikes, special }) {
   `;
 }
 
-function renderProficienciesTab(body, { attributes, skills }) {
+function renderProficienciesTab(body, { attributes, skills, languages }) {
   // Abbreviated, not ABILITY_NAMES' full "Strength" — six of them share one
   // row, where the Character tab's grid only ever fits two. The title
   // carries the full name.
@@ -2567,9 +2623,20 @@ function renderProficienciesTab(body, { attributes, skills }) {
     </li>
   `).join("");
 
+  // Attributes sit at their natural square size with languages taking the
+  // rest of the row, rather than the six tiles stretching to fill the panel.
+  // Languages belong here and not on Info because this is the tab about what
+  // a creature is capable of, and "can it understand you" is that question.
   body.innerHTML = `
     <div class="battle-ability-body">
-      <div class="battle-stat-grid battle-ability-attrs">${attrRow}</div>
+      <div class="battle-ability-top">
+        <div class="battle-ability-attrs">${attrRow}</div>
+        ${languages ? `
+          <div class="battle-ability-langs">
+            <span class="battle-inv-label">Languages</span>
+            <span class="battle-info-value">${escapeHtml(languages)}</span>
+          </div>` : ""}
+      </div>
       <ul class="battle-ability-list battle-ability-skills">
         ${skillRows || '<li class="placeholder">No trained skills.</li>'}
       </ul>
@@ -2932,7 +2999,14 @@ function renderCharacterTab(objectBody) {
   const hpLow = maxHp > 0 && hp / maxHp <= 0.25;
   // Only a character can raise a shield — a monster's AC already includes
   // whatever it carries, and there's no published shield bonus to add.
-  const { hasShield, shieldBonus } = build ? getAcBonuses(build) : { hasShield: false, shieldBonus: 0 };
+  // A character's shield comes from their carried equipment; a monster's is
+  // read off its statblock's second AC ("18 (20 with shield raised)"), which
+  // is the only place the bonus is stated — so it's never guessed from the
+  // item's name. Everything downstream (the toggle, raisedShieldIds, the
+  // corner icon) is already generic, so both kinds behave identically.
+  const { hasShield, shieldBonus } = build
+    ? getAcBonuses(build)
+    : { hasShield: (stats.shieldBonus ?? 0) > 0, shieldBonus: stats.shieldBonus ?? 0 };
   const shieldRaised = hasShield && raisedShieldIds.has(characterId);
   // Conditions apply on top of the raised-shield bonus, not instead of it:
   // the shield is a circumstance bonus, so it and a status penalty from
@@ -3050,7 +3124,12 @@ function renderCharacterTab(objectBody) {
       <div class="battle-stat-grid">
         ${checks}
       </div>
-      ${conditionsSectionHtml(characterId)}
+      <div class="battle-stat-side">
+        ${stats.recallKnowledge
+          ? `<p class="battle-recall" title="Recall Knowledge">${escapeHtml(stats.recallKnowledge)}</p>`
+          : ""}
+        ${conditionsSectionHtml(characterId)}
+      </div>
     </div>
   `;
 

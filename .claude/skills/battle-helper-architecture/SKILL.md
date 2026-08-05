@@ -222,14 +222,18 @@ inside this structure rather than adding top-level regions.
     — what that creature can *do*, as tabs split by when a DM reaches for
     them. **Actions** (`renderActionsTab()`): strikes, then named special
     abilities — the in-combat page. **Spells** (`renderSpellsTab()`): spell
-    levels, slots and lists — also in-combat, and **present only when
-    `entitySpells()` finds any**, which makes it the one conditional tab on
-    the page. **Proficiencies** (`renderProficienciesTab()`): attribute
-    modifiers and skills — the out-of-combat one. Its tab list is built per
-    entity by `abilityTabsFor()`, with Spells fixed *between* the two
-    always-present tabs so neither moves when it appears; when the selection
-    changes to something with no spells, the active tab falls back to
-    Actions explicitly rather than leaving nothing selected. It reuses the
+    levels, slots and lists — also in-combat. **Proficiencies**
+    (`renderProficienciesTab()`): attribute modifiers, skills and languages —
+    the out-of-combat one. **Inventory** (`renderInventoryTab()`): coin and
+    carried items. **Info** (`renderInfoTab()`): a monster's flavour text,
+    traits and senses — the "what *is* this thing" page, and the only tab
+    that answers a question about the creature rather than about the fight.
+    Its tab list is built per entity by `abilityTabsFor()`. **Every tab is
+    conditional** — a custom object can have nothing but Inventory — so the
+    list is built in one fixed order and filtered, never reordered: a tab
+    appearing must not move the ones already there. When the selection
+    changes to something lacking the active tab, it falls back to the first
+    tab that *is* present rather than leaving nothing selected. It reuses the
     left box's `.battle-object-tabs` markup and classes deliberately: one
     tab pattern on the page, not two.
 
@@ -329,6 +333,13 @@ all. `.battle-stat-ac` is a fixed square, which is *why* its shield-icon
 corner badge can safely be a plain present-or-absent ternary. It's a single
 `<button>` always, `disabled` when there's no shield, so the whole square
 is the click target rather than a small icon inside it.
+
+**Monsters can have shields too**, so `hasShield`/`shieldBonus` come from
+`getAcBonuses(build)` for characters and from `stats.shieldBonus` otherwise —
+everything downstream (the toggle, `raisedShieldIds`, the corner icon) was
+already generic. The bonus is **read off the page, never inferred from an
+item name**: all three shield-bearing monsters in the corpus print it as a
+second AC (`18 (20 with shield raised)`), which `PAGE_SHIELD_AC` parses.
 
 Skip all of this for elements whose absence genuinely shouldn't reserve
 space — the roster/initiative "nothing here yet" rows replace the whole
@@ -760,9 +771,11 @@ penalties hit all your Speeds, and a slowed dragon showing an unmodified fly
 speed beside a modified walk speed would be the panel disagreeing with
 itself.
 
-Still TODO by request, though the **data is now present**: Recall Knowledge
-(`abilities.recallKnowledge`, e.g. `"DC 15 • Animal (Nature)"` — parsed and
-shipped, not yet displayed anywhere).
+Recall Knowledge (e.g. `"DC 15 • Humanoid (Society)"`) rides in **`stats`,
+not `abilities`**, and is shown on the Character tab just above Conditions.
+The split is deliberate: the Character panel renders from the index that
+loads at startup, while abilities are fetched lazily per monster, and a line
+on an always-visible panel must not wait on a lazy fetch to appear.
 
 ### Spells are a character-only tab
 
@@ -825,10 +838,16 @@ what a creature carries, not battle progress, so moving it off the board and
 back must not empty its pockets. It is cleared only where the entity itself
 goes away: outright deletion, and a character leaving the battle.
 
-The coin row **always renders all four denominations, zeros included**.
-Hiding empty ones made "no silver" and "silver not tracked" identical, and
-changed the row's width whenever a purse ran out. Battle-local coin
-*replaces* the sheet's once set, rather than adding to it.
+The coin row sits **at the top of the tab** and **always renders all four
+denominations, zeros included**. Hiding empty ones made "no silver" and
+"silver not tracked" identical, and changed the row's width whenever a purse
+ran out. Battle-local coin *replaces* the sheet's once set, rather than
+adding to it.
+
+A monster's statblock `Items` line is folded in as its own group. It is
+split at build time by `split_outside_parens()`, not on commas: `wooden
+shield (Hardness 3, HP 12, BT 6)` is **one** item, and a naive split makes
+three, two of them named "HP 12" and "BT 6".
 
 Editing happens in `#battle-inventory-dialog`, **not** in the tab: the panel
 is rebuilt on every `render()`, so an input living there would lose a
@@ -841,14 +860,29 @@ to do." and stop, which would now make loot unreachable for exactly the
 cases that need it: custom objects, and every monster on the deployed site,
 where the abilities file isn't published. Actions and Proficiencies simply
 don't appear; the fallback tab is the first one that *is* present, not
-Actions. The strip's corner slot holds a per-tab control —
-refresh on Spells, add on Inventory, nothing on the read-only tabs.
+Actions. The strip's corner slot holds a per-tab control — refresh on
+Spells, nothing elsewhere. Inventory's add button deliberately **isn't**
+there: a control in the strip's far corner reads as acting on the whole tab,
+so it sits beside the coin row it actually edits.
+
+### Info is the monster's identity, not its numbers
+
+`entityInfo()` pulls `flavour`, `traits` and `senses` off the abilities file,
+and the tab hides when none are present — which is every character, since a
+Pathbuilder build has no equivalent. Coverage across the 558 cached pages:
+traits 558, senses 545, flavour 537.
+
+**Flavour comes from the page's `<meta name="description">`**, not from the
+prose above the statblock. Scraping the prose means deciding where the
+description ends, and that boundary moves from page to page; the meta tag is
+one unambiguous string AoN maintains for the same purpose.
 
 ### One stat block, two kinds of entity
 
 `entityStatBlock(entity)` normalises a character's Pathbuilder build and a
 monster's published stats into one shape (`level`, `maxHp`, `ac`,
-`fortitude`, `reflex`, `will`, `perception`, `speed`, `speedText`). A
+`fortitude`, `reflex`, `will`, `perception`, `speed`, `speedText`,
+`recallKnowledge`, `shieldBonus`). A
 character's values need PF2e's proficiency math (`checkTotal`,
 `computeMaxHp`); a monster's are already finished totals. Everything
 downstream — the stat panel, the HP pool, `effectiveMaxHp()`, the
