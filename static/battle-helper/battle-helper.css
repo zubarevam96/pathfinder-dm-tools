@@ -613,6 +613,24 @@
   white-space: nowrap;
 }
 
+/* "(elite)" rides inside the name span so it ellipsizes with the name rather
+   than surviving as a fragment after the name it belongs to has been cut.
+   Coloured and smaller so it reads as an annotation, not part of the name. */
+.battle-initiative-adjust {
+  margin-left: 0.2rem;
+  font-size: 0.68em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.battle-initiative-adjust.elite {
+  color: var(--adjust-elite);
+}
+
+.battle-initiative-adjust.weak {
+  color: var(--adjust-weak);
+}
+
 /* A small clickable box, not a plain label — click opens the initiative
    dialog. Re-declares background on hover (not just border-color) for the
    same reason .battle-hp-bar does: the global button:hover tint would
@@ -1204,6 +1222,88 @@
   white-space: nowrap;
 }
 
+/* The level and the elite/weak switch share one line above the name. The
+   min-width on the level is what stops the row twitching sideways as the
+   switch moves it between "lvl 9" and "lvl 10" — the switch itself is a
+   fixed size, so the level was the only part that could resize. */
+.battle-stat-level-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.battle-stat-level-row .battle-stat-level {
+  min-width: 2.4rem;
+  text-align: right;
+}
+
+/* A three-position switch, not three loose buttons: one bordered track with
+   the segments butted together, so it reads as one control with a current
+   position rather than three things to press. */
+.battle-adjust {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 0.2rem;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.battle-adjust-btn {
+  width: 1.15rem;
+  height: 0.9rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* fill: currentColor is what makes the icon follow the segment's own colour
+   through muted / hover / active, so the art is declared once and never needs
+   a per-state copy. Same contract as .speed-icon. */
+.battle-adjust-icon {
+  width: 0.62rem;
+  height: 0.62rem;
+  display: block;
+  fill: currentColor;
+}
+
+.battle-adjust-btn + .battle-adjust-btn {
+  border-left: 1px solid var(--border);
+}
+
+/* Re-declares BOTH background and border-color, not just one: style.css's
+   global button:hover sets both, and the cascade resolves per property — a
+   rule that names only one lets the global tint supply the other and wash
+   the active segment out. Same trap the HP bar documents. */
+.battle-adjust-btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.battle-adjust-btn.active {
+  background: var(--border);
+  color: var(--text);
+}
+
+.battle-adjust-btn.weak.active,
+.battle-adjust-btn.weak.active:hover {
+  background: var(--adjust-weak);
+  color: #fff;
+}
+
+.battle-adjust-btn.elite.active,
+.battle-adjust-btn.elite.active:hover {
+  background: var(--adjust-elite);
+  color: #fff;
+}
+
 /* flex-shrink: 0 — the speeds are already down to an icon and a number
    each; trimming them buys almost nothing and would cut a number in half,
    so the name absorbs the loss instead. */
@@ -1732,6 +1832,31 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+}
+
+/* Says what the elite/weak template still needs doing by hand, because the
+   ability text below is AoN's, quoted as printed. The left border rather than
+   a filled panel: it's a standing note about the list beneath it, not an
+   alert, and a solid block here would outweigh the strikes it annotates. */
+.battle-adjust-note {
+  margin: 0;
+  padding: 0.3rem 0.45rem;
+  border-left: 3px solid var(--border);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.battle-adjust-note.elite {
+  border-left-color: var(--adjust-elite);
+}
+
+.battle-adjust-note.weak {
+  border-left-color: var(--adjust-weak);
+}
+
+.battle-adjust-note strong {
+  color: var(--text);
 }
 
 .battle-ability-list {

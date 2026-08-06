@@ -28,6 +28,14 @@
      one more slot. */
   --focus-point: #7c3aed;
   --focus-point-glow: #7c3aed59;
+
+  /* The elite and weak monster templates. Amber for elite rather than red:
+     red on this page already means a condition is biting, and an elite
+     creature isn't penalized, it's dangerous. Cyan for weak is the coldest
+     hue here and reads as the opposite of amber at a glance, which is the
+     whole job of a two-ended switch. */
+  --adjust-elite: #b45309;
+  --adjust-weak: #0e7490;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -52,6 +60,8 @@
     --spell-slot-glow: #60a5fa4d;
     --focus-point: #a78bfa;
     --focus-point-glow: #a78bfa4d;
+    --adjust-elite: #fbbf24;
+    --adjust-weak: #22d3ee;
   }
 }
 

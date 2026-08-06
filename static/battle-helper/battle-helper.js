@@ -373,7 +373,7 @@ function fitMapToView() {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, spellSlots: {}, inventory: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, spellSlots: {}, inventory: {}, adjustment: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -851,7 +851,224 @@ function monsterStats(monsterName) {
 //
 // `speedText` is the monster's prose speed ("25 feet, fly 40 feet"): one
 // number can't say a dragon flies, so the panel keeps it for the tooltip.
-function entityStatBlock(entity) {
+// ---------------------------------------------------------------------------
+// Elite and weak adjustments (Monster Core pg. 6-7). A DM reaches for these to
+// make one enemy tougher or softer than the rest of its kin without editing a
+// statblock, so they're a per-entity toggle rather than a second bestiary
+// entry — "Goblin Warrior (elite)" is still a Goblin Warrior.
+//
+// Both templates apply to the NORMALISED numbers — entityStatBlock()'s output
+// and entityAbilities()' strikes and skills — for the same reason those
+// functions exist. Adjust at the choke point and the stat panel, the HP pool,
+// effectiveMaxHp(), the damage dialog and the condition pipeline all follow,
+// with no elite branch beside every stat.
+//
+// The line this deliberately does NOT cross is AoN's prose. Ability text ships
+// verbatim, and rewriting the DCs and damage inside it would put a regex in
+// charge of editing published rules text — where "DC 5 flat check" (24 of them
+// in the corpus) must not shift while "DC 17 Fortitude" must, and the two look
+// identical to a pattern. renderActionsTab() states what's left to do by hand
+// instead of guessing. Structured numbers are adjusted; prose is not.
+const ADJUST_ELITE = "elite";
+const ADJUST_WEAK = "weak";
+
+function entityAdjustment(entityId) {
+  const kind = battleState.adjustment?.[entityId];
+  return kind === ADJUST_ELITE || kind === ADJUST_WEAK ? kind : null;
+}
+
+// "Increase/decrease the creature's AC, attack modifiers, DCs, saving throws,
+// Perception, and skill modifiers by 2."
+function adjustDelta(kind) {
+  return kind === ADJUST_ELITE ? 2 : -2;
+}
+
+// "Increase the creature's level by 1; if the creature is level -1 or 0,
+// instead increase its level by 2" — and weak's mirror at level 1, so a level
+// 1 creature drops to -1 rather than stopping at 0.
+function adjustedLevel(kind, level) {
+  if (kind === ADJUST_ELITE) return level <= 0 ? level + 2 : level + 1;
+  return level === 1 ? -1 : level - 1;
+}
+
+// Straight from the template's own table, and keyed off the STARTING level —
+// the one before adjustedLevel() moves it. Reading it off the adjusted level
+// would put every creature sitting on a table boundary in the wrong band.
+function adjustHpDelta(kind, startingLevel) {
+  if (kind === ADJUST_ELITE) {
+    if (startingLevel <= 1) return 10;
+    if (startingLevel <= 4) return 15;
+    if (startingLevel <= 19) return 20;
+    return 30;
+  }
+  if (startingLevel <= 2) return -10;
+  if (startingLevel <= 5) return -15;
+  if (startingLevel <= 20) return -20;
+  return -30;
+}
+
+// The leading dice term of a strike's damage — the only part the template
+// moves. "Increase the damage of its Strikes by 2" is one increase, not one
+// per damage instance, so a rider ("plus 1d6 fire", "plus Grab") is left
+// alone. All 1100 strike damage strings in the corpus start with this shape.
+// The en dash in the character class is not decoration: AoN writes 14 of the
+// negative modifiers with U+2013, so the sign has to be read as text.
+//
+// The whitespace is INSIDE the optional group. Outside it, a strike with no
+// flat modifier ("1d6 piercing", 71 of them) matches the space before the
+// damage type as part of the head, and rebuilding swallows it: "1d6+2piercing".
+const DAMAGE_HEAD = /^(\d*d\d+)(?:\s*([+–−-]\s*\d+))?/;
+
+function adjustDamage(damage, delta) {
+  const match = DAMAGE_HEAD.exec(damage ?? "");
+  if (!match) return damage;
+  const current = match[2] ? Number(match[2].replace(/[–−]/, "-").replace(/\s+/g, "")) : 0;
+  const next = current + delta;
+  const head = next === 0 ? match[1] : `${match[1]}${next > 0 ? "+" : "-"}${Math.abs(next)}`;
+  return head + damage.slice(match[0].length);
+}
+
+// Speed, the attribute modifiers and the shield bonus are untouched on
+// purpose: the template lists what it changes, and none of them are on it. A
+// shield's bonus is an item's circumstance bonus rather than a creature stat,
+// and Recall Knowledge is a DC rolled *against* the creature, printed above
+// the statblock rather than in it.
+function applyAdjustmentToStats(stats, kind) {
+  if (!kind || !stats) return stats;
+  const delta = adjustDelta(kind);
+  const bump = (value) => (value == null ? null : value + delta);
+  const level = stats.level ?? 0;
+  return {
+    ...stats,
+    level: adjustedLevel(kind, level),
+    // Floored at 1: a weak level-1 creature with 8 HP would otherwise come
+    // out at or below zero, dead before the fight starts.
+    maxHp: stats.maxHp == null ? null : Math.max(1, stats.maxHp + adjustHpDelta(kind, level)),
+    ac: bump(stats.ac),
+    fortitude: bump(stats.fortitude),
+    reflex: bump(stats.reflex),
+    will: bump(stats.will),
+    perception: bump(stats.perception),
+  };
+}
+
+function applyAdjustmentToAbilities(abilities, kind) {
+  if (!kind || !abilities) return abilities;
+  const delta = adjustDelta(kind);
+  return {
+    ...abilities,
+    strikes: (abilities.strikes ?? []).map((strike) => ({
+      ...strike,
+      bonus: strike.bonus + delta,
+      // The printed multiple-attack penalties move with the attack modifier
+      // they're derived from — a DM reads them every round, and leaving them
+      // behind would have the second attack disagree with the first.
+      map: (strike.map ?? []).map((value) => value + delta),
+      damage: adjustDamage(strike.damage, delta),
+    })),
+    skills: (abilities.skills ?? []).map((skill) => ({
+      ...skill,
+      modifier: skill.modifier + delta,
+      // A conditional bonus is a full alternative total ("+9 to Climb"), not
+      // an increment on the flat one, so it moves by the same 2.
+      notes: (skill.notes ?? []).map((note) => ({ ...note, modifier: note.modifier + delta })),
+    })),
+    adjustment: kind,
+  };
+}
+
+// A real battle-state change, not a UI toggle: it moves HP, AC and every save
+// at once. A DM who undid their way past this would be exactly as surprised to
+// find the creature still elite as to find it still damaged, which is the test
+// Rule 1 sets.
+function setEntityAdjustment(entityId, kind) {
+  const entity = findEntity(entityId);
+  if (!entity) return;
+
+  // Current HP moves with max HP. A monster is tracked at a real number from
+  // the moment it's placed, so without this a 30/30 creature made elite would
+  // read 30/45 — it grew a bigger body and took 15 damage in the same click.
+  // The wound is what should survive the change, not the total: a creature at
+  // 22/30 becomes 37/45, still 8 down.
+  //
+  // Computed here rather than in the mutator because the mutator sees only
+  // the live state, and this needs the max HP the entity is ABOUT to have.
+  const base = baseStatBlock(entity);
+  const before = applyAdjustmentToStats(base, entityAdjustment(entityId));
+  const after = applyAdjustmentToStats(base, kind);
+  const hpDelta = (after?.maxHp ?? 0) - (before?.maxHp ?? 0);
+
+  dispatch(
+    "set-adjustment",
+    kind ? `Made ${entity.name} ${kind}` : `Reset ${entity.name} to normal`,
+    (state) => {
+      if (kind) state.adjustment[entityId] = kind;
+      else delete state.adjustment[entityId];
+      // Untracked HP already reads as "full", so it needs no shifting — and
+      // shifting it would write a number where the absence of one was the
+      // point. Floored at 0 rather than 1: a creature made weak while nearly
+      // dead can legitimately drop to dying, and pretending otherwise would
+      // hand it a hit point it hasn't got.
+      const tracked = state.hp[entityId];
+      if (tracked != null && hpDelta) {
+        state.hp[entityId] = Math.max(0, Math.min(after?.maxHp ?? tracked, tracked + hpDelta));
+      }
+    }
+  );
+}
+
+// Same conventions as SPEED_ICON_ART: a 100-unit viewBox, currentColor, sized
+// in em. Rank marks rather than arithmetic signs — "+2 to everything" is what
+// the template does, not what it IS, and a crown says "this one is the
+// dangerous one" across the table faster than a plus sign does.
+//
+// Deliberately coarse. These render at roughly 10px, where a cracked-crown
+// counterpart to the crown (the prettier pairing) loses its crack entirely and
+// becomes an identical shape in a different colour. The chevron survives
+// because it's three straight lines with nothing inside them.
+const ADJUST_ICON_ART = {
+  // Three FLAT-topped points over a solid base — no separate band, which at
+  // this size is a half-pixel gap that renders as a smudge or vanishes. The
+  // first attempt used sharp spikes over a tall base and rasterized to a
+  // rectangle with a fuzzy top: the points have to be tall and blunt enough
+  // to survive at ~10px, and the notches between them wide enough to stay
+  // open. Verified by rasterizing at 14x9.
+  elite: "M8 90 L8 28 L26 28 L34 60 L41 16 L59 16 L66 60 L74 28 L92 28 L92 90 Z",
+  // A downward chevron as a band of constant thickness, not a filled
+  // triangle: a triangle at this size reads as a solid blob.
+  weak: "M8 26 L50 66 L92 26 L92 48 L50 88 L8 48 Z",
+  normal: "M32 50 A18 18 0 1 0 68 50 A18 18 0 1 0 32 50 Z",
+};
+
+function adjustIcon(key) {
+  return `<svg class="battle-adjust-icon" viewBox="0 0 100 100" aria-hidden="true"><path d="${ADJUST_ICON_ART[key]}"/></svg>`;
+}
+
+// A three-position switch — weak, normal, elite — as three buttons rather
+// than a checkbox pair or a <select>: every state has to be one click away and
+// readable at a glance mid-combat, and a <select> would need opening to say
+// which one is on. The icons carry it instead of words because this sits in
+// the header row, which has no width to spare; the accessible name and the
+// tooltip spell out what each one does. The SVGs are aria-hidden so a screen
+// reader gets the button's label once rather than twice.
+function adjustmentToggleHtml(current) {
+  const options = [
+    { value: ADJUST_WEAK, icon: "weak", label: "Weak", hint: "Weak\n\n-2 to AC, attack modifiers, saves, Perception and skills\n-2 Strike damage\nLower HP and level" },
+    { value: "", icon: "normal", label: "Normal", hint: "Normal\n\nThe published statblock, unadjusted" },
+    { value: ADJUST_ELITE, icon: "elite", label: "Elite", hint: "Elite\n\n+2 to AC, attack modifiers, saves, Perception and skills\n+2 Strike damage\nHigher HP and level" },
+  ];
+  const buttons = options.map((option) => {
+    const active = (current ?? "") === option.value;
+    return `<button type="button" class="battle-adjust-btn${option.value ? ` ${option.value}` : ""}${active ? " active" : ""}" data-adjust="${option.value}" title="${escapeHtml(option.hint)}" aria-label="${option.label}" aria-pressed="${active}">${adjustIcon(option.icon)}</button>`;
+  }).join("");
+  return `<span class="battle-adjust" role="group" aria-label="Creature adjustment">${buttons}</span>`;
+}
+
+// The unadjusted stat block. Split out from entityStatBlock() so a caller can
+// ask what a creature's numbers would be under a DIFFERENT adjustment than
+// the one it currently has — which is what changing the switch needs, and
+// what it can't get from the adjusted result alone.
+function baseStatBlock(entity) {
   const build = entity?.build;
   if (build) {
     const prof = build.proficiencies ?? {};
@@ -894,6 +1111,16 @@ function entityStatBlock(entity) {
     recallKnowledge: stats.recallKnowledge ?? null,
     shieldBonus: stats.shieldBonus ?? 0,
   };
+}
+
+// Elite/weak is applied here rather than at each reader, so a monster's
+// adjusted numbers ARE its numbers everywhere downstream. Characters are
+// exempt: these are monster templates, and a PC has a sheet to level up
+// rather than a statblock to adjust.
+function entityStatBlock(entity) {
+  const base = baseStatBlock(entity);
+  if (!base || entity?.build) return base;
+  return applyAdjustmentToStats(base, entityAdjustment(entity?.id));
 }
 
 // The stat block for an entity id, looked up from scratch. Convenience for
@@ -1736,6 +1963,7 @@ function renderRoster() {
           delete state.conditions[id];
           delete state.spellSlots[id];
           delete state.inventory[id];
+          delete state.adjustment[id];
         });
       } else {
         removeCharacterFromBattle(id, entity.name);
@@ -1803,6 +2031,7 @@ function removeCharacterFromBattle(characterId, name) {
     delete state.conditions[characterId];
     delete state.spellSlots[characterId];
     delete state.inventory[characterId];
+    delete state.adjustment[characterId];
     delete state.initiative[characterId];
   });
   raisedShieldIds.delete(characterId);
@@ -1845,9 +2074,14 @@ function renderInitiative() {
     const nameTitle = e.isCustom
       ? "Double-click to rename"
       : "Renaming a character is done on their sheet, on the main page";
+    // The suffix is drawn, never stored: "(elite)" is a property of the
+    // creature's numbers, not part of its name, and baking it in would send it
+    // through rename, uniqueEntityName() and the copy/paste base name — so
+    // pasting an elite goblin would make one called "Goblin (elite) 2".
+    const adjustment = entityAdjustment(e.id);
     return `
       <li draggable="true" data-entity-id="${escapeHtml(e.id)}" class="${e.id === selectedEntityId ? "selected" : ""}">
-        <span class="battle-initiative-name" title="${escapeHtml(nameTitle)}">${escapeHtml(e.name)}</span>
+        <span class="battle-initiative-name" title="${escapeHtml(nameTitle)}">${escapeHtml(e.name)}${adjustment ? `<span class="battle-initiative-adjust ${adjustment}">(${adjustment})</span>` : ""}</span>
         <button type="button" class="battle-initiative-value" draggable="false" data-entity-id="${escapeHtml(e.id)}" title="Set initiative">${initiative != null ? initiative : "—"}</button>
       </li>
     `;
@@ -2561,7 +2795,7 @@ inventoryMoneyForm.addEventListener("submit", (event) => {
 
 inventoryCloseBtn.addEventListener("click", () => inventoryDialog.close());
 
-function renderActionsTab(body, { strikes, special }) {
+function renderActionsTab(body, { strikes, special, adjustment }) {
   // The multiple-attack penalty beside each strike, because a DM reads it
   // every single round and doing the arithmetic mid-fight is exactly the
   // kind of friction this panel exists to remove.
@@ -2592,8 +2826,22 @@ function renderActionsTab(body, { strikes, special }) {
   `;
   }).join("");
 
+  // The strikes above already carry the template's +/-2 to attack, MAP and
+  // damage. The abilities below do not: their text is AoN's, shipped verbatim,
+  // and the DCs and damage inside it are prose. Saying so is the honest half
+  // of that choice — an adjusted creature whose Breath Weapon still reads
+  // "DC 22" would otherwise look finished when it isn't.
+  const note = adjustment
+    ? `<p class="battle-adjust-note ${adjustment}">
+         <strong>${adjustment === ADJUST_ELITE ? "Elite" : "Weak"}</strong> — strikes, saves, AC, HP and skills are adjusted.
+         Ability text is quoted as printed: ${adjustment === ADJUST_ELITE ? "add 2 to" : "subtract 2 from"} its DCs and damage
+         by hand, or 4 for a limited-use ability such as a spell or a breath weapon.
+       </p>`
+    : "";
+
   body.innerHTML = `
     <div class="battle-ability-body">
+      ${note}
       <ul class="battle-ability-list">
         ${strikeRows || '<li class="placeholder">No strikes.</li>'}
       </ul>
@@ -2831,7 +3079,12 @@ function entityAbilities(entity) {
         notes: [],
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
-    return { strikes, attributes, special: [], skills };
+    // Explicit nulls rather than omissions: this is the shape entityInfo(),
+    // entityInventory() and renderProficienciesTab() destructure, and a key
+    // that's simply missing here reads as "no data" identically to one that's
+    // null — right up until someone adds a field to the monster branch and
+    // forgets this one, which is exactly how the Info tab shipped blank.
+    return { strikes, attributes, special: [], skills, languages: null, items: [], senses: null, flavour: null, traits: null };
   }
 
   if (!entity?.monsterName) return null;
@@ -2841,12 +3094,21 @@ function entityAbilities(entity) {
   }
   const abilities = monsterAbilitiesByName.get(entity.monsterName);
   if (!abilities) return null;
-  return {
+  // Everything the Info, Proficiencies and Inventory tabs read comes through
+  // here — this function is the only reader of monsterAbilitiesByName, so a
+  // field it doesn't copy out cannot reach a panel however well the build
+  // script parsed it.
+  return applyAdjustmentToAbilities({
     strikes: abilities.strikes ?? [],
     attributes: abilities.attributes ?? {},
     special: abilities.special ?? [],
     skills: abilities.skills ?? [],
-  };
+    languages: abilities.languages ?? null,
+    items: abilities.items ?? [],
+    senses: abilities.senses ?? null,
+    flavour: abilities.flavour ?? null,
+    traits: abilities.traits ?? null,
+  }, entityAdjustment(entity.id));
 }
 
 // One icon per movement type, so four speeds fit where "Speed 15 ft" used
@@ -3086,6 +3348,13 @@ function renderCharacterTab(objectBody) {
     ? `<button type="button" id="battle-monster-stats" class="battle-stat-name battle-stat-name-link" title="${escapeHtml(monsterName)} statblock">${escapeHtml(entity.name)}</button>`
     : `<span class="battle-stat-name">${escapeHtml(entity.name)}</span>`;
 
+  // Elite and weak are monster templates, so the switch appears only for a
+  // creature that came from the bestiary — a PC levels up on their sheet.
+  // It rides the level line because the level is the one thing both templates
+  // always move, and because the header row proper has no spare width for
+  // another control (see "The Character panel's header row is tight").
+  const adjustHtml = monsterName ? adjustmentToggleHtml(entityAdjustment(characterId)) : "";
+
   // Two clusters pinned to opposite edges (identity on the left, HP/AC on
   // the right) rather than one row that stretches the HP bar to fill the
   // gap — an empty center is intentional, not a layout bug. See "Page
@@ -3101,7 +3370,10 @@ function renderCharacterTab(objectBody) {
                save. It stays a sibling of the name, never a child — inside
                the monster case's <button> it would join the click target. -->
           <div class="battle-stat-name-block">
-            <span class="battle-stat-level">lvl ${stats.level ?? 1}</span>
+            <span class="battle-stat-level-row">
+              <span class="battle-stat-level">lvl ${stats.level ?? 1}</span>
+              ${adjustHtml}
+            </span>
             <span class="battle-stat-name-wrap">${nameHtml}</span>
           </div>
           <span class="battle-stat-speeds" title="${escapeHtml(speedTitle)}">${speedsHtml}</span>
@@ -3135,6 +3407,15 @@ function renderCharacterTab(objectBody) {
 
   bindRemoveButton();
   bindConditionsSection(characterId, entity.name);
+
+  // An empty data-adjust is the "normal" position, which clears the entry
+  // rather than storing a third value — absent already reads as unadjusted
+  // everywhere, so there's no state to keep in step.
+  for (const btn of objectBody.querySelectorAll(".battle-adjust-btn")) {
+    btn.addEventListener("click", () => {
+      setEntityAdjustment(characterId, btn.dataset.adjust || null);
+    });
+  }
 
   if (monsterName) {
     document.getElementById("battle-monster-stats").addEventListener("click", () => {

@@ -45,6 +45,7 @@ Everything `emptyBattleState()` returns, and nothing else:
 | `conditions` | `entityId -> { conditionId: { active, value } }` | |
 | `spellSlots` | `entityId -> { "casterKey:level": bool[] }` | `true` = spent; read with a clamp, never written back into shape |
 | `inventory` | `entityId -> { items: [{name, qty}], money }` | DM-added loot and coin; **survives leaving the field**, like `appearance` |
+| `adjustment` | `entityId -> "elite" \| "weak"` | absent = unadjusted; also survives leaving the field |
 | `customObjects` | `id -> { name, monster? }` | `monster` = bestiary entry, for monsters |
 | `characterIds` | `characterId[]` | which characters are in THIS battle |
 | `initiative` | `entityId -> number` | the *number* |
@@ -865,6 +866,26 @@ Spells, nothing elsewhere. Inventory's add button deliberately **isn't**
 there: a control in the strip's far corner reads as acting on the whole tab,
 so it sits beside the coin row it actually edits.
 
+### `entityAbilities()` is a gate, not a window
+
+It is the **only** reader of `monsterAbilitiesByName`, and it returns a
+literal listing its keys — so a field it doesn't copy out cannot reach a
+panel however well the build script parsed it and however many monsters
+carry it. Info, Proficiencies' languages and Inventory's statblock items all
+shipped blank for exactly this reason: the parser, the data file and the
+render code were all correct, and the four-key return in the middle threw
+the fields away.
+
+Two habits that would have caught it, and are worth keeping:
+
+- **Add the key to both branches**, monster and character, the character one
+  as an explicit `null`/`[]`. A missing key and a null key read identically
+  at the destructure, so the omission is invisible until someone extends the
+  monster branch alone.
+- **Verify along the real call chain.** The check that "passed" fed a Python
+  mirror of `entityInfo()` straight from the JSON, which is the one path the
+  app never takes. A mirror has to start where the app starts.
+
 ### Info is the monster's identity, not its numbers
 
 `entityInfo()` pulls `flavour`, `traits` and `senses` off the abilities file,
@@ -876,6 +897,71 @@ traits 558, senses 545, flavour 537.
 prose above the statblock. Scraping the prose means deciding where the
 description ends, and that boundary moves from page to page; the meta tag is
 one unambiguous string AoN maintains for the same purpose.
+
+### Elite and weak adjust the numbers, never the prose
+
+The two Monster Core templates, as a three-position switch beside the level
+on the Character tab. They're applied at the two normalising choke points —
+`applyAdjustmentToStats()` inside `entityStatBlock()`, and
+`applyAdjustmentToAbilities()` inside `entityAbilities()` — so an adjusted
+monster's numbers simply *are* its numbers to the stat panel, the HP pool,
+`effectiveMaxHp()`, the damage dialog and the condition pipeline. No caller
+knows the feature exists.
+
+**Structured numbers are adjusted; AoN's prose is not.** Ability text ships
+verbatim, and a regex rewriting the DCs inside it would have to tell "DC 17
+Fortitude" (shift it) from "DC 5 flat check" (never shift it — 24 of those
+in the corpus) with nothing to go on but the words after the number.
+`renderActionsTab()` prints what's left to do by hand instead of guessing.
+That's also why Speed, the attribute modifiers and `shieldBonus` are
+untouched: the template lists what it changes, and none of them are on it.
+
+Details that are load-bearing:
+
+- **HP is keyed off the *starting* level**, before the level itself moves.
+  Reading it off the adjusted level puts every creature on a table boundary
+  in the wrong band.
+- **Current HP moves with max HP.** `placeEntity()` writes a real number into
+  `state.hp` the moment anything is placed, so nothing on the field is ever
+  "untracked" — without an explicit shift, a 30/30 creature made elite reads
+  30/45, having grown a bigger body and taken 15 damage in one click. What
+  survives the change is the *wound*: 22/30 becomes 37/45. This is the reason
+  `baseStatBlock()` is split out of `entityStatBlock()` — the shift needs the
+  max HP the entity is **about to** have, which the adjusted result can't
+  give you. It's computed outside the mutator, which sees only live state,
+  and floored at 0 rather than 1, since a creature made weak while nearly
+  dead can legitimately drop to dying.
+- **The level rules aren't plain ±1.** Elite takes −1 and 0 up by *two*;
+  weak takes 1 down to *−1*. Max HP is floored at 1, or a weak level −1
+  creature arrives dead.
+- **Strike damage moves by 2 once**, on the leading dice term only — "plus
+  1d6 fire" is a rider, not a second thing to adjust. `DAMAGE_HEAD` keeps
+  its whitespace **inside** the optional modifier group; outside it, the 71
+  strikes with no flat modifier lose the space before their damage type
+  ("1d6+2piercing"). AoN writes 14 negative modifiers with an en dash, so
+  the sign is read as text rather than parsed.
+- **A skill's conditional bonus is a full alternative total** ("+9 to
+  Climb"), so it moves by the same 2 as the flat one.
+- **The switch's icons are rank marks, not arithmetic signs** — a crown, a
+  dot, a downward chevron. They render at roughly 10px, which rules out the
+  prettier pairing (a crown and a *cracked* crown: the crack disappears and
+  the two become one shape in two colours) and killed a first crown drawn as
+  sharp spikes over a tall base, which rasterized to a rectangle with a fuzzy
+  top. Points must be blunt and tall, notches wide. Rasterize the polygon at
+  14×9 before trusting any icon at this size — it takes a scanline
+  point-in-polygon test and no dependencies.
+- **The `(elite)` suffix in the initiative track is drawn, never stored.**
+  Baked into the name it would flow through rename, `uniqueEntityName()` and
+  the copy/paste base name, and pasting an elite goblin would produce
+  "Goblin (elite) 2".
+
+The usual mirror discipline applies and paid for itself here: a throwaway
+Python mirror that lifts `DAMAGE_HEAD` and both HP tables **out of** the
+shipped JS with a regex — rather than restating them — and runs the rewriter
+over all 1100 strike damage strings in the corpus. It asserts the lifted
+tables against the ones Monster Core prints, that the tail past the dice term
+survives byte-for-byte, and that +2 then −2 round-trips. That is what caught
+the swallowed space.
 
 ### One stat block, two kinds of entity
 
