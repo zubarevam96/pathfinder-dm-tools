@@ -166,8 +166,34 @@ saved via `loadStore()`/`persist()` in `app.js`. Shape:
   group, by construction (there's no multi-group data structure to misuse).
 - Since storage is per-browser, there is no cross-device sync and no way for
   one user to see another's characters. This is deliberate (privacy by
-  isolation), not a gap to "fix" by adding a backend unless the developer
-  asks for that explicitly.
+  isolation), not a gap to "fix" by adding a backend.
+- **`static/google-drive.js` is the one sanctioned exception**, added at the
+  developer's explicit request. It is a *backup* layer, not a sync layer, and
+  the difference is load-bearing: localStorage stays the single source of
+  truth, nothing writes to storage behind a running page, and a restore
+  rewrites both keys and then **reloads** — because `app.js` and
+  `battle-helper.js` both read storage once at startup and hold live state in
+  module-level variables, so a page left running would disagree with what was
+  just written under it. It is self-contained (no file imports from it, it
+  imports from none) and reaches storage by key exactly as the two pages do,
+  which is what makes it impossible for it to change how either behaves.
+  Backing up whole blobs rather than chosen fields is also deliberate — a
+  partial backup that silently drops a key the app grows later is worse than
+  none.
+- **Reconnecting is silent, not an auto-opened popup.** A popup that isn't
+  traceable to a click is blocked by every browser, so "open the Google window
+  automatically" is not a thing a page can do and isn't what other apps are
+  doing either — they re-issue the token through a hidden iframe once consent
+  exists. `autoConnect()` does that on load, gated on a
+  `pathfinder-dm-tools:google-connected` flag so a user who never connected
+  gets no third-party script and no request to Google. Its failures are
+  deliberately silent: the silent path rides Google's session cookie in a
+  third-party context and can fail under Safari's ITP or Chrome's cookie
+  restrictions with a perfectly valid grant, which is why opening the dialog
+  escalates to the visible flow. Only tokens live in memory; the flag records
+  that a grant happened, never the token itself. Don't turn this into automatic sync without asking: last-write-wins
+  across two devices is exactly how a session's battle gets overwritten by a
+  stale tab, and it was rejected for that reason.
 - `data/` (server-side JSON) is a legacy artifact from before storage moved
   to the browser. It's gitignored and only read by `GET api/legacy-store`
   for one-time migration. Don't build new features on it.

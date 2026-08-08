@@ -12,6 +12,7 @@
     <header class="battle-header">
       <a class="sidebar-link" href="../">&larr; Pathfinder DM Tools</a>
       <h1 class="app-title">Battle Helper</h1>
+      <button type="button" id="drive-btn" class="battle-drive-btn" title="Google Drive backup">&#9729; Drive</button>
     </header>
 
     <nav class="battle-tabs" aria-label="Battles">
@@ -147,6 +148,45 @@
     </div>
   </dialog>
 
+  <!-- Persistent damage is a form, not a pick-from-a-list, so it gets its own
+       dialog rather than a tab in the condition one. Static markup, like every
+       other input on this page: the panel behind it rebuilds on each render()
+       and would take a half-entered value with it. -->
+  <dialog id="battle-persistent-dialog" class="battle-persistent-dialog">
+    <h2>Persistent damage — <span id="battle-persistent-dialog-name"></span></h2>
+    <form id="battle-persistent-form">
+      <!-- "Flat" is an option in the die list rather than a mode switch above
+           it: flat damage IS the no-die case, so folding it in loses nothing
+           and removes a whole control plus the tab state behind it. -->
+      <div class="battle-persistent-fields">
+        <label>
+          <span>Value</span>
+          <input type="number" id="battle-persistent-value" min="0" max="99" step="1" value="1" />
+        </label>
+        <label>
+          <span>Die</span>
+          <select id="battle-persistent-die"></select>
+        </label>
+        <label>
+          <span>Type</span>
+          <select id="battle-persistent-type"></select>
+        </label>
+      </div>
+      <p class="battle-persistent-preview">
+        <span id="battle-persistent-preview-text"></span>
+      </p>
+      <p class="battle-panel-hint">
+        Taken at the end of the creature's turn, then a DC 15 flat check to end it.
+        Different types all apply; for the same type only the highest does — every
+        source is kept here so you can see them, and which one is live is your call.
+      </p>
+      <div class="dialog-actions">
+        <button type="submit">Add</button>
+        <button type="button" id="battle-persistent-close">Close</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Characters are picked into a battle rather than all being in the
        roster at once, and are listed under the groups they belong to on the
        main page. -->
@@ -252,5 +292,8 @@
        before battle-helper.js, same as pf2e-math.js. -->
   <script src="../pf2e-conditions.js"></script>
   <script src="battle-helper.js"></script>
+  <!-- Backs up both stores, so it lives on both pages. Self-contained: it
+       reaches localStorage by key and nothing here calls into it. -->
+  <script src="../google-drive.js"></script>
 </body>
 </html>

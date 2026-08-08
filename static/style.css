@@ -320,8 +320,127 @@ button.subtle {
   box-shadow: var(--shadow);
 }
 
+/* Sits beside the gear rather than under it: both are fixed to the top-right,
+   so the second one needs its own offset or they stack in the same spot.
+   2.4rem button + 0.5rem gap + the gear's own 1rem inset. */
+.drive-btn {
+  right: 3.9rem;
+  font-size: 1.15rem;
+}
+
+/* Colours the cloud itself rather than adding a badge, so "connected" costs
+   the button no size and nothing shifts when it flips. Applies to the battle
+   helper's header button too — same state, same signal on both pages. */
+.drive-btn.connected,
+.battle-drive-btn.connected {
+  color: var(--success);
+  border-color: var(--success);
+}
+
 #main-content {
   flex: 1;
+}
+
+/* --- Google Drive backup dialog -------------------------------------------
+   Shared by both pages: the markup is built in google-drive.js so the two
+   can't drift, and these styles are the matching half. */
+#drive-dialog {
+  max-width: 32rem;
+}
+
+.drive-status {
+  min-height: 1.2rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.drive-status.ok {
+  color: var(--success);
+}
+
+.drive-status.error {
+  color: var(--danger);
+}
+
+.drive-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.drive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.drive-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.drive-hint code {
+  font-size: 0.95em;
+  word-break: break-all;
+}
+
+/* A button styled down to look like the inline link it reads as. Re-declares
+   background AND border-color on hover because the global button:hover sets
+   both, and the cascade resolves per property — naming only one lets the
+   global tint supply the other. */
+.drive-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.drive-link:hover {
+  background: none;
+  border-color: transparent;
+  filter: brightness(1.15);
+}
+
+.drive-id-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.drive-id-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.drive-compare-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.drive-compare {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.drive-warn {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--danger);
+}
+
+.drive-detail:empty {
+  display: none;
 }
 
 .placeholder {
