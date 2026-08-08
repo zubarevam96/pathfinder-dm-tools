@@ -35,6 +35,15 @@
   width: auto;
 }
 
+/* margin-left: auto pushes it to the far end of the header's flex row, which
+   is where the main page's fixed gear/cloud pair sits too. A fixed button
+   would overlap the battle tab strip on a short viewport. */
+.battle-drive-btn {
+  margin-left: auto;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .battle-header .app-title {
   margin: 0;
   border-bottom: none;
@@ -1406,8 +1415,25 @@
 /* Fills the rest of the row beside the saves block. min-width: 0 so long
    condition names ellipse instead of forcing the flex row wider than the
    panel. */
-.battle-conditions {
+/* Conditions and persistent damage side by side, as siblings — persistent
+   damage is not a condition, and nesting it inside the conditions block made
+   that block's name a lie about its contents.
+
+   Two columns rather than two stacked sections: stacking cost a second
+   heading's worth of vertical space in a box that has none to give, while both
+   lists are narrow enough that half the width each is plenty. Fixed 1fr
+   fractions, not auto — an empty persistent column still holds its half, so
+   applying the first persistent damage doesn't reflow the conditions beside
+   it. See references/bottom-boxes.md. */
+.battle-afflictions {
   flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.battle-conditions-col {
   min-width: 0;
 }
 
@@ -1423,6 +1449,145 @@
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+/* --- Persistent damage ---
+   Second COLUMN of the conditions block, so the divider is a left rule rather
+   than a top one. The padding is on the same side as the border so the rule
+   sits in the gap, not against the text. */
+.battle-persistent {
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--border);
+}
+
+.battle-persistent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* A chip rather than a list row: these are short, there are rarely more than
+   two, and wrapping them fits the panel's width better than a column of
+   mostly-empty rows would. */
+.battle-persistent-row {
+  display: flex;
+  align-items: center;
+  padding: 0.1rem 0.15rem 0.1rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+/* A dashed underline marks the second and later sources of one type, so two
+   bleeds are visibly two rather than reading as a double-render. It marks
+   them, deliberately, without deciding which applies — that's the DM's call.
+   A border colour would have collided with the red the formula already uses. */
+.battle-persistent-row.stacked {
+  border-style: dashed;
+}
+
+/* The chip's label is the edit control. A button styled back down to the text
+   it replaces, so the chip doesn't grow a second visible control. */
+.battle-persistent-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.battle-persistent-edit:hover {
+  background: none;
+  border-color: transparent;
+}
+
+.battle-persistent-edit:hover .battle-persistent-type {
+  color: var(--text);
+}
+
+.battle-persistent-formula {
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.battle-persistent-type {
+  color: var(--muted);
+}
+
+.battle-persistent-remove {
+  margin-left: 0.3rem;
+  width: 1rem;
+  height: 1rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Re-declares background as well as colour: the global button:hover sets
+   background and border-color, and the cascade resolves per property, so a
+   rule naming only colour lets the accent tint through underneath. */
+.battle-persistent-remove:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--danger);
+}
+
+.battle-persistent-dialog {
+  max-width: 26rem;
+}
+
+
+.battle-persistent-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.battle-persistent-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* The two number fields are narrow on purpose — a dice count and a flat
+   amount are one or two digits, and full-width inputs made the row wrap. */
+.battle-persistent-fields input[type="number"] {
+  width: 3.5rem;
+}
+
+.battle-persistent-fields select {
+  min-width: 6rem;
+}
+
+.battle-persistent-preview {
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.battle-persistent-preview.empty {
+  font-weight: 400;
   color: var(--muted);
 }
 
@@ -1796,20 +1961,31 @@
   min-width: 0;
 }
 
-/* Wraps Recall Knowledge and the conditions list so the two stack in the
-   column beside the saves grid, instead of the recall line becoming a third
-   sibling and pushing conditions out of the row. Takes the flex growth that
-   .battle-conditions used to. */
+/* Holds the conditions grid, which takes whatever the saves column doesn't. */
 .battle-stat-side {
   flex: 1;
   min-width: 0;
 }
 
+/* The saves grid and Recall Knowledge, stacked. Both are pinned to the grid's
+   fixed width, so this whole column costs the row a known amount and every
+   pixel it doesn't use goes to the conditions. */
+.battle-stat-checks {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
 /* The DC to identify a creature, right where a DM looks when a player asks.
-   Muted and small — it's reference, not a live number like a save. */
+   Muted and small — it's reference, not a live number like a save.
+   Wraps rather than ellipsizing: it sits under a 2-column grid roughly one
+   line wide, and truncating "Animal (Nature)" would lose the skill, which is
+   the half a DM actually needs. */
 .battle-recall {
-  margin: 0 0 0.3rem;
+  margin: 0;
   font-size: 0.68rem;
+  line-height: 1.3;
   color: var(--muted);
 }
 

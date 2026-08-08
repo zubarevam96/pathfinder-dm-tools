@@ -14,6 +14,14 @@ function for every action type.
 doors, terrain, pathfinding, token drawing, drag-and-drop — lives in
 `references/map.md`. Read that too before touching any of it.
 
+**The two bottom boxes are the tightest space on the page**, and anything
+added to either is a trade against what's already there. Before adding a
+control, row, heading or label to `#battle-object-panel` or
+`#battle-abilities-panel`, read `references/bottom-boxes.md` — it carries
+the compactness check, what each box already spends its space on, and how
+the "reserve space to avoid jumping" rule is reconciled with not wasting
+any.
+
 ## Rule 1: Everything is an event, or part of one
 
 Any code that changes battle **state** must go through the one
@@ -43,6 +51,7 @@ Everything `emptyBattleState()` returns, and nothing else:
 | `placements` | `squareKey -> entityId` | one entity per square |
 | `hp`, `tempHp` | `entityId -> number` | never max HP — see "State separation" |
 | `conditions` | `entityId -> { conditionId: { active, value } }` | |
+| `persistentDamage` | `entityId -> [{ id, type, value, die }]` | a list — duplicate types allowed; `die: null` = flat; cleared wherever `conditions` is |
 | `spellSlots` | `entityId -> { "casterKey:level": bool[] }` | `true` = spent; read with a clamp, never written back into shape |
 | `inventory` | `entityId -> { items: [{name, qty}], money }` | DM-added loot and coin; **survives leaving the field**, like `appearance` |
 | `adjustment` | `entityId -> "elite" \| "weak"` | absent = unadjusted; also survives leaving the field |
@@ -1106,6 +1115,82 @@ half-modelled penalty a DM leans on is worse than none. Same for
 conditional ones whose trigger the page can't know, like Blinded's −4
 Perception "if vision was your only precise sense". If you add effects,
 add them for stats the panel actually shows.
+
+### Persistent damage is next to the conditions, not one of them
+
+It renders **beside** the conditions, as the second column of
+`.battle-afflictions` — a wrapper that holds `conditionsSectionHtml()` and
+`persistentSectionHtml()` as **siblings**. It was briefly nested inside the
+conditions block, which made that block's name a lie about its contents;
+persistent damage is not a condition. Two columns rather than two stacked
+sections because stacking cost a second heading's worth of height in a box
+with none to spare, and neither list is wide enough to miss half the width
+(`references/bottom-boxes.md`). The empty column still holds its `1fr`, so the
+first bleed applied doesn't reflow the conditions beside it.
+
+**An entry is either dice or a flat amount, never both** — `{ value, die }`
+with a null `die` meaning flat. The dialog is three controls: `Value`, `Die`,
+`Type`. **"flat" is the first option in the Die select**, not a mode switch
+above it — flat damage *is* the no-die case, so folding it in removed a whole
+control and the tab state behind it while losing nothing. `Value` is the
+number of dice when a die is picked and the amount itself when "flat" is,
+which is why it isn't labelled "Dice".
+
+This arrived in two steps worth not repeating: first as separate `dice`,
+`die` and `flat` fields (two of the three were always noise), then as a
+Die/Flat tab strip over one `Value` (a control whose only job was to hide
+another control). Seeding an existing entry must restore the **die**, or
+reopening a flat 3 and saving would quietly turn it into 3d6.
+
+**It's a list, and two sources of the same type are legal.** PF2e applies only
+the highest of a given type, but that's a judgement about which source is live,
+and a DM who just landed a second bleed needs both on screen to make it —
+collapsing them would also silently discard a source when a smaller one is
+applied after a bigger one. So `addPersistentDamage()` always appends, and
+`edit`/`remove` work by **row id**: with duplicates allowed, a damage type
+identifies nothing. Repeats of one type get a dashed border and a "source 2 of
+3" tooltip — marked, never resolved.
+
+`entityPersistentDamage()` sorts by `PF2E_DAMAGE_TYPES` order, and relies on
+JS's sort being stable (guaranteed since ES2019) to keep same-type rows in the
+order they were applied. That adjacency is the point: comparing same-type
+sources is exactly the call being left to the DM.
+
+Two older shapes are **reconciled on read** and never written back, the same
+way `initiativeOrderIds()` and `getAppearance()` handle theirs — an object
+keyed by damage type (the type doubles as the row id, unique because that shape
+allowed only one per type), and `{ count, die, flat }` per entry, where dice
+win over a flat term because that's the part a DM rolled. The mutator in
+`updatePersistentDamage()` receives the *normalised array*, so the first write
+converts a legacy record and no writer ever sees the old shape.
+
+**It is deliberately not in `PF2E_CONDITIONS`.** It has no tier, takes part in
+no imposed-condition graph, and moves no stat the panel shows — so it lives in
+its own `battleState.persistentDamage` map rather than being bent into a
+dictionary built for a different shape. It *is* cleared everywhere
+`conditions` is (place, remove, delete, remove-character, resize eviction);
+those five sites must stay in step, and the pairing is worth checking
+mechanically rather than by eye.
+
+**Keyed by damage type, one entry each.** The rule is that persistent damage
+of different types all applies but only the highest of a given type does, so
+one entry per type makes the illegal state unrepresentable instead of leaving
+a DM to reconcile two fire rows. Setting a type that already exists replaces
+it, and the dialog seeds its fields from whatever that type currently has —
+which is what makes it the edit form as well as the add form. Changing the
+type re-seeds, or the preview would offer to apply a number read off a
+different type.
+
+`PF2E_DAMAGE_TYPES` is the remaster list: vitality replaced positive, void
+replaced negative, spirit replaced the four alignment types. **Precision is
+deliberately absent** — it's a damage type, but never a persistent one.
+
+**The token's blood drop is one mark for any type**, drawn last so it sits
+over the letters. It's filled dark red and *stroked white*: the token's colour
+is the DM's to choose, and a red drop on a red goblin is invisible without an
+outline that survives whatever is underneath. One closed bezier path rather
+than a circle plus a triangle, so the stroke traces the silhouette instead of
+showing a seam where the two met.
 
 Drained breaks the "max HP is never stored, just recomputed" rule's
 simplicity by *lowering* max HP, so everything that clamps HP goes through

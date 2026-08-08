@@ -373,7 +373,7 @@ function fitMapToView() {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, spellSlots: {}, inventory: {}, adjustment: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, persistentDamage: {}, spellSlots: {}, inventory: {}, adjustment: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -1861,6 +1861,14 @@ function drawGrid() {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(appearance.letters, cx, cy);
+
+    // One drop for any persistent damage, whatever the type. A DM scanning
+    // the board needs to know which creatures still have something ticking
+    // at end of turn; which flavour it is, is a question for the panel.
+    // Drawn last so it sits over the letters rather than under them.
+    if (hasPersistentDamage(entityId)) {
+      drawPersistentMark(cx + radius * 0.62, cy - radius * 0.62, radius * 0.34);
+    }
   }
 
   if (selectedSquareKey) {
@@ -1869,6 +1877,30 @@ function drawGrid() {
     ctx.lineWidth = 2;
     ctx.strokeRect(pixelX(col) + 1, pixelY(row) + 1, SQUARE_SIZE - 2, SQUARE_SIZE - 2);
   }
+}
+
+// A blood drop in the token's top-right corner: pointed at the top, round at
+// the bottom, as one closed path so the outline traces the silhouette instead
+// of showing a seam where two shapes met.
+//
+// The outline is not decoration. A token's colour is the DM's to choose, and
+// a red drop on a red goblin is invisible without one — so the drop is filled
+// dark red and stroked in white, a pair that survives any shape colour
+// underneath it.
+const PERSISTENT_MARK_FILL = "#b3261e";
+const PERSISTENT_MARK_EDGE = "#ffffff";
+
+function drawPersistentMark(x, y, size) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - size);
+  ctx.bezierCurveTo(x + size, y - size * 0.15, x + size, y + size * 0.6, x, y + size * 0.8);
+  ctx.bezierCurveTo(x - size, y + size * 0.6, x - size, y - size * 0.15, x, y - size);
+  ctx.closePath();
+  ctx.fillStyle = PERSISTENT_MARK_FILL;
+  ctx.fill();
+  ctx.strokeStyle = PERSISTENT_MARK_EDGE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
 }
 
 function renderRoster() {
@@ -1961,6 +1993,7 @@ function renderRoster() {
           delete state.initiative[id];
           delete state.appearance[id];
           delete state.conditions[id];
+          delete state.persistentDamage[id];
           delete state.spellSlots[id];
           delete state.inventory[id];
           delete state.adjustment[id];
@@ -1993,6 +2026,7 @@ function placeEntity(entityId, key) {
     else delete state.hp[entityId];
     delete state.tempHp[entityId];
     delete state.conditions[entityId];
+    delete state.persistentDamage[entityId];
     delete state.spellSlots[entityId];
     state.initiativeOrder.push(entityId);
   });
@@ -2029,6 +2063,7 @@ function removeCharacterFromBattle(characterId, name) {
     delete state.hp[characterId];
     delete state.tempHp[characterId];
     delete state.conditions[characterId];
+    delete state.persistentDamage[characterId];
     delete state.spellSlots[characterId];
     delete state.inventory[characterId];
     delete state.adjustment[characterId];
@@ -3219,7 +3254,7 @@ function renderCharacterTab(objectBody) {
       </div>
       ${summary}
       <div class="battle-stat-body">
-        ${conditionsSectionHtml(entityId)}
+        ${afflictionsSectionHtml(entityId)}
       </div>
     `;
     bindRemoveButton();
@@ -3393,14 +3428,20 @@ function renderCharacterTab(objectBody) {
       </div>
     </div>
     <div class="battle-stat-body">
-      <div class="battle-stat-grid">
-        ${checks}
-      </div>
-      <div class="battle-stat-side">
+      <!-- Recall Knowledge sits UNDER the saves grid rather than over the
+           conditions: it's the same fixed width as the grid, so it costs the
+           row no horizontal space at all there, where above the conditions it
+           was setting the width of the wider column. -->
+      <div class="battle-stat-checks">
+        <div class="battle-stat-grid">
+          ${checks}
+        </div>
         ${stats.recallKnowledge
           ? `<p class="battle-recall" title="Recall Knowledge">${escapeHtml(stats.recallKnowledge)}</p>`
           : ""}
-        ${conditionsSectionHtml(characterId)}
+      </div>
+      <div class="battle-stat-side">
+        ${afflictionsSectionHtml(characterId)}
       </div>
     </div>
   `;
@@ -3516,6 +3557,148 @@ function modifierHint(label, base, modifier, format = formatMod) {
     lines.push(`${formatMod(term.amount)}${type} — ${term.source}${term.applied ? "" : " (doesn't stack)"}`);
   }
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Persistent damage.
+//
+// It sits with the conditions rather than beside them because that's what it
+// is at the table: something stuck to a creature that a DM has to remember at
+// the end of its turn. It is NOT one of PF2E_CONDITIONS, though — it has no
+// tier, no imposed-condition graph, and no effect on any stat the panel
+// shows — so it gets its own map rather than being forced into a dictionary
+// built for a different shape.
+//
+// A LIST, one row per source, and two rows of the same damage type are
+// allowed. The rule is that only the highest of a given type applies — but
+// that's a judgement about which source is live, and a DM who has just landed
+// a second bleed wants both on screen to make it. Collapsing them here would
+// throw away the information needed to decide, and would silently discard a
+// source when a smaller one is applied after a bigger one.
+//
+// Remaster names: vitality replaced positive, void replaced negative, and
+// spirit replaced the four alignment damage types. Bleed leads the list
+// because it's the persistent damage a DM reaches for most.
+const PF2E_DAMAGE_TYPES = [
+  "bleed",
+  "acid", "cold", "electricity", "fire", "force", "sonic", "vitality", "void",
+  "bludgeoning", "piercing", "slashing",
+  "mental", "poison", "spirit", "untyped",
+];
+
+const PERSISTENT_DICE = [4, 6, 8, 10, 12];
+
+// The die select's value for "no die" — flat damage is the no-die case rather
+// than a separate mode, so it lives in the same control.
+const PERSISTENT_FLAT = "flat";
+
+// The flat check to end it. Shown, never rolled — the page doesn't roll
+// anything else either, and a DM with dice in hand doesn't need it to.
+const PERSISTENT_FLAT_DC = 15;
+
+// Always returns a normalised array, whatever shape is in storage. Sorted by
+// damage type in PF2E_DAMAGE_TYPES order, which is a stable sort, so two
+// bleeds land next to each other in the order they were applied — that
+// adjacency is the point, since comparing same-type sources is the call the
+// DM has to make.
+function entityPersistentDamage(entityId) {
+  const stored = battleState.persistentDamage?.[entityId];
+  if (!stored) return [];
+  const list = Array.isArray(stored)
+    ? stored
+    // Legacy: an object keyed by damage type, one entry each. The type doubles
+    // as the id, which is unique precisely because that shape allowed only one
+    // entry per type.
+    : Object.entries(stored).map(([type, entry]) => ({ id: type, type, ...entry }));
+
+  return list
+    .map((entry) => ({
+      id: entry.id ?? entry.type,
+      type: entry.type,
+      ...normalizePersistentEntry(entry),
+    }))
+    .filter((entry) => entry.type && entry.value > 0)
+    .sort((a, b) => PF2E_DAMAGE_TYPES.indexOf(a.type) - PF2E_DAMAGE_TYPES.indexOf(b.type));
+}
+
+function hasPersistentDamage(entityId) {
+  return entityPersistentDamage(entityId).length > 0;
+}
+
+// An entry is EITHER dice or a flat amount, never both: `{ value, die }` with
+// a null `die` meaning flat. Persistent damage is written one way or the other
+// at the table ("1d6 persistent bleed", "3 persistent fire"), and offering
+// both at once produced a form where two of the three fields were always
+// noise.
+//
+// Reconciled on read rather than migrated, the same way initiativeOrderIds()
+// and getAppearance() handle their older shapes: an entry saved as
+// `{ count, die, flat }` is converted here and never written back. Dice win
+// over a flat term when a legacy entry carried both, because that's the part
+// a DM would have rolled.
+function normalizePersistentEntry(entry) {
+  if (!entry) return { value: 0, die: null };
+  if (entry.count != null || entry.flat != null) {
+    const count = Number(entry.count) || 0;
+    return count > 0
+      ? { value: count, die: Number(entry.die) || 6 }
+      : { value: Number(entry.flat) || 0, die: null };
+  }
+  const die = entry.die == null ? null : Number(entry.die) || null;
+  return { value: Math.max(0, Number(entry.value) || 0), die };
+}
+
+// "1d6", "2d8", "5".
+function persistentDamageFormula(entry) {
+  const { value, die } = normalizePersistentEntry(entry);
+  return die ? `${value}d${die}` : String(value);
+}
+
+// The mutator gets the NORMALISED array, so every writer works in the new
+// shape and a legacy object is converted the first time anything is written —
+// without a migration pass, and without the readers ever seeing two shapes.
+function updatePersistentDamage(entityId, label, mutate) {
+  dispatch("persistent-damage", label, (state) => {
+    if (!state.persistentDamage) state.persistentDamage = {};
+    const list = entityPersistentDamage(entityId).map((entry) => ({ ...entry }));
+    mutate(list);
+    // Dropping the whole record when the last row goes keeps
+    // hasPersistentDamage() — and so the token's drop — honest without a
+    // separate emptiness check at every reader.
+    if (list.length) state.persistentDamage[entityId] = list;
+    else delete state.persistentDamage[entityId];
+  });
+}
+
+// Always appends. Two sources of the same type is a legal, deliberate state:
+// PF2e applies only the highest of a type, but deciding which that is belongs
+// to the DM, and silently replacing would delete a source they can still see
+// on the table.
+function addPersistentDamage(entityId, name, entry) {
+  const formula = persistentDamageFormula(entry);
+  updatePersistentDamage(entityId, `${name} took ${formula} persistent ${entry.type}`, (list) => {
+    list.push({ id: `pd-${crypto.randomUUID()}`, type: entry.type, value: entry.value, die: entry.die });
+  });
+}
+
+// Editing is by row id, not by type — with duplicates allowed, a type no
+// longer identifies anything.
+function editPersistentDamage(entityId, name, entryId, entry) {
+  const formula = persistentDamageFormula(entry);
+  updatePersistentDamage(entityId, `${name}'s persistent ${entry.type} set to ${formula}`, (list) => {
+    const index = list.findIndex((row) => row.id === entryId);
+    if (index < 0) return;
+    list[index] = { id: entryId, type: entry.type, value: entry.value, die: entry.die };
+  });
+}
+
+function removePersistentDamage(entityId, name, entryId) {
+  const row = entityPersistentDamage(entityId).find((entry) => entry.id === entryId);
+  if (!row) return;
+  updatePersistentDamage(entityId, `${name}'s ${persistentDamageFormula(row)} persistent ${row.type} ended`, (list) => {
+    const index = list.findIndex((entry) => entry.id === entryId);
+    if (index >= 0) list.splice(index, 1);
+  });
 }
 
 // One place that writes the map, so every caller gets the same defensive
@@ -3639,7 +3822,7 @@ function conditionsSectionHtml(entityId) {
   }).join("");
 
   return `
-    <div class="battle-conditions">
+    <div class="battle-conditions-col">
       <div class="battle-conditions-header">
         <h3>Conditions</h3>
         <button type="button" id="battle-condition-add" class="battle-condition-add" title="Add condition" aria-label="Add condition">+</button>
@@ -3647,6 +3830,72 @@ function conditionsSectionHtml(entityId) {
       <ul class="battle-condition-list">
         ${rows || '<li class="placeholder">None.</li>'}
       </ul>
+    </div>`;
+}
+
+// Conditions and persistent damage, side by side. They are SIBLINGS here, not
+// one nested in the other: persistent damage isn't a condition, and having
+// conditionsSectionHtml() emit it made the block's name a lie about what was
+// inside it. Two columns rather than two stacked sections — stacked, the
+// second heading pushed everything below it down a box with no vertical room
+// to give, and neither list is wide enough to miss half the width.
+// See references/bottom-boxes.md.
+function afflictionsSectionHtml(entityId) {
+  return `
+    <div class="battle-afflictions">
+      ${conditionsSectionHtml(entityId)}
+      ${persistentSectionHtml(entityId)}
+    </div>`;
+}
+
+// The second column of the conditions block, with its own heading and its own
+// + button. One block because a DM reads "what is stuck to this creature" as
+// one question; two columns because persistent damage is added and removed
+// differently — there's no dictionary to pick from, and no tier to step.
+//
+// The column is rendered even when empty, and the grid gives it a fixed
+// fraction, so the first persistent damage applied doesn't reflow the
+// conditions beside it (see "Avoiding layout jumps").
+function persistentSectionHtml(entityId) {
+  const entries = entityPersistentDamage(entityId);
+  // Two rows of the same type are expected, not a glitch, so each is counted
+  // in its tooltip — "1 of 2 bleed sources" is what tells the DM they have a
+  // call to make about which one is actually applying.
+  const perType = {};
+  for (const entry of entries) perType[entry.type] = (perType[entry.type] ?? 0) + 1;
+  const seen = {};
+
+  const rows = entries.map((entry) => {
+    const formula = persistentDamageFormula(entry);
+    seen[entry.type] = (seen[entry.type] ?? 0) + 1;
+    const total = perType[entry.type];
+    const hint = [
+      `${formula} persistent ${entry.type} at the end of each turn, then a DC ${PERSISTENT_FLAT_DC} flat check to end it.`,
+      total > 1
+        ? `Source ${seen[entry.type]} of ${total} of this type — only the highest applies, your call which.`
+        : "",
+      "Click to edit.",
+    ].filter(Boolean).join("\n\n");
+    return `
+      <li class="battle-persistent-row${total > 1 ? " stacked" : ""}">
+        <button type="button" class="battle-persistent-edit" data-entry="${escapeHtml(entry.id)}" title="${escapeHtml(hint)}">
+          <span class="battle-persistent-formula">${escapeHtml(formula)}</span>
+          <span class="battle-persistent-type">${escapeHtml(entry.type)}</span>
+        </button>
+        <button type="button" class="battle-persistent-remove" data-entry="${escapeHtml(entry.id)}" title="End this ${escapeHtml(entry.type)}" aria-label="End this ${escapeHtml(entry.type)}">&times;</button>
+      </li>`;
+  }).join("");
+
+  // The list is dropped entirely when empty rather than printing "None." a
+  // second time beside the conditions' own — one block shouldn't say it twice,
+  // and the empty column still holds its half of the grid.
+  return `
+    <div class="battle-conditions-col battle-persistent">
+      <div class="battle-conditions-header">
+        <h3>Persistent damage</h3>
+        <button type="button" id="battle-persistent-add" class="battle-condition-add" title="Add persistent damage" aria-label="Add persistent damage">+</button>
+      </div>
+      ${rows ? `<ul class="battle-persistent-list">${rows}</ul>` : ""}
     </div>`;
 }
 
@@ -3661,6 +3910,18 @@ function bindConditionsSection(entityId, name) {
   for (const btn of objectPanel.querySelectorAll(".battle-condition-step")) {
     btn.addEventListener("click", () => {
       adjustCondition(entityId, btn.dataset.condition, name, Number(btn.dataset.delta));
+    });
+  }
+
+  document.getElementById("battle-persistent-add").addEventListener("click", () => {
+    openPersistentDialog(entityId, name, null);
+  });
+  for (const btn of objectPanel.querySelectorAll(".battle-persistent-edit")) {
+    btn.addEventListener("click", () => openPersistentDialog(entityId, name, btn.dataset.entry));
+  }
+  for (const btn of objectPanel.querySelectorAll(".battle-persistent-remove")) {
+    btn.addEventListener("click", () => {
+      removePersistentDamage(entityId, name, btn.dataset.entry);
     });
   }
 }
@@ -4166,6 +4427,112 @@ function renderConditionOptions() {
 }
 
 conditionFilter.addEventListener("input", renderConditionOptions);
+
+// ---------------------------------------------------------------------------
+// Persistent damage dialog
+
+const persistentDialog = document.getElementById("battle-persistent-dialog");
+const persistentDialogTitle = document.getElementById("battle-persistent-dialog-name");
+const persistentForm = document.getElementById("battle-persistent-form");
+const persistentValue = document.getElementById("battle-persistent-value");
+const persistentDie = document.getElementById("battle-persistent-die");
+const persistentType = document.getElementById("battle-persistent-type");
+const persistentPreview = document.getElementById("battle-persistent-preview-text");
+
+const persistentSubmit = persistentForm.querySelector('button[type="submit"]');
+
+let persistentDialogEntityId = null;
+let persistentDialogName = "";
+// null = adding a new source; an id = editing that row.
+let persistentDialogEntryId = null;
+
+// Options are built once from the constants rather than written out in the
+// HTML, so the two can't disagree about which damage types exist.
+// "Flat" leads the list because it's the no-die case, and reads as the
+// simplest option rather than something hidden past the dice.
+persistentDie.innerHTML = [`<option value="${PERSISTENT_FLAT}">flat</option>`]
+  .concat(PERSISTENT_DICE.map((die) => `<option value="${die}">d${die}</option>`))
+  .join("");
+persistentDie.value = "6";
+persistentType.innerHTML = PF2E_DAMAGE_TYPES.map((type) => `<option value="${type}">${type}</option>`).join("");
+
+// "Value" means the number of dice when a die is selected and the amount
+// itself when "flat" is — one field doing both jobs, which is why it isn't
+// called "Dice".
+function persistentDialogEntry() {
+  return {
+    value: Math.max(0, Math.trunc(Number(persistentValue.value) || 0)),
+    die: persistentDie.value === PERSISTENT_FLAT ? null : Number(persistentDie.value) || null,
+  };
+}
+
+function renderPersistentPreview() {
+  const entry = persistentDialogEntry();
+  const empty = entry.value <= 0;
+  persistentPreview.textContent = empty
+    ? (entry.die ? "Set how many dice." : "Set an amount.")
+    : `${persistentDamageFormula(entry)} persistent ${persistentType.value}`;
+  persistentPreview.classList.toggle("empty", empty);
+  persistentSubmit.disabled = empty;
+}
+
+// Two jobs, told apart by entryId: null adds a new source, an id edits that
+// one. It can't be told apart by damage type any more — with duplicates
+// allowed, a type identifies nothing.
+function openPersistentDialog(entityId, name, entryId) {
+  persistentDialogEntityId = entityId;
+  persistentDialogName = name;
+  persistentDialogEntryId = entryId ?? null;
+  persistentDialogTitle.textContent = name;
+
+  const editing = entryId
+    ? entityPersistentDamage(entityId).find((entry) => entry.id === entryId)
+    : null;
+  persistentType.value = editing?.type ?? "bleed";
+  seedPersistentFields(editing);
+  persistentSubmit.textContent = editing ? "Save" : "Add";
+
+  persistentDialog.showModal();
+  persistentValue.focus();
+}
+
+// Loads an existing entry into the form, INCLUDING its die — a flat 3 has to
+// come back with "flat" selected, or saving it again would quietly turn it
+// into 3d6. A new entry defaults to d6, the commonest persistent die.
+function seedPersistentFields(entry) {
+  const seeded = entry ? normalizePersistentEntry(entry) : null;
+  persistentValue.value = String(seeded?.value ?? 1);
+  if (!seeded) persistentDie.value = "6";
+  else persistentDie.value = seeded.die ? String(seeded.die) : PERSISTENT_FLAT;
+  renderPersistentPreview();
+}
+
+// Changing the type re-seeds from whatever that type already has, so the
+// preview never claims a creature is about to take 2d6 acid when the 2d6 was
+// read off its bleed.
+// Changing the type only refreshes the preview now. It used to re-seed the
+// fields from whatever that type already had, which made sense when a type
+// could hold one entry; with several possible it would have to pick one
+// arbitrarily, and picking wrong silently retypes the numbers being entered.
+persistentType.addEventListener("change", renderPersistentPreview);
+
+for (const input of [persistentValue, persistentDie]) {
+  input.addEventListener("input", renderPersistentPreview);
+}
+
+persistentForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entry = { ...persistentDialogEntry(), type: persistentType.value };
+  if (entry.value <= 0) return;
+  if (persistentDialogEntryId) {
+    editPersistentDamage(persistentDialogEntityId, persistentDialogName, persistentDialogEntryId, entry);
+  } else {
+    addPersistentDamage(persistentDialogEntityId, persistentDialogName, entry);
+  }
+  persistentDialog.close();
+});
+
+document.getElementById("battle-persistent-close").addEventListener("click", () => persistentDialog.close());
 conditionCloseBtn.addEventListener("click", () => conditionDialog.close());
 
 // ---------------------------------------------------------------------------
@@ -4932,6 +5299,7 @@ function resizeGrid(side, delta) {
       delete state.hp[entityId];
       delete state.tempHp[entityId];
       delete state.conditions[entityId];
+      delete state.persistentDamage[entityId];
       delete state.spellSlots[entityId];
       delete state.initiative[entityId];
       // Appearance deliberately survives, exactly as it does for a normal
@@ -5319,6 +5687,7 @@ function deleteSelectedToken() {
     delete state.hp[entityId];
     delete state.tempHp[entityId];
     delete state.conditions[entityId];
+    delete state.persistentDamage[entityId];
     delete state.spellSlots[entityId];
     delete state.initiative[entityId];
     state.initiativeOrder = state.initiativeOrder.filter((id) => id !== entityId);
