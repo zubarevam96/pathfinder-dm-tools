@@ -1,0 +1,16 @@
+# local/ is the gitignored half of the repo — build scripts, the ~50 MB Archives
+# of Nethys download cache, and the generated monster data. None of it belongs
+# in an image; the monster data reaches production on a volume instead
+# (MONSTER_DATA_DIR), because it isn't in the repo to copy.
+local/
+
+.git/
+.github/
+.venv/
+__pycache__/
+*.pyc
+.claude/
+*.md
+prechange.sh
+postchange.sh
+pyproject.toml

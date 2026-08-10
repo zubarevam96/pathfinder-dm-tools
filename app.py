@@ -1,17 +1,25 @@
-"""Flask app: static frontend + Pathbuilder 2e fetch proxy.
+"""Flask app: static frontend, Pathbuilder proxy, and the bot API's front door.
 
-Character/group data lives in the browser (localStorage), so each user only
-sees their own characters. The server keeps nothing; it only proxies fetches
-to Pathbuilder (which browsers can't call directly due to CORS) and serves a
-one-time export of the old server-side store for migration.
+Character/group data lives in the browser (localStorage). This server keeps
+nothing of its own; it serves the site, proxies fetches to Pathbuilder (which
+browsers can't always call directly), serves the monster data that is kept out
+of the committed site, and forwards ``/sync/*`` to the DM assistant bot.
+
+That last one is why this runs in production at all now rather than only in
+local dev. The site and the bot's API used to be two origins — GitHub Pages
+and a Railway domain — which meant a CORS allowlist, a public API, and the
+site having to be told an address. Serving both from here makes them one
+origin: the browser only ever talks to this service, and the bot is reached
+over Railway's private network, so its API needs no public domain at all.
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
@@ -34,8 +42,35 @@ LEGACY_CHARACTERS_FILE = DATA_DIR / "characters.json"
 # stats — which IS published. Local dev prefers the richer local copy and
 # falls back to the committed one, so a fresh clone that has never run the
 # build still gets a working roster instead of an empty picker.
-MONSTER_DATA_DIR = LOCAL_DIR / "static" / "monster-data"
+#
+# In production the generated half isn't in the image either — it's gitignored,
+# so it isn't in the repo the container builds from. MONSTER_DATA_DIR points it
+# at a mounted volume instead, which is the one manual step of the Railway
+# deploy: upload the built files once, and again whenever the corpus is rebuilt.
+MONSTER_DATA_DIR = Path(os.environ.get("MONSTER_DATA_DIR") or LOCAL_DIR / "static" / "monster-data")
 PUBLIC_MONSTER_DATA_DIR = Path(app.static_folder) / "monster-data"
+
+# The bot service. On Railway this is its private address —
+# <service>.railway.internal — which is reachable only from inside the project,
+# so the bot needs no public domain. Locally it's the bot's own dev port.
+BOT_API_URL = (os.environ.get("BOT_API_URL") or "http://127.0.0.1:8080").rstrip("/")
+PROXY_TIMEOUT_SECONDS = 15
+
+# Set per-connection by whichever server is speaking, and meaningless to pass
+# along: forwarding Connection or Transfer-Encoding hands the browser a claim
+# about a hop it isn't on. Content-Length is dropped because Flask recomputes it.
+HOP_BY_HOP = frozenset({
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "content-length",
+    "content-encoding",
+})
 
 
 def extract_character_id(link_or_id: str) -> str | None:
@@ -75,6 +110,52 @@ def monster_data(filename):
     if (MONSTER_DATA_DIR / filename).is_file():
         return send_from_directory(MONSTER_DATA_DIR, filename)
     return send_from_directory(PUBLIC_MONSTER_DATA_DIR, filename)
+
+
+@app.route(
+    "/sync/<path:subpath>",
+    methods=["GET", "POST", "PUT", "DELETE"],
+)
+def sync_proxy(subpath):
+    """Forward one call to the bot's API and hand back what it said.
+
+    Deliberately dumb: it passes the method, the query string, the body and the
+    Authorization header, and returns the status and body unread. The bearer
+    token is the browser's, not this service's — nothing here mints, stores or
+    inspects credentials, so a bug in this file cannot become an authorization
+    bug in the bot.
+
+    There is no CORS handling because there is nothing to handle: the browser
+    is talking to its own origin, and this hop is server to server.
+    """
+    headers = {}
+    authorization = request.headers.get("Authorization")
+    if authorization:
+        headers["Authorization"] = authorization
+    if request.content_type:
+        headers["Content-Type"] = request.content_type
+
+    try:
+        upstream = requests.request(
+            request.method,
+            f"{BOT_API_URL}/{subpath}",
+            params=request.args,
+            data=request.get_data(),
+            headers=headers,
+            timeout=PROXY_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        # The bot being down, asleep or unreachable is an ordinary state, not a
+        # crash: the site still works on local data, and the sync dialog says
+        # what happened instead of hanging.
+        return jsonify(error=f"Couldn't reach the bot service: {exc}"), 502
+
+    passed = [
+        (name, value)
+        for name, value in upstream.headers.items()
+        if name.lower() not in HOP_BY_HOP
+    ]
+    return Response(upstream.content, status=upstream.status_code, headers=passed)
 
 
 @app.post("/api/fetch")

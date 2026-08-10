@@ -1,0 +1,9 @@
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Nothing here is stateful — the browser holds the data and the bot holds the
+# rest — so more than one replica is fine if it ever needs them.
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
