@@ -164,36 +164,43 @@ saved via `loadStore()`/`persist()` in `app.js`. Shape:
   checks to `sourceId` alone.
 - `groupId` is a single value or `null` — a character belongs to at most one
   group, by construction (there's no multi-group data structure to misuse).
-- Since storage is per-browser, there is no cross-device sync and no way for
-  one user to see another's characters. This is deliberate (privacy by
-  isolation), not a gap to "fix" by adding a backend.
-- **`static/google-drive.js` is the one sanctioned exception**, added at the
-  developer's explicit request. It is a *backup* layer, not a sync layer, and
-  the difference is load-bearing: localStorage stays the single source of
-  truth, nothing writes to storage behind a running page, and a restore
-  rewrites both keys and then **reloads** — because `app.js` and
-  `battle-helper.js` both read storage once at startup and hold live state in
-  module-level variables, so a page left running would disagree with what was
-  just written under it. It is self-contained (no file imports from it, it
-  imports from none) and reaches storage by key exactly as the two pages do,
-  which is what makes it impossible for it to change how either behaves.
-  Backing up whole blobs rather than chosen fields is also deliberate — a
-  partial backup that silently drops a key the app grows later is worse than
-  none.
-- **Reconnecting is silent, not an auto-opened popup.** A popup that isn't
-  traceable to a click is blocked by every browser, so "open the Google window
-  automatically" is not a thing a page can do and isn't what other apps are
-  doing either — they re-issue the token through a hidden iframe once consent
-  exists. `autoConnect()` does that on load, gated on a
-  `pathfinder-dm-tools:google-connected` flag so a user who never connected
-  gets no third-party script and no request to Google. Its failures are
-  deliberately silent: the silent path rides Google's session cookie in a
-  third-party context and can fail under Safari's ITP or Chrome's cookie
-  restrictions with a perfectly valid grant, which is why opening the dialog
-  escalates to the visible flow. Only tokens live in memory; the flag records
-  that a grant happened, never the token itself. Don't turn this into automatic sync without asking: last-write-wins
-  across two devices is exactly how a session's battle gets overwritten by a
-  stale tab, and it was rejected for that reason.
+- Storage is per-browser, and **localStorage stays the single source of
+  truth.** One user cannot see another's characters, and no code path writes
+  to storage behind a running page. Adding a backend that the app reads
+  through, rather than syncs with, is a much bigger conversation than it
+  looks — have it with the developer first.
+- **`static/railway-sync.js` is the one sanctioned exception**, added at the
+  developer's explicit request. It stores characters and battles on the
+  companion `roleplaying-dm-assistant-bot` service, so there *is* cross-device
+  sync now — but only when someone asks for it, and only for browsers they
+  have paired. Its rules:
+  - **Both directions are a button, never automatic.** Last-write-wins across
+    two devices is exactly how a session's battle gets overwritten by a stale
+    tab, and it was rejected for that reason. A pull **reloads** the page,
+    because `app.js` and `battle-helper.js` both read storage once at startup
+    and hold live state in module-level variables — a page left running would
+    disagree with what was just written under it.
+  - **Nothing is ever deleted on either side.** Characters merge by name with
+    the newer copy winning; a character that exists in only one place stays
+    there. Battles use optimistic concurrency: the server refuses a second
+    write with **409** rather than merging, and that status has to reach the
+    browser intact — see the proxy note below.
+  - It is self-contained (no file imports from it, it imports from none) and
+    reaches storage by key exactly as the two pages do, which is what makes it
+    impossible for it to change how either behaves.
+- **Identity is Telegram, not a login of this app's own.** `/link` in a private
+  chat gives an eight-character code, good for five minutes and one browser,
+  exchanged here for a token. This app therefore holds no credential it could
+  leak beyond that token, and mints none.
+- **`app.py` proxies `/sync/*` to the bot** over Railway's private network, so
+  the browser never leaves one origin — no CORS anywhere in the path, and the
+  bot needs no public domain. The proxy is deliberately dumb: it forwards the
+  method, query, body and `Authorization` header and returns the status unread,
+  so a bug there cannot become an authorization bug in the bot. The one header
+  it adds is `X-Forwarded-For`, as a **single entry**, because the bot buckets
+  rate limits on the last entry and without it every browser shares one bucket.
+  This is the exception to "don't add real features to `app.py`", and it earns
+  it by holding no state and making no decisions.
 - `data/` (server-side JSON) is a legacy artifact from before storage moved
   to the browser. It's gitignored and only read by `GET api/legacy-store`
   for one-time migration. Don't build new features on it.

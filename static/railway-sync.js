@@ -4,13 +4,11 @@
 // Campaign sync — stores characters and battles on the DM assistant bot's
 // service instead of in this browser alone.
 //
-// Same shape as google-drive.js, deliberately: localStorage stays the single
-// source of truth, every render path stays synchronous, nothing writes to
-// storage behind a running page, and a pull reloads afterwards because both
-// pages read storage once at startup and hold live state in module-level
-// variables. Read that file's header before changing this one; google-drive.js
-// is scheduled for deletion once this is proven working (Phase 6 of the bot
-// repo's TODO-web-api.md), and until then the two coexist.
+// It replaced a Google Drive backup and kept that file's shape, which is worth
+// keeping: localStorage stays the single source of truth, every render path
+// stays synchronous, nothing writes to storage behind a running page, and a
+// pull reloads afterwards because both pages read storage once at startup and
+// hold live state in module-level variables.
 //
 // What is NOT the same: this is not a blob backup. Characters are the *same
 // rows* the Telegram bot reads — a character imported in chat and one opened
@@ -536,9 +534,19 @@
     button.title = person ? "Campaign sync — paired" : "Campaign sync";
   }
 
+  // The Google Drive backup this replaced left two keys behind in the browsers
+  // that used it. Nothing reads them any more, so they're only untidy — but
+  // one is an OAuth client ID, and a feature that's gone shouldn't keep hold of
+  // it. Safe to delete this whole function once the browsers have come round.
+  function forgetDriveKeys() {
+    write("pathfinder-dm-tools:google-client-id", null);
+    write("pathfinder-dm-tools:google-connected", null);
+  }
+
   function init() {
     const button = document.getElementById("sync-btn");
     if (!button) return;
+    try { forgetDriveKeys(); } catch { /* a blocked store has nothing to clear */ }
     buildDialog();
     refreshButton();
     // Resolves the stored token on load so the button can show paired state

@@ -36,9 +36,9 @@
 }
 
 /* margin-left: auto pushes it to the far end of the header's flex row, which
-   is where the main page's fixed gear/cloud pair sits too. A fixed button
+   is where the main page's fixed gear/sync pair sits too. A fixed button
    would overlap the battle tab strip on a short viewport. */
-.battle-drive-btn {
+.battle-sync-btn {
   margin-left: auto;
   font-size: 0.85rem;
   white-space: nowrap;

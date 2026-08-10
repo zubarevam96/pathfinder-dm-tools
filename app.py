@@ -73,6 +73,22 @@ HOP_BY_HOP = frozenset({
 })
 
 
+def client_address():
+    """The browser's address, as well as this hop can know it.
+
+    Railway's edge appends the address it saw to ``X-Forwarded-For``, so the
+    *last* entry is the one entry a client cannot write for itself — reading the
+    first, as the header's own definition suggests, would let anyone reset their
+    rate limit by inventing a hop. The bot reads it the same way, on purpose.
+    """
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if hops:
+            return hops[-1]
+    return request.remote_addr
+
+
 def extract_character_id(link_or_id: str) -> str | None:
     """Pull the numeric character id out of a Pathbuilder link or raw id string."""
     link_or_id = link_or_id.strip()
@@ -134,6 +150,18 @@ def sync_proxy(subpath):
         headers["Authorization"] = authorization
     if request.content_type:
         headers["Content-Type"] = request.content_type
+
+    # Without this every browser reaches the bot wearing this service's address
+    # and they all share one rate-limit bucket — the pairing budget first, so one
+    # person mistyping a /link code spends everyone else's attempts.
+    #
+    # Exactly one entry is sent, not the chain we received appended to. The bot
+    # buckets on the LAST entry, so appending our own address in the usual way
+    # would name the proxy again and change nothing; and a single entry can't be
+    # read wrong from either end. Any hops a client invented are dropped with it.
+    caller = client_address()
+    if caller:
+        headers["X-Forwarded-For"] = caller
 
     try:
         upstream = requests.request(

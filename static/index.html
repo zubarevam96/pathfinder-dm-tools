@@ -8,7 +8,6 @@
 </head>
 <body>
   <button id="options-btn" class="gear-btn" title="Options" aria-label="Options">⚙</button>
-  <button id="drive-btn" class="gear-btn drive-btn" title="Google Drive backup" aria-label="Google Drive backup">&#9729;</button>
   <button id="sync-btn" class="gear-btn sync-btn" title="Campaign sync" aria-label="Campaign sync">&#8645;</button>
 
   <div class="layout">
@@ -123,9 +122,6 @@
   <script src="app.js"></script>
   <!-- Self-contained: reaches localStorage by key exactly as app.js does, and
        nothing here calls into it. Load order against app.js doesn't matter. -->
-  <script src="google-drive.js"></script>
-  <!-- Same contract as google-drive.js: self-contained, reaches localStorage by
-       key, nothing imports from it. Replaces it once proven (Phase 6). -->
   <script src="railway-sync.js"></script>
 </body>
 </html>

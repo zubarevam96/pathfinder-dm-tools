@@ -12,8 +12,7 @@
     <header class="battle-header">
       <a class="sidebar-link" href="../">&larr; Pathfinder DM Tools</a>
       <h1 class="app-title">Battle Helper</h1>
-      <button type="button" id="drive-btn" class="battle-drive-btn" title="Google Drive backup">&#9729; Drive</button>
-      <button type="button" id="sync-btn" class="battle-drive-btn" title="Campaign sync">&#8645; Sync</button>
+      <button type="button" id="sync-btn" class="battle-sync-btn" title="Campaign sync">&#8645; Sync</button>
     </header>
 
     <nav class="battle-tabs" aria-label="Battles">
@@ -293,9 +292,8 @@
        before battle-helper.js, same as pf2e-math.js. -->
   <script src="../pf2e-conditions.js"></script>
   <script src="battle-helper.js"></script>
-  <!-- Backs up both stores, so it lives on both pages. Self-contained: it
-       reaches localStorage by key and nothing here calls into it. -->
-  <script src="../google-drive.js"></script>
+  <!-- Syncs both stores, so it lives on both pages. Self-contained: it reaches
+       localStorage by key and nothing here calls into it. -->
   <script src="../railway-sync.js"></script>
 </body>
 </html>
