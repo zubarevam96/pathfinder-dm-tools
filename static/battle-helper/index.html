@@ -212,6 +212,13 @@
   <!-- Renames a creature on the initiative track. Battle-local entities only
        (custom objects and monsters) — a character's name belongs to their
        sheet, and this page never writes to the character store. -->
+  <!-- Right-click menu for a creature, opened from the Character tab's name
+       and from an initiative row. Static markup at body level on purpose: both
+       of those regions are rebuilt by render(), and a menu living inside one
+       would be destroyed between the click that opened it and the click that
+       chose from it. -->
+  <div id="battle-context-menu" class="battle-context-menu" role="menu" hidden></div>
+
   <dialog id="battle-entity-rename-dialog">
     <h2>Rename</h2>
     <form id="battle-entity-rename-form" class="battle-rename-form">

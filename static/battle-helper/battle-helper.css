@@ -2831,3 +2831,62 @@
   padding: 0.15rem;
   cursor: pointer;
 }
+
+/* --- Right-click menu -----------------------------------------------------
+   Positioned in viewport coordinates by JS, so `fixed` rather than absolute:
+   the panels it opens over are scroll containers, and an absolute menu would
+   scroll away from the thing it belongs to.
+
+   z-index sits above the panels but below <dialog>, which the top layer puts
+   above everything regardless — the rename dialog it opens must not appear
+   underneath the menu that opened it. */
+.battle-context-menu {
+  position: fixed;
+  z-index: 30;
+  min-width: 9rem;
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+/* The element declares its own display, so the user-agent [hidden] rule loses
+   to it — author CSS wins regardless of specificity. Without this the menu is
+   never hidden at all. */
+.battle-context-menu[hidden] {
+  display: none;
+}
+
+.battle-context-menu button {
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Re-declares background AND border-color: the global button:hover sets both,
+   and the cascade resolves per property. */
+.battle-context-menu button:not(:disabled):hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+
+/* :not(:disabled):hover above only stops THIS rule matching a disabled item —
+   it cannot cancel the global button:hover, which has no such guard. Without
+   this reset a disabled Rename still lights up as though it were clickable. */
+.battle-context-menu button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.battle-context-menu button:disabled:hover {
+  background: none;
+  border-color: transparent;
+}

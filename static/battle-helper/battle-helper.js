@@ -2155,7 +2155,7 @@ function renderInitiative() {
     // comes from their sheet. The title says which, so a double-click that
     // does nothing on a character row isn't a mystery.
     const nameTitle = e.isCustom
-      ? "Double-click to rename"
+      ? "Double-click or right-click to rename"
       : "Renaming a character is done on their sheet, on the main page";
     // The suffix is drawn, never stored: "(elite)" is a property of the
     // creature's numbers, not part of its name, and baking it in would send it
@@ -4831,6 +4831,101 @@ function pasteEntity() {
 
 let renameEntityId = null;
 
+// --- Right-click menu ------------------------------------------------------
+//
+// One menu, opened from two places: the Character tab's name and an initiative
+// row. Both are rebuilt by render(), which is why the element itself is static
+// markup at body level — a menu inside either would be destroyed between the
+// click that opened it and the click that chose from it.
+//
+// UI-only state, like selection and the active tool: it never dispatches, and
+// nothing about it survives a reload. What it *chooses* dispatches.
+const contextMenu = document.getElementById("battle-context-menu");
+let contextMenuEntityId = null;
+
+// Kept clear of the pointer and of the viewport edge. Measured after showing,
+// because a hidden element has no size to flip against.
+const CONTEXT_MENU_GAP = 2;
+
+function openContextMenu(clientX, clientY, entityId) {
+  const entity = findEntity(entityId);
+  if (!entity) return;
+  contextMenuEntityId = entityId;
+
+  // A character's name belongs to their sheet, which this page never writes
+  // to. The item is shown disabled rather than hidden, with the reason in its
+  // title: a menu that silently has nothing in it for characters reads as
+  // broken, and the same right-click on a monster does work.
+  const renamable = entity.isCustom;
+  contextMenu.innerHTML = `
+    <button type="button" role="menuitem" data-action="rename" ${renamable ? "" : "disabled"}
+            title="${renamable ? "Rename this creature" : "A character's name comes from their sheet and is changed there"}">
+      Rename
+    </button>
+  `;
+
+  contextMenu.hidden = false;
+  // Placed off-screen first so measuring can't scroll the page.
+  contextMenu.style.left = "0px";
+  contextMenu.style.top = "0px";
+  const { width, height } = contextMenu.getBoundingClientRect();
+  const left = Math.max(0, Math.min(clientX + CONTEXT_MENU_GAP, window.innerWidth - width - CONTEXT_MENU_GAP));
+  const top = Math.max(0, Math.min(clientY + CONTEXT_MENU_GAP, window.innerHeight - height - CONTEXT_MENU_GAP));
+  contextMenu.style.left = `${left}px`;
+  contextMenu.style.top = `${top}px`;
+}
+
+function closeContextMenu() {
+  contextMenu.hidden = true;
+  contextMenuEntityId = null;
+}
+
+function contextMenuOpen() {
+  return !contextMenu.hidden;
+}
+
+contextMenu.addEventListener("click", (event) => {
+  const item = event.target.closest("button[data-action]");
+  if (!item || item.disabled) return;
+  const entityId = contextMenuEntityId;
+  closeContextMenu();
+  if (item.dataset.action === "rename") openEntityRenameDialog(entityId);
+});
+
+// pointerdown rather than click, and capturing: the menu has to be gone before
+// whatever was clicked underneath reacts, including a canvas drag that never
+// produces a click at all.
+document.addEventListener("pointerdown", (event) => {
+  if (contextMenuOpen() && !contextMenu.contains(event.target)) closeContextMenu();
+}, true);
+
+// A menu pinned to viewport coordinates lies the moment anything moves under
+// it, so it closes rather than follows.
+window.addEventListener("scroll", () => { if (contextMenuOpen()) closeContextMenu(); }, true);
+window.addEventListener("resize", () => { if (contextMenuOpen()) closeContextMenu(); });
+window.addEventListener("blur", () => { if (contextMenuOpen()) closeContextMenu(); });
+
+// The selected square's own name, in the Character tab. Delegated to the panel,
+// whose id is stable, rather than to the name — which is replaced every render.
+objectPanel.addEventListener("contextmenu", (event) => {
+  const name = event.target.closest(".battle-stat-name");
+  if (!name) return;
+  const entityId = selectedSquareKey ? battleState.placements[selectedSquareKey] : null;
+  if (!entityId) return;
+  event.preventDefault();
+  openContextMenu(event.clientX, event.clientY, entityId);
+});
+
+// The same menu from the initiative track, which already renames on
+// double-click. Right-click is the discoverable half of that: a menu says the
+// option exists, where a double-click has to be guessed at.
+initiativeList.addEventListener("contextmenu", (event) => {
+  const row = event.target.closest("li[data-entity-id]");
+  if (!row) return;
+  event.preventDefault();
+  openContextMenu(event.clientX, event.clientY, row.dataset.entityId);
+});
+
 function openEntityRenameDialog(entityId) {
   const entity = findEntity(entityId);
   if (!entity?.isCustom) return;
@@ -5757,14 +5852,26 @@ function deleteSelectedToken() {
 }
 
 // Unmodified letters and Delete are only map shortcuts when nothing else
-// could want them: not while typing, and not while a dialog is open. A
-// modal traps focus but keydown still bubbles to document, so without the
-// dialog check, tabbing to a dialog button and pressing "d" would silently
-// grow the board behind the backdrop.
+// could want them: not while typing, not while a dialog is open, and not
+// while the right-click menu is up. A modal traps focus but keydown still
+// bubbles to document, so without the dialog check, tabbing to a dialog
+// button and pressing "d" would silently grow the board behind the backdrop.
+// The context menu traps nothing at all, which makes its guard the same
+// necessity for a weaker reason.
 document.addEventListener("keydown", (event) => {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   if (isTextEntry(event.target)) return;
   if (document.querySelector("dialog[open]")) return;
+
+  // Escape closes the menu and stops there, rather than falling through to a
+  // map shortcut that happens to answer to the same key.
+  if (contextMenuOpen()) {
+    if (event.key === "Escape") {
+      closeContextMenu();
+      event.preventDefault();
+    }
+    return;
+  }
 
   if (event.key === "Delete") {
     if (deleteSelectedToken()) event.preventDefault();
