@@ -153,14 +153,32 @@ The only time the browser leaves is the sign-in redirect itself.
 
 **Keycloak:**
 
-1. Add a **Postgres** service (Railway's own, from the New menu).
+1. Add a **Postgres** service (Railway's own, from the New menu). Railway names
+   it something like `Postgres-f0lP`; **rename it to `Postgres` first**, before
+   writing any variable that refers to it. See the warning below.
 2. New → GitHub Repo → this one *again*, and set **Root Directory** to
-   `keycloak/`. One repository, two services, two Dockerfiles.
+   `keycloak/`. One repository, two services, two Dockerfiles. Without the
+   root directory it silently builds the *site's* Dockerfile instead and comes
+   up as a second copy of the site — gunicorn in the logs where Keycloak should
+   be is the tell.
 3. Variables: see the comment block at the top of `keycloak/railway.toml` —
    it lists every one, including the `${{Postgres.*}}` references.
 4. Generate a domain for it, port **8080**, and set `KC_HOSTNAME` to that
-   domain. Keycloak builds its own redirect URLs from it, so a wrong value
-   fails at the *end* of a login rather than the start.
+   domain **as a full URL** (`https://…up.railway.app`). Keycloak builds its
+   own redirect URLs from it, so a wrong value fails at the *end* of a login
+   rather than the start, once the password has already been accepted.
+
+> **A reference to a service that doesn't exist resolves to an empty string,
+> not an error.** Write `${{Postgres.PGHOST}}` while the service is still
+> called `Postgres-f0lP` and you get `jdbc:postgresql://:/` — no warning
+> anywhere, and Keycloak fails at boot with a database error naming no host.
+>
+> Renaming the service afterwards does **not** repair it. Re-enter every
+> affected variable.
+>
+> There is no way to spot this by reading the variables back: `railway
+> variables --json` prints *resolved* values, so a live reference and a dead
+> literal look identical. If in doubt, set it again.
 5. First boot imports `keycloak/realm-pathfinder.json`. Then, in the console:
    read the `pathfinder-web` client's secret from **Credentials** into the
    site's `KEYCLOAK_CLIENT_SECRET`, and create yourself a user under **Users**.

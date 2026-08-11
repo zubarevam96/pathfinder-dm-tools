@@ -8,6 +8,16 @@
 #   KC_DB_USERNAME            ${{Postgres.PGUSER}}
 #   KC_DB_PASSWORD            ${{Postgres.PGPASSWORD}}
 #   KC_HOSTNAME               https://<this-service>.up.railway.app
+#
+# Those three references name the Postgres service, so the service has to
+# already be called `Postgres` when they are written. Railway resolves a
+# reference to a missing service as an empty string rather than refusing it,
+# which turns the URL above into `jdbc:postgresql://:/` and is not visible
+# anywhere until Keycloak fails to reach a database it can't name. Renaming
+# the service later does not fix variables already written; re-enter them.
+#
+# KC_HOSTNAME must match the generated domain exactly, including the scheme.
+# The service's own name is not involved and may differ from its domain.
 #   KC_HTTP_ENABLED           true      (Railway terminates TLS at its edge)
 #   KC_PROXY_HEADERS          xforwarded
 #   KC_BOOTSTRAP_ADMIN_USERNAME / KC_BOOTSTRAP_ADMIN_PASSWORD
