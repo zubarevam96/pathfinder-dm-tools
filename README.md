@@ -188,6 +188,14 @@ is on the management port (9000), not the port Railway routes to, so a check
 against it fails for its whole retry window and marks a working deploy failed
 — with no error in the logs, because nothing was wrong.
 
+Editing `realm-pathfinder.json` is riskier than it looks: the importer rejects
+any field it doesn't recognise, a rejected import aborts the import, and a
+failed import **stops the server booting at all**. Post-logout redirect URIs
+are the trap worth naming — they are the client *attribute*
+`post.logout.redirect.uris`, not a `postLogoutRedirectUris` array, which reads
+perfectly plausibly and takes the whole service down. The error names every
+field it does know, so the log is the reference when this happens.
+
 The realm file's redirect URIs name
 `pathfinder-dm-tools-production.up.railway.app`. If your domain differs, fix
 them in the console — a redirect URI Keycloak doesn't recognise is refused at
