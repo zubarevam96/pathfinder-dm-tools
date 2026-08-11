@@ -1,0 +1,37 @@
+# Deployed as its own Railway service with Root Directory set to `keycloak/`.
+#
+# Variables the service needs (none can be baked into the image — the database
+# credentials are Railway's to generate, and the hostname is the domain you
+# generate for THIS service, not for the site):
+#
+#   KC_DB_URL                 jdbc:postgresql://${{Postgres.PGHOST}}:${{Postgres.PGPORT}}/${{Postgres.PGDATABASE}}
+#   KC_DB_USERNAME            ${{Postgres.PGUSER}}
+#   KC_DB_PASSWORD            ${{Postgres.PGPASSWORD}}
+#   KC_HOSTNAME               https://<this-service>.up.railway.app
+#   KC_HTTP_ENABLED           true      (Railway terminates TLS at its edge)
+#   KC_PROXY_HEADERS          xforwarded
+#   KC_BOOTSTRAP_ADMIN_USERNAME / KC_BOOTSTRAP_ADMIN_PASSWORD
+#
+# The bootstrap admin is spent on first boot: it creates the permanent admin
+# account and is then ignored. Change the password in the console afterwards
+# and the variables stop mattering.
+#
+# KC_HTTP_ENABLED is the one that looks alarming and isn't. Keycloak refuses
+# plain HTTP by default because it assumes it faces the internet; here it faces
+# Railway's edge, which has already terminated TLS. KC_PROXY_HEADERS is what
+# stops that being a hole — without it Keycloak would trust an X-Forwarded-Proto
+# from anyone.
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+# Keycloak holds its state in Postgres, so a restart costs only the boot time.
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+# Slow by nature: the JVM starts, migrations run, and the realm import happens
+# on the first boot of a fresh database.
+healthcheckPath = "/health/ready"
+healthcheckTimeout = 300

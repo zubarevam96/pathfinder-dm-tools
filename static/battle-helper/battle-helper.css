@@ -44,6 +44,13 @@
   white-space: nowrap;
 }
 
+/* No margin-left of its own: the sync button beside it already claimed the
+   gap, and a second auto margin would split the space between them instead. */
+.battle-account-btn {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 .battle-header .app-title {
   margin: 0;
   border-bottom: none;

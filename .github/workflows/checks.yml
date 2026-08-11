@@ -1,0 +1,38 @@
+# What is left of the Pages workflow, which used to check and then publish.
+#
+# Publishing moved to Railway, which builds from the Dockerfile on push and
+# knows nothing about this file. The checks stayed: they are the only automated
+# gate this repo has, they caught real syntax errors, and they are about the
+# code rather than about where it was going.
+name: Checks
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Byte-compile the Python modules
+        run: python -m py_compile app.py accounts.py oidc.py
+      - name: Check frontend JS syntax
+        run: |
+          node --check static/pf2e-math.js
+          node --check static/pf2e-conditions.js
+          node --check static/app.js
+          node --check static/railway-sync.js
+          node --check static/account.js
+          node --check static/account/account-page.js
+          node --check static/battle-helper/battle-helper.js
+      - name: Check the Keycloak realm import is valid JSON
+        run: python -m json.tool keycloak/realm-pathfinder.json > /dev/null

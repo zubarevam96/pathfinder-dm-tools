@@ -1,0 +1,58 @@
+{
+  "realm": "pathfinder",
+  "displayName": "Pathfinder DM Tools",
+  "enabled": true,
+
+  "registrationAllowed": false,
+  "registrationEmailAsUsername": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "verifyEmail": false,
+  "editUsernameAllowed": false,
+  "rememberMe": true,
+
+  "sslRequired": "external",
+
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 2592000,
+  "ssoSessionMaxLifespan": 5184000,
+
+  "clients": [
+    {
+      "clientId": "pathfinder-web",
+      "name": "Pathfinder DM Tools",
+      "enabled": true,
+      "protocol": "openid-connect",
+
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+
+      "redirectUris": [
+        "https://pathfinder-dm-tools-production.up.railway.app/auth/callback",
+        "http://127.0.0.1:5000/auth/callback",
+        "http://localhost:5000/auth/callback"
+      ],
+      "postLogoutRedirectUris": [
+        "https://pathfinder-dm-tools-production.up.railway.app/*",
+        "http://127.0.0.1:5000/*",
+        "http://localhost:5000/*"
+      ],
+      "webOrigins": [],
+
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://pathfinder-dm-tools-production.up.railway.app/*##http://127.0.0.1:5000/*##http://localhost:5000/*"
+      }
+    }
+  ]
+}

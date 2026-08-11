@@ -5,8 +5,11 @@
 local/
 
 .git/
-.github/
 .venv/
+
+# Its own service, built from its own Dockerfile with Root Directory set to
+# keycloak/. Nothing in it belongs in this image.
+keycloak/
 __pycache__/
 *.pyc
 .claude/

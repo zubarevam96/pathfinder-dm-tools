@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal info · Pathfinder DM Tools</title>
+  <link rel="stylesheet" href="../style.css" />
+</head>
+<body>
+  <div class="account-page">
+    <a class="sidebar-link" href="../">&larr; Pathfinder DM Tools</a>
+    <h1 class="app-title">Personal info</h1>
+
+    <div id="account-page-status" class="account-status"></div>
+
+    <!-- Every section is present from the start and filled in by script. The
+         page is short enough that swapping whole blocks in would be visible as
+         a flash of the wrong layout. -->
+    <section id="account-signed-out" class="account-card" hidden>
+      <p>You're not signed in.</p>
+      <p class="account-hint">
+        Accounts are created by the site's administrator — there is no public
+        sign-up here.
+      </p>
+      <div class="account-actions">
+        <a class="account-button" href="/auth/login?next=%2Faccount%2F">Sign in</a>
+      </div>
+    </section>
+
+    <section id="account-unconfigured" class="account-card" hidden>
+      <p>This copy of the site has no sign-in configured.</p>
+      <p class="account-hint">
+        Characters and battles live in this browser, as they always have. There
+        is nothing to set up here.
+      </p>
+    </section>
+
+    <div id="account-signed-in" hidden>
+      <section class="account-card">
+        <h2>Email</h2>
+        <p class="account-hint">
+          Used to sign in, and the only way to reset a password. Changing it here
+          changes it in the sign-in service too.
+        </p>
+        <form id="account-email-form" class="account-field">
+          <input type="email" id="account-email-input" autocomplete="email" required />
+          <button type="submit">Save</button>
+        </form>
+      </section>
+
+      <section class="account-card">
+        <h2>Password</h2>
+        <p class="account-hint">
+          Set on the sign-in service's own page, which is the only place a
+          password is ever typed — this site never sees one.
+        </p>
+        <div class="account-actions">
+          <a class="account-button" href="/auth/password">Change password</a>
+        </div>
+      </section>
+
+      <section class="account-card">
+        <h2>Telegram</h2>
+        <p class="account-field-value" id="account-telegram">Not linked</p>
+        <p class="account-hint">
+          <strong>Not built yet.</strong> The DM assistant bot keys everything it
+          stores on a Telegram account, so linking one here is what would let a
+          character imported in chat and one opened here be the same character.
+          Until something can prove the two are the same person, this stays
+          empty rather than guessing.
+        </p>
+      </section>
+
+      <section class="account-card">
+        <h2>Stored data</h2>
+        <ul id="account-stored" class="account-stored"></ul>
+        <p class="account-hint">
+          Sent and fetched with the account button on the main page. This is a
+          copy — the data this site runs on is the one in your browser.
+        </p>
+      </section>
+
+      <section class="account-card">
+        <div class="account-actions">
+          <button type="button" id="account-page-signout">Sign out</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="account-page.js"></script>
+</body>
+</html>

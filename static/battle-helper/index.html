@@ -13,6 +13,7 @@
       <a class="sidebar-link" href="../">&larr; Pathfinder DM Tools</a>
       <h1 class="app-title">Battle Helper</h1>
       <button type="button" id="sync-btn" class="battle-sync-btn" title="Campaign sync">&#8645; Sync</button>
+      <button type="button" id="account-btn" class="battle-account-btn" title="Account" hidden>&#128100; Account</button>
     </header>
 
     <nav class="battle-tabs" aria-label="Battles">
@@ -295,5 +296,6 @@
   <!-- Syncs both stores, so it lives on both pages. Self-contained: it reaches
        localStorage by key and nothing here calls into it. -->
   <script src="../railway-sync.js"></script>
+  <script src="../account.js"></script>
 </body>
 </html>

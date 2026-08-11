@@ -85,7 +85,7 @@ Then, regardless of the postchange result:
 2. **Stop before committing or pushing.** Tell the developer what changed,
    what `postchange.sh` reported, how you verified the change, and
    explicitly ask them to test it themselves (locally via `python app.py`,
-   or by trying the deployed GitHub Pages site) and confirm it's correct.
+   or on the deployed Railway site) and confirm it's correct.
 3. Only commit and push after the developer explicitly confirms the result
    is correct. Do not commit "in the meantime" or "to save progress" — if
    asked to keep working, keep the changes staged/uncommitted and continue.
@@ -97,33 +97,46 @@ does not carry over to future turns or future sessions.
 
 ## Architecture
 
-The whole app is static — HTML/CSS/vanilla JS, no build step, no framework,
-no bundler. This is intentional: it needs to run on GitHub Pages, which
-can't execute server code.
+The frontend is HTML/CSS/vanilla JS with no build step, no framework and no
+bundler. That was originally because GitHub Pages can't execute server code;
+Pages is gone and Railway runs a real server now, but the constraint stayed —
+**every file under `static/` must still work as a plain `<script>` tag**, and
+the pages must still function with the server answering nothing but files.
 
 ```
-app.py                          Flask app — dev convenience + fetch fallback only
+app.py                          Flask app: static files, proxies, auth routes
+accounts.py                     SQLite store: users, sessions, stored documents
+oidc.py                         The OpenID Connect client (Keycloak)
 prechange.sh                    Run before applying changes — see "Required workflow"
 postchange.sh                   Run after applying changes — see "Required workflow"
+Dockerfile, railway.toml        The site's Railway service
+keycloak/                       The Keycloak service: Dockerfile + realm import
 static/
   index.html                    Page shell: sidebar, tabs, all <dialog> modals
   app.js                        All application logic (single file, no modules)
   style.css                     All styling (CSS custom properties for theming)
-.github/workflows/deploy.yml    CI: syntax checks, then deploy static/ to GitHub Pages
+  railway-sync.js               Telegram-identified sync with the bot
+  account.js                    Signed-in account: state, backup and restore
+  account/                      The personal info page
+.github/workflows/checks.yml    CI: syntax checks only. It deploys nothing
 data/                           Legacy server-side storage (gitignored; see below)
 ```
 
-- **`app.py`** is not the production backend — GitHub Pages serves the
-  static files directly with no server involved. `app.py` exists only for
-  local development (`python app.py` → http://127.0.0.1:5000) and as a CORS
-  fallback: normally the browser calls `pathbuilder2e.com/json.php`
-  directly (Pathbuilder allows CORS), but if that ever fails, `app.js`
-  falls back to `POST api/fetch` on this Flask server. It also serves
-  `GET api/legacy-store`, a one-time export of old server-side data (see
-  Data model) for browsers to import. Do not add real application features
-  to `app.py` — if a feature needs a real server, that's a bigger
-  architectural conversation to have with the developer first, not a
-  default to reach for.
+- **`app.py` is the production backend now**, which it was not for most of
+  this project's life. It serves the site, falls back to `POST api/fetch` for
+  Pathbuilder when the browser's direct call fails, serves
+  `GET api/legacy-store` for one-time import, proxies `/sync/*` to the bot, and
+  runs sign-in at `/auth/*` and `/api/account/*`.
+  **The rule against putting features here has not been repealed.** Everything
+  above is there for one of two reasons: the browser can't do it (another
+  origin, a client secret, an HttpOnly cookie) or doing it in the browser would
+  mean holding a credential a script could read. A feature that could live in
+  `static/` and merely *would be easier* on the server does not qualify —
+  that's still a conversation to have with the developer first.
+- **The site must survive an unconfigured server.** With no `KEYCLOAK_*`
+  variables the 👤 button never appears and `/api/account/*` answers 503; with
+  no bot the ⇅ dialog reports it; with no monster data the panels are empty.
+  All three are ordinary local-dev states, and none of them may break a page.
 - **`static/app.js`** holds everything: localStorage persistence, sidebar
   rendering, the character sheet renderer, roll logic, dialogs for
   add/collision/group/delete, and the Pathbuilder fetch (direct + fallback).
@@ -188,10 +201,28 @@ saved via `loadStore()`/`persist()` in `app.js`. Shape:
   - It is self-contained (no file imports from it, it imports from none) and
     reaches storage by key exactly as the two pages do, which is what makes it
     impossible for it to change how either behaves.
-- **Identity is Telegram, not a login of this app's own.** `/link` in a private
-  chat gives an eight-character code, good for five minutes and one browser,
-  exchanged here for a token. This app therefore holds no credential it could
-  leak beyond that token, and mints none.
+- **`static/account.js` is the second exception**, and the two are not rivals.
+  It stores whole documents against an account of this site's own, in the
+  SQLite file `accounts.py` owns. Backup and restore, not a merge: unlike the
+  bot, there is no second writer here to reconcile with, and inventing a merge
+  for one would lose data rather than protect it.
+- **There are two identity systems, on purpose and temporarily.** `railway-sync.js`
+  asks *which Telegram person is this*, and that answer is what unifies a
+  character with one the bot imported. `account.js` asks *which account on this
+  site is this*, which is the only way in for someone who has never spoken to
+  the bot. They are meant to meet at `users.telegram_id` — currently always
+  NULL, and `set_telegram_id()` has no callers. Do not fill that column in from
+  anything a browser claims; it is a join to the bot's Telegram-keyed database,
+  and writing it unverified would hand someone else's characters away.
+- **No token and no password ever reaches the page.** The server runs the
+  OpenID Connect flow (`oidc.py`) and hands back an HttpOnly session cookie;
+  tokens live in the `sessions` table. Passwords are only ever typed on
+  Keycloak's origin, reached by redirect — `/auth/password` sends someone there
+  and back. If you find yourself adding a password field to this app, stop.
+  The ID token's signature is deliberately *not* verified, which is safe for
+  exactly one reason spelled out in `oidc.py`'s docstring: it arrives on this
+  server's own authenticated connection to the token endpoint. That reason
+  evaporates if a token ever starts arriving from anywhere else.
 - **`app.py` proxies `/sync/*` to the bot** over Railway's private network, so
   the browser never leaves one origin — no CORS anywhere in the path, and the
   bot needs no public domain. The proxy is deliberately dumb: it forwards the
@@ -247,26 +278,32 @@ There's no automated test suite. Verification is manual:
   rather than claiming it works, and ask the developer to click through it.
   This is exactly the kind of thing step 2 of the workflow above exists for.
 
-## Deployment (GitHub Pages)
+## Deployment (Railway)
 
-`static/` is published to GitHub Pages by `.github/workflows/deploy.yml` on
-every push to `master`/`main`. Things learned the hard way, worth knowing
-before touching this workflow:
+Railway builds from the `Dockerfile` on every push to `master`. GitHub Actions
+runs syntax checks (`.github/workflows/checks.yml`) and deploys nothing.
 
-- The `deploy-pages` action caps its internal timeout at 600000ms (10 min)
-  — raising it further does nothing, GitHub silently clamps it.
-- **Never use "Re-run failed jobs" / "Re-run all jobs"** on a deploy run.
-  Re-running reuses the same run ID, and `upload-pages-artifact` doesn't
-  replace the previous attempt's artifact — it adds another one. Once a run
-  has more than one `github-pages` artifact, `deploy-pages` fails with
-  "Multiple artifacts... unexpectedly found." Always trigger a fresh run
-  instead (push a commit, or Actions → this workflow → "Run workflow").
-- `concurrency: { group: pages, cancel-in-progress: true }` is intentional:
-  a new deploy cancels any older one still in flight, so deploys never race.
-- If a deploy gets stuck at `deployment_queued` for the full timeout with no
-  GitHub status-page incident, the fix that has worked is toggling
-  Settings → Pages → Source to **None** and back to **GitHub Actions** —
-  this resets GitHub's internal Pages deployment state.
+One Railway project, four services: this site, the DM assistant bot, Keycloak,
+and Keycloak's Postgres. `README.md` has the topology and every variable; what
+matters when changing code here:
+
+- **The browser only ever talks to this service.** `/sync/*` is proxied to the
+  bot over the private network, and Keycloak is reached by this server or by a
+  top-level redirect — never by script. Anything that would make the page fetch
+  another origin is reintroducing the CORS problem all of this removed.
+- **Railway's private network is IPv6-only.** A service that binds `0.0.0.0`
+  is unreachable from its neighbours while its public domain works perfectly.
+  That cost the bot a production outage; it is the first thing to check when
+  one service can't reach another.
+- **The volume at `/data` holds the account database.** Monster data on it is
+  regenerable; `accounts.sqlite3` is not. A change that rewrites it wants a
+  copy taken first.
+- Two new files ship with the image and are easy to forget in the `Dockerfile`:
+  `accounts.py` and `oidc.py` are copied by name, not by wildcard.
+
+GitHub Pages was retired when the site moved here. If it ever comes back, note
+that the page it serves has no server: sign-in, `/sync/*` and monster data all
+fail there, in ways that look like bugs rather than absence.
 
 ## Conventions to follow when adding to the UI
 

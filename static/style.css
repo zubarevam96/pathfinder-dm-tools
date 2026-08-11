@@ -332,10 +332,25 @@ button.subtle {
   font-size: 1.15rem;
 }
 
+/* Third in the fixed top-right stack: gear at 1rem, sync at 3.9rem, this at
+   6.8rem. Hidden entirely where the server has no sign-in configured. */
+.account-btn {
+  right: 6.8rem;
+  font-size: 1.15rem;
+}
+
+/* .gear-btn declares display: flex, and author CSS beats the user-agent
+   [hidden] rule regardless of specificity — without this, hiding the account
+   button would do nothing at all. */
+.gear-btn[hidden] {
+  display: none;
+}
+
 /* Colours the glyph itself rather than adding a badge, so "paired" costs the
    button no size and nothing shifts when it flips. By id, because the battle
    helper's header button is a different shape wanting the same signal. */
-#sync-btn.connected {
+#sync-btn.connected,
+#account-btn.connected {
   color: var(--success);
   border-color: var(--success);
 }
@@ -423,6 +438,157 @@ button.subtle {
 
 .sync-detail:empty {
   display: none;
+}
+
+/* --- Account --------------------------------------------------------------
+   The dialog shares the sync dialog's shape on purpose — one dialog pattern on
+   this site, not three — so these grouped selectors are the two of them saying
+   the same thing rather than a copy that can drift. */
+#account-dialog {
+  max-width: 32rem;
+}
+
+.account-status,
+.account-body,
+.account-actions,
+.account-hint,
+.account-stored,
+.account-detail {
+  font-size: 0.85rem;
+}
+
+.account-status {
+  min-height: 1.2rem;
+  margin-bottom: 0.6rem;
+  color: var(--muted);
+}
+
+.account-status.ok {
+  color: var(--success);
+}
+
+.account-status.error {
+  color: var(--danger);
+}
+
+.account-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.account-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.account-who {
+  margin: 0;
+}
+
+/* Re-declares background AND border-color: the global button:hover sets both,
+   and the cascade resolves per property. */
+.account-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account-link:hover {
+  background: none;
+  border-color: transparent;
+  filter: brightness(1.15);
+}
+
+/* An <a> that has to sit in a row of <button>s and look like one of them. */
+.account-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.account-button:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.account-stored {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+}
+
+.account-muted {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.account-detail:empty {
+  display: none;
+}
+
+/* --- The personal info page ---------------------------------------------- */
+
+.account-page {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.account-card {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.account-card h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.account-card p {
+  margin: 0;
+}
+
+.account-field {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.account-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-field-value {
+  font-size: 0.95rem;
 }
 
 .placeholder {
