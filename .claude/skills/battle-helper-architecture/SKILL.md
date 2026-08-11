@@ -135,7 +135,7 @@ direction.
 ### Keyboard shortcuts, and what they must yield to
 
 Two `keydown` listeners at `document` level: one for the Ctrl combos
-(undo/redo, copy/paste), one for the unmodified map keys — **Delete** to
+(undo/redo, copy/cut/paste), one for the unmodified map keys — **Delete** to
 take the selected token off the field, **WASD** to grow the board on that
 side, **Shift+WASD** to shrink it, and the **digits** to pick an instrument
 by its position in the tool palette (see `references/map.md`).
@@ -471,26 +471,48 @@ name and only numbers subsequent ones ("Goblin Warrior", "Goblin Warrior
 collide with one. Freed numbers get reused rather than counting ever
 upward.
 
-**Copy/paste** (Ctrl+C / Ctrl+V over the roster or the initiative track)
-copies a *description* — base name plus statblock reference — not an
-entity id, so copying something and then deleting it still pastes. The
-base comes from `baseEntityName()`, which strips a trailing number, so
-pasting "Goblin Warrior 4" continues the series instead of producing
-"Goblin Warrior 4 2"; for a monster the base is its statblock name, so a
-renamed one still pastes as its own kind.
+**Copy/cut/paste** (Ctrl+C / Ctrl+X / Ctrl+V) copies a *description* — base
+name, statblock reference, overrides, max HP — not an entity id, so copying
+something and then deleting it still pastes. The base comes from
+`baseEntityName()`, which strips a trailing number, so pasting "Goblin
+Warrior 4" continues the series instead of producing "Goblin Warrior 4 2";
+for a monster the base is its statblock name, so a renamed one still pastes
+as its own kind. The snapshot carries `overrides` because a creature built
+by hand would otherwise paste as an empty shell wearing its name, and
+`maxHp` because the pasted creature doesn't exist yet when its starting hit
+points have to be chosen.
+
+**Paste puts the creature on the field**, at the selected square — the
+roster already has an add form, and a copy is nearly always wanted where the
+DM is looking. An occupied square (or no selection) is a **no-op**, not a
+swap or a shove: a paste that silently landed somewhere else is worse than
+one that visibly did nothing. Creating the creature and standing it on the
+square is **one dispatch** — one act at the table, one Ctrl+Z — which is why
+`putOnField()` is split out of `placeEntity()`; both seed HP and the
+initiative track through it so the two paths can't drift.
 
 Characters aren't duplicable — there is one Tumb, his sheet lives in the
 main store, and a battle-local "Tumb 2" would be a name with no stats
-behind it. Pasting a copied character instead **adds them to the current
-battle**, which makes Ctrl+C/Ctrl+V the way to carry someone between
-battle tabs; the clipboard deliberately survives `setActiveBattle()` for
-exactly that, while the "copied" row highlight doesn't.
+behind it. Pasting a copied character instead **places them**, adding them
+to the battle first if this tab didn't have them, which makes Ctrl+C/Ctrl+V
+the way to carry someone between battle tabs; the clipboard deliberately
+survives `setActiveBattle()` for exactly that, while the "copied" row
+highlight doesn't. A character already standing somewhere pastes nowhere.
+
+**Ctrl+X is Ctrl+C then Delete**, which is what it was specified to be —
+so it acts on the field only, and takes `copyEntity()`'s explicit-id
+parameter rather than the usual armed-then-selected preference, since
+copying an armed roster row and deleting a token would take two different
+creatures. Note it **duplicates rather than moves** a battle-local creature:
+Delete takes a token off the field but leaves the entity in the roster, and
+paste then builds a new one. Dragging is still how a token moves.
 
 The shortcut only calls `preventDefault()` once it's actually going to do
-something, so a Ctrl+V with an empty clipboard falls through to the
-browser instead of becoming a dead key. It also defers to a non-collapsed
-text selection on Ctrl+C — if the DM highlighted a name to copy, that's
-what they meant.
+something, so a Ctrl+V onto an occupied square falls through to the browser
+instead of becoming a dead key. It also defers to a non-collapsed text
+selection on Ctrl+C and Ctrl+X — if the DM highlighted a name to take
+elsewhere, that's what they meant — but not on Ctrl+V, where a selection
+says nothing about what the paste was for.
 
 **Renaming** works for battle-local entities only, by double-clicking a
 row in the initiative track. A character's name belongs to their sheet,

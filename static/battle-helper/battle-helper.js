@@ -2286,19 +2286,31 @@ function placeEntity(entityId, key) {
   if (!entity) return false;
   const stats = entityStatBlock(entity);
   dispatch("place-token", `Placed ${entity.name} on the field`, (state) => {
-    state.placements[key] = entityId;
-    // Characters get their computed max, monsters their published one, and
-    // a plain custom object none at all — it's name-only by design, per
-    // the battle-helper-architecture skill.
-    if (stats?.maxHp != null) state.hp[entityId] = stats.maxHp;
-    else delete state.hp[entityId];
-    delete state.tempHp[entityId];
-    delete state.conditions[entityId];
-    delete state.persistentDamage[entityId];
-    delete state.spellSlots[entityId];
-    state.initiativeOrder.push(entityId);
+    putOnField(state, entityId, key, stats?.maxHp ?? null);
   });
   return true;
+}
+
+// The state changes that put an entity on a square, WITHOUT the dispatch
+// around them. Split out so pasting can create a creature and place it as a
+// single event rather than two — one Ctrl+Z should take back a paste, not
+// half of one — while still seeding HP and the initiative track exactly the
+// way a drag-and-drop does.
+//
+// maxHp is passed in rather than looked up, because the creature a paste
+// places may not exist yet when its hit points have to be decided.
+// Characters get their computed max, monsters their published one, and a
+// plain custom object none at all — it's name-only by design, per the
+// battle-helper-architecture skill.
+function putOnField(state, entityId, key, maxHp) {
+  state.placements[key] = entityId;
+  if (maxHp != null) state.hp[entityId] = maxHp;
+  else delete state.hp[entityId];
+  delete state.tempHp[entityId];
+  delete state.conditions[entityId];
+  delete state.persistentDamage[entityId];
+  delete state.spellSlots[entityId];
+  state.initiativeOrder.push(entityId);
 }
 
 // Clears whatever a roster drag left behind. Called from dragend and from
@@ -5090,8 +5102,11 @@ function copyTargetId() {
   return selectedSquareKey ? battleState.placements[selectedSquareKey] ?? null : null;
 }
 
-function copyEntity() {
-  const id = copyTargetId();
+// `explicitId` overrides the usual armed-then-selected preference. Cut needs
+// it: Delete only ever acts on the field, so a cut that copied an armed
+// roster row and deleted a token would take two different creatures.
+function copyEntity(explicitId) {
+  const id = explicitId ?? copyTargetId();
   const entity = id ? findEntity(id) : null;
   if (!entity) return false;
   clipboard = {
@@ -5100,33 +5115,71 @@ function copyEntity() {
     isCharacter: !entity.isCustom,
     characterId: entity.isCustom ? null : entity.id,
     sourceName: entity.name,
+    // A snapshot, like everything else here. A creature built by hand keeps
+    // the numbers it was built with when pasted — without this, copying one
+    // would produce an empty shell wearing its name.
+    overrides: { ...statOverrides(id) },
+    // Decided at copy time because the pasted creature doesn't exist yet
+    // when its starting HP has to be chosen.
+    maxHp: entityStatBlock(entity)?.maxHp ?? null,
   };
   clipboardSourceId = id;
   render();
   return true;
 }
 
+// Paste puts the creature ON THE FIELD, at the selected square — the roster
+// already has an add form, and a copy is nearly always wanted where the DM
+// is looking. An occupied square is a no-op rather than a swap or a shove:
+// a paste that silently landed somewhere else would be worse than one that
+// visibly did nothing.
 function pasteEntity() {
   if (!clipboard) return false;
+  const key = selectedSquareKey;
+  if (!key || battleState.placements[key]) return false;
 
-  // A character can't be duplicated, so pasting one puts THEM in the
-  // battle instead — which makes Ctrl+C/Ctrl+V a way to carry someone from
+  // A character can't be duplicated — there is only one of a given PC — so
+  // pasting one places THEM, adding them to the battle first if this tab
+  // didn't have them. That makes Ctrl+C/Ctrl+V a way to carry someone from
   // one battle tab to another, the only thing copying a character could
-  // usefully mean.
+  // usefully mean. Already standing somewhere, and there's nothing to place.
   if (clipboard.isCharacter) {
-    if (!loadCharacters().some((c) => c.id === clipboard.characterId)) return false;
-    if (battleCharacterIds().includes(clipboard.characterId)) return false;
-    addCharacterToBattle(clipboard.characterId, clipboard.sourceName);
+    const characterId = clipboard.characterId;
+    if (!loadCharacters().some((c) => c.id === characterId)) return false;
+    if (squareKeyForEntity(characterId)) return false;
+    dispatch("paste-entity", `Placed ${clipboard.sourceName} on the field`, (state) => {
+      if (!state.characterIds.includes(characterId)) state.characterIds.push(characterId);
+      putOnField(state, characterId, key, clipboard.maxHp);
+    });
     return true;
   }
 
   const id = `custom-${crypto.randomUUID()}`;
   const name = uniqueEntityName(clipboard.baseName);
   const monster = clipboard.monster;
-  dispatch("paste-entity", `Added ${name} to the roster`, (state) => {
+  const overrides = clipboard.overrides;
+  // One dispatch for creating the creature and standing it on the square:
+  // that is one act at the table, and undo should treat it as one.
+  dispatch("paste-entity", `Placed ${name} on the field`, (state) => {
     state.customObjects[id] = monster ? { name, monster } : { name };
+    if (Object.keys(overrides).length) state.overrides[id] = { ...overrides };
+    putOnField(state, id, key, clipboard.maxHp);
   });
   return true;
+}
+
+// Ctrl+X is Ctrl+C followed by Delete, which is what it was asked to be —
+// so it acts on the field only, and leaves the copied creature in the
+// clipboard for a paste somewhere else. Note that for a battle-local
+// creature this DUPLICATES rather than moves: Delete takes a token off the
+// field but leaves the entity in the roster, and paste then builds a new
+// one. Dragging is still the way to move a token.
+function cutEntity() {
+  const key = selectedSquareKey;
+  const entityId = key ? battleState.placements[key] : null;
+  if (!entityId) return false;
+  if (!copyEntity(entityId)) return false;
+  return deleteSelectedToken();
 }
 
 // ---------------------------------------------------------------------------
@@ -7146,7 +7199,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("keydown", (event) => {
   if (!event.ctrlKey) return;
   const key = event.key.toLowerCase();
-  if (!["z", "y", "c", "v"].includes(key)) return;
+  if (!["z", "y", "c", "v", "x"].includes(key)) return;
 
   // Returns BEFORE preventDefault, which is the whole point: the browser's
   // native undo/copy/paste has to still fire so half-typed text can be
@@ -7158,17 +7211,21 @@ document.addEventListener("keydown", (event) => {
   if (isTextEntry(event.target)) return;
 
   // Same deference for a text selection anywhere on the page: if the DM
-  // has highlighted a monster's name to paste elsewhere, Ctrl+C means that
-  // and not "copy the armed token". Only Ctrl+C — a selection says nothing
-  // about what a paste was meant to do.
-  if (key === "c" && !window.getSelection().isCollapsed) return;
+  // has highlighted a monster's name to take elsewhere, Ctrl+C and Ctrl+X
+  // mean that and not "copy the armed token". Not Ctrl+V — a selection says
+  // nothing about what a paste was meant to do.
+  if ((key === "c" || key === "x") && !window.getSelection().isCollapsed) return;
 
   // preventDefault only once the shortcut is actually going to do
-  // something. A Ctrl+V with an empty clipboard, or a Ctrl+C with nothing
+  // something. A Ctrl+V onto an occupied square, or a Ctrl+C with nothing
   // selected on the board, falls through to the browser rather than
   // becoming a key that silently does nothing anywhere on the page.
   if (key === "c") {
     if (copyEntity()) event.preventDefault();
+    return;
+  }
+  if (key === "x") {
+    if (cutEntity()) event.preventDefault();
     return;
   }
   if (key === "v") {
