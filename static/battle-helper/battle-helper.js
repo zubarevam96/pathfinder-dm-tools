@@ -373,7 +373,7 @@ function fitMapToView() {
 // see the battle-helper-architecture skill for why that split matters.
 
 function emptyBattleState() {
-  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, persistentDamage: {}, spellSlots: {}, inventory: {}, adjustment: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
+  return { placements: {}, hp: {}, tempHp: {}, customObjects: {}, characterIds: [], initiative: {}, initiativeOrder: [], appearance: {}, conditions: {}, persistentDamage: {}, spellSlots: {}, inventory: {}, adjustment: {}, overrides: {}, walls: {}, terrain: {}, cols: MIN_GRID, rows: MIN_GRID, originRow: 0, originCol: 0 };
 }
 
 // Multiple battles, browser-tab style. Each entry is a fully independent
@@ -1112,6 +1112,184 @@ function adjustmentToggleHtml(current) {
   return `<span class="battle-adjust" role="group" aria-label="Creature adjustment">${buttons}</span>`;
 }
 
+// ---------------------------------------------------------------------------
+// DM overrides. A creature's numbers at the table are whatever the DM says
+// they are — a boss already wounded before the party arrives, a goblin
+// wearing armour it found, an NPC given a swim speed for one encounter. This
+// is a layer OVER the sheet or statblock, never an edit to it: the character
+// store is read-only from this page (see "State separation"), a monster's
+// statblock isn't ours to change, and "Reset" has to be one right-click away.
+//
+//   overrides[entityId][key] = value
+//
+// Keys are flat strings so one map covers stats from three different
+// sources:
+//   "maxHp" | "ac" | "fortitude" | "reflex" | "will" | "perception"
+//   "attr:<abbr>"   — a Proficiencies-tab attribute modifier
+//   "skill:<name>"  — a Proficiencies-tab skill, keyed by its printed name
+//   "speed:<kind>"  — one movement type
+//
+// `null` means "this speed is gone", which is why every read tests
+// `key in overrides` rather than truthiness: 0 is a perfectly good AC to
+// force, and absent has to stay distinguishable from removed.
+//
+// Applied LAST — after elite/weak, after the sheet's own arithmetic. A number
+// a DM typed is the number they want on screen, not a base for a template to
+// scale again. Conditions still stack on top, because those are the fight
+// happening TO the creature rather than what the creature is.
+//
+// Each key stands alone: raising a creature's Dexterity does NOT ripple into
+// its AC or its Reflex save. Those come from the sheet's own arithmetic or
+// from a printed statblock, neither of which this layer re-derives — and a
+// DM who wants the save moved has the save's own right-click. Rippling would
+// mean reimplementing character building for one of the two sources and
+// guessing at it for the other.
+//
+// Like appearance/inventory/adjustment and unlike hp/conditions, an override
+// survives its token leaving the field: it says what the creature IS, not how
+// this fight is going. It's cleared only when the entity itself is deleted.
+
+const SPEED_KINDS = ["walk", "climb", "fly", "swim", "burrow"];
+
+// SPEED_LABELS calls the walk speed plain "Speed", which is right on a chip
+// beside a boot icon and wrong in a menu item ("Set Speed speed…").
+const SPEED_MENU_LABELS = {
+  walk: "Speed",
+  climb: "Climb Speed",
+  fly: "Fly Speed",
+  swim: "Swim Speed",
+  burrow: "Burrow Speed",
+};
+
+const STAT_LABELS = {
+  maxHp: "max HP",
+  ac: "AC",
+  fortitude: "Fortitude",
+  reflex: "Reflex",
+  will: "Will",
+  perception: "Perception",
+};
+
+// The stat-block fields a plain scalar override replaces, by key. Speeds are
+// absent: "speed:walk" lands on stats.speed through its own branch below,
+// and the other four movement types aren't stat-block fields at all.
+const OVERRIDABLE_STATS = ["maxHp", "ac", "fortitude", "reflex", "will", "perception"];
+
+function statLabel(key) {
+  if (key.startsWith("attr:")) return ABILITY_NAMES[key.slice(5)] ?? key.slice(5).toUpperCase();
+  if (key.startsWith("skill:")) return key.slice(6);
+  if (key.startsWith("speed:")) return SPEED_MENU_LABELS[key.slice(6)] ?? key.slice(6);
+  return STAT_LABELS[key] ?? key;
+}
+
+// Lowest value each stat accepts. Saves, Perception, attributes and skills
+// are modifiers and genuinely go negative; a quantity does not.
+function statMinimum(key) {
+  if (key === "maxHp") return 1;
+  if (key === "ac" || key.startsWith("speed:")) return 0;
+  return -99;
+}
+
+function statOverrides(entityId) {
+  return battleState.overrides?.[entityId] ?? {};
+}
+
+function hasOverride(entityId, key) {
+  return key in statOverrides(entityId);
+}
+
+function setOverride(entityId, key, value, label) {
+  dispatch("set-override", label, (state) => {
+    state.overrides[entityId] = { ...(state.overrides[entityId] ?? {}), [key]: value };
+  });
+}
+
+// Deletes the entry rather than storing a sentinel, so "not overridden" has
+// exactly one representation and an entity with nothing left drops out of the
+// map entirely instead of accumulating empty objects in every save.
+function clearOverride(entityId, key, label) {
+  dispatch("clear-override", label, (state) => {
+    const remaining = { ...(state.overrides[entityId] ?? {}) };
+    delete remaining[key];
+    if (Object.keys(remaining).length) state.overrides[entityId] = remaining;
+    else delete state.overrides[entityId];
+  });
+}
+
+// Returns a NEW block; the caller's is left alone. Nothing here is written
+// back to state — the override is re-applied on every read, which is what
+// lets a monster's published numbers reappear the moment one is cleared.
+function applyStatOverrides(stats, entityId) {
+  if (!stats) return stats;
+  const overrides = statOverrides(entityId);
+  if (!Object.keys(overrides).length) return stats;
+  const out = { ...stats };
+  for (const key of OVERRIDABLE_STATS) {
+    if (key in overrides) out[key] = overrides[key];
+  }
+  // The walk speed is both a chip and the `speed` field the condition hint
+  // and parseSpeeds() read, so it has to land on the block itself — otherwise
+  // the chip would show the DM's number while the tooltip explained the
+  // book's.
+  if ("speed:walk" in overrides) out.speed = overrides["speed:walk"];
+  return out;
+}
+
+function applyAbilityOverrides(abilities, entityId) {
+  const overrides = statOverrides(entityId);
+  if (!abilities || !Object.keys(overrides).length) return abilities;
+  const attributes = { ...(abilities.attributes ?? {}) };
+  for (const key of ABILITIES) {
+    if (`attr:${key}` in overrides) attributes[key] = overrides[`attr:${key}`];
+  }
+  // Keyed by printed name, so a skill's conditional notes ("+9 to Climb")
+  // ride through untouched — the override replaces the flat modifier the DM
+  // right-clicked, not the whole row.
+  const skills = (abilities.skills ?? []).map((skill) => {
+    const key = `skill:${skill.name}`;
+    return key in overrides ? { ...skill, modifier: overrides[key] } : skill;
+  });
+  return { ...abilities, attributes, skills };
+}
+
+// Every movement type the creature has after overrides, in canonical order —
+// so a fly speed added mid-fight sits where a published one would rather than
+// at the end, and the panel doesn't reorder itself as speeds are edited.
+function effectiveSpeeds(entityId, stats) {
+  const speeds = new Map(parseSpeeds(stats?.speedText, stats?.speed).map(({ kind, feet }) => [kind, feet]));
+  const overrides = statOverrides(entityId);
+  for (const kind of SPEED_KINDS) {
+    const key = `speed:${kind}`;
+    if (!(key in overrides)) continue;
+    if (overrides[key] == null) speeds.delete(kind);
+    else speeds.set(kind, overrides[key]);
+  }
+  return SPEED_KINDS.filter((kind) => speeds.has(kind)).map((kind) => ({ kind, feet: speeds.get(kind) }));
+}
+
+// The published feet for one movement type, or null when the source has none.
+// A speed the DM invented outright therefore reads as "not published" rather
+// than borrowing the walk speed's number.
+function publishedSpeed(entity, kind) {
+  const stats = publishedStatBlock(entity);
+  if (!stats) return null;
+  return parseSpeeds(stats.speedText, stats.speed).find((speed) => speed.kind === kind)?.feet ?? null;
+}
+
+// The tooltip line that keeps an overridden number honest: it names what was
+// replaced, which is also what Reset goes back to. Without it a DM returning
+// to a creature an hour later has no way to tell a typed number from a
+// published one.
+function overrideNote(entityId, key, original, format = formatMod) {
+  if (!hasOverride(entityId, key)) return "";
+  const was = original == null ? "not published" : format(original);
+  return `Set by hand — ${was} on the statblock`;
+}
+
+function overrideClass(entityId, key) {
+  return hasOverride(entityId, key) ? "overridden" : "";
+}
+
 // The unadjusted stat block. Split out from entityStatBlock() so a caller can
 // ask what a creature's numbers would be under a DIFFERENT adjustment than
 // the one it currently has — which is what changing the switch needs, and
@@ -1166,6 +1344,14 @@ function baseStatBlock(entity) {
 // exempt: these are monster templates, and a PC has a sheet to level up
 // rather than a statblock to adjust.
 function entityStatBlock(entity) {
+  return applyStatOverrides(publishedStatBlock(entity), entity?.id);
+}
+
+// The block as the sheet or the bestiary has it — adjusted, but with no DM
+// override applied. This is what an overridden stat's tooltip names and what
+// Reset restores, so it has to stay reachable separately from the numbers the
+// panel actually prints.
+function publishedStatBlock(entity) {
   const base = baseStatBlock(entity);
   if (!base || entity?.build) return base;
   return applyAdjustmentToStats(base, entityAdjustment(entity?.id));
@@ -2045,6 +2231,7 @@ function renderRoster() {
           delete state.spellSlots[id];
           delete state.inventory[id];
           delete state.adjustment[id];
+          delete state.overrides[id];
         });
       } else {
         removeCharacterFromBattle(id, entity.name);
@@ -2115,6 +2302,7 @@ function removeCharacterFromBattle(characterId, name) {
     delete state.spellSlots[characterId];
     delete state.inventory[characterId];
     delete state.adjustment[characterId];
+    delete state.overrides[characterId];
     delete state.initiative[characterId];
   });
   raisedShieldIds.delete(characterId);
@@ -2630,7 +2818,7 @@ function renderAbilitiesPanel() {
   }
 
   const body = document.getElementById("battle-ability-body");
-  if (activeTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities);
+  if (activeTab === ABILITY_TAB_PROFICIENCIES) renderProficienciesTab(body, abilities, entityId, publishedAbilities(entity));
   else if (activeTab === ABILITY_TAB_SPELLS) renderSpellsTab(body, entity, spells);
   else if (activeTab === ABILITY_TAB_INVENTORY) renderInventoryTab(body, entity, inventory);
   else if (activeTab === ABILITY_TAB_INFO) renderInfoTab(body, info);
@@ -2933,26 +3121,42 @@ function renderActionsTab(body, { strikes, special, adjustment }) {
   `;
 }
 
-function renderProficienciesTab(body, { attributes, skills, languages }) {
+function renderProficienciesTab(body, { attributes, skills, languages }, entityId, published) {
   // Abbreviated, not ABILITY_NAMES' full "Strength" — six of them share one
   // row, where the Character tab's grid only ever fits two. The title
   // carries the full name.
+  //
+  // data-stat is the same handle the Character tab's tiles use, so one
+  // right-click menu covers stats from both boxes without either panel
+  // knowing about the other.
   const attrRow = ABILITIES.map((key) => {
     const value = attributes?.[key];
-    return `<div class="battle-stat" title="${escapeHtml(ABILITY_NAMES[key] ?? key)}"><span class="stat-label">${key.toUpperCase()}</span><span class="stat-value${value == null ? " unknown" : ""}">${value == null ? "&mdash;" : formatMod(value)}</span></div>`;
+    const statKey = `attr:${key}`;
+    const title = [ABILITY_NAMES[key] ?? key, overrideNote(entityId, statKey, published?.attributes?.[key])]
+      .filter(Boolean).join("\n\n");
+    return `<div class="battle-stat" data-stat="${statKey}" title="${escapeHtml(title)}"><span class="stat-label">${key.toUpperCase()}</span><span class="stat-value${value == null ? " unknown" : ""} ${overrideClass(entityId, statKey)}">${value == null ? "&mdash;" : formatMod(value)}</span></div>`;
   }).join("");
 
   // A conditional bonus ("Athletics +5 (+9 to Climb)") is shown beside the
   // flat one rather than replacing it — both apply, and which one is live
   // depends on what's being attempted. It's the whole reason these are
   // scraped from the rendered statblock; see the build script.
-  const skillRows = (skills ?? []).map((s) => `
-    <li class="battle-ability-skill">
+  //
+  // The override key is the skill's printed NAME, since that's the only
+  // stable identifier a scraped statblock row has — there's no key behind it
+  // the way ABILITIES gives the attributes one.
+  const publishedSkills = new Map((published?.skills ?? []).map((s) => [s.name, s.modifier]));
+  const skillRows = (skills ?? []).map((s) => {
+    const statKey = `skill:${s.name}`;
+    const note = overrideNote(entityId, statKey, publishedSkills.get(s.name) ?? null);
+    return `
+    <li class="battle-ability-skill" data-stat="${escapeHtml(statKey)}"${note ? ` title="${escapeHtml(note)}"` : ""}>
       <span class="battle-ability-skill-name">${escapeHtml(s.name)}</span>
-      <span class="battle-ability-bonus">${formatMod(s.modifier)}</span>
+      <span class="battle-ability-bonus ${overrideClass(entityId, statKey)}">${formatMod(s.modifier)}</span>
       ${(s.notes ?? []).map((n) => `<span class="battle-ability-skill-note">${formatMod(n.modifier)}${n.condition ? ` ${escapeHtml(n.condition)}` : ""}</span>`).join("")}
     </li>
-  `).join("");
+  `;
+  }).join("");
 
   // Attributes sit at their natural square size with languages taking the
   // rest of the row, rather than the six tiles stretching to fill the panel.
@@ -3122,6 +3326,16 @@ function loadMonsterAbilities() {
 // Returns the string "loading" for a monster whose abilities file hasn't
 // arrived yet, which is distinct from null ("this thing has none").
 function entityAbilities(entity) {
+  const abilities = publishedAbilities(entity);
+  // "loading" is a sentinel, not a shape — overriding its attributes would
+  // turn the Proficiencies tab's spinner into an empty table.
+  if (!abilities || abilities === "loading") return abilities;
+  return applyAbilityOverrides(abilities, entity?.id);
+}
+
+// As above: what the sheet or the bestiary published, before any override.
+// Kept separate so an overridden attribute can still say what it replaced.
+function publishedAbilities(entity) {
   const build = entity?.build;
   if (build) {
     const strikes = (build.weapons ?? []).map((w) => {
@@ -3332,6 +3546,9 @@ function renderCharacterTab(objectBody) {
   // otherwise), so this renders a character and a statted monster alike.
   const characterId = entityId;
   const build = entity.build;
+  // What the sheet or the bestiary says, before any DM override. Only ever
+  // read for the tooltips, so an overridden number can say what it replaced.
+  const published = publishedStatBlock(entity);
   // Conditions are resolved once for the whole panel — every stat below
   // reads its own entry out of this, rather than each recomputing the
   // grant graph.
@@ -3380,17 +3597,23 @@ function renderCharacterTab(objectBody) {
   // tooltip and the condition breakdown. "PERCEPTION" spelled out is what
   // was setting the tile width, and these four are the only stats here —
   // the abbreviations aren't ambiguous against anything.
+  //
+  // Each carries its override key as data-stat, which is the whole handle the
+  // right-click menu needs — one delegated listener on the panel finds it
+  // without knowing which tile is which. A tile the source left blank still
+  // gets one: "not published" is exactly the case a DM most wants to fill in.
   const checks = [
-    { label: "Fortitude", short: "FORT", base: stats.fortitude, modifier: mods.fortitude },
-    { label: "Reflex", short: "REF", base: stats.reflex, modifier: mods.reflex },
-    { label: "Will", short: "WILL", base: stats.will, modifier: mods.will },
-    { label: "Perception", short: "PERC", base: stats.perception, modifier: mods.perception },
-  ].map(({ label, short, base, modifier }) => {
+    { key: "fortitude", label: "Fortitude", short: "FORT", base: stats.fortitude, modifier: mods.fortitude },
+    { key: "reflex", label: "Reflex", short: "REF", base: stats.reflex, modifier: mods.reflex },
+    { key: "will", label: "Will", short: "WILL", base: stats.will, modifier: mods.will },
+    { key: "perception", label: "Perception", short: "PERC", base: stats.perception, modifier: mods.perception },
+  ].map(({ key, label, short, base, modifier }) => {
+    const note = overrideNote(characterId, key, published?.[key]);
     if (base == null) {
-      return `<div class="battle-stat" title="${label}"><span class="stat-label">${short}</span><span class="stat-value unknown" title="Not published for this creature">&mdash;</span></div>`;
+      return `<div class="battle-stat" data-stat="${key}" title="${label}"><span class="stat-label">${short}</span><span class="stat-value unknown" title="Not published for this creature">&mdash;</span></div>`;
     }
-    const hint = modifierHint(label, base, modifier);
-    return `<div class="battle-stat" title="${escapeHtml(hint || label)}"><span class="stat-label">${short}</span><span class="stat-value ${modifierClass(modifier)}">${formatMod(base + modifier.total)}</span></div>`;
+    const hint = [modifierHint(label, base, modifier), note].filter(Boolean).join("\n\n");
+    return `<div class="battle-stat" data-stat="${key}" title="${escapeHtml(hint || label)}"><span class="stat-label">${short}</span><span class="stat-value ${modifierClass(modifier)} ${overrideClass(characterId, key)}">${formatMod(base + modifier.total)}</span></div>`;
   }).join("");
 
   const ac = baseAc == null ? null : baseAc + mods.ac.total;
@@ -3401,9 +3624,13 @@ function renderCharacterTab(objectBody) {
   const maxHpHint = hasHp ? modifierHint("Max HP", baseMaxHp, mods.maxHp, String) : "";
   // The AC panel's tooltip already explains the shield toggle; the
   // condition breakdown is appended below it rather than replacing it.
-  const acTitle = [hasShield ? `Raise a Shield (+${shieldBonus} AC)` : "AC", acHint].filter(Boolean).join("\n\n");
+  const acTitle = [
+    hasShield ? `Raise a Shield (+${shieldBonus} AC)` : "AC",
+    acHint,
+    overrideNote(characterId, "ac", published?.ac, String),
+  ].filter(Boolean).join("\n\n");
   const hpTitle = hasHp
-    ? ["Click to adjust HP", maxHpHint].filter(Boolean).join("\n\n")
+    ? ["Click to adjust HP", maxHpHint, overrideNote(characterId, "maxHp", published?.maxHp, String)].filter(Boolean).join("\n\n")
     : "No published HP for this creature";
   // Every movement type the creature has, as an icon and a number each.
   // A dragon's fly speed used to be readable only by hovering for the prose
@@ -3414,15 +3641,25 @@ function renderCharacterTab(objectBody) {
   // Speed penalties are penalties to all your Speeds, and showing a slowed
   // dragon an unmodified fly speed beside a modified walk speed would be
   // the panel disagreeing with itself.
+  //
+  // Each chip carries its movement type as data-speed, so the right-click
+  // menu can offer set/reset/remove for the one under the cursor. The
+  // "nothing published" placeholder carries walk for the same reason: a
+  // creature with no speed at all is precisely the one a DM needs to give
+  // one, and the menu's Add items hang off the same element.
   const speedTitle = [stats.speedText, speedHint].filter(Boolean).join("\n\n");
-  const speeds = parseSpeeds(stats.speedText, baseSpeed)
+  const speeds = effectiveSpeeds(characterId, stats)
     .map(({ kind, feet }) => ({ kind, feet: Math.max(0, feet + mods.speed.total) }));
   const speedsHtml = speeds.length
     ? speeds.map(({ kind, feet }) => {
-      const hint = [`${SPEED_LABELS[kind]} ${feet} feet`, speedHint].filter(Boolean).join("\n\n");
-      return `<span class="battle-speed ${modifierClass(mods.speed)}" title="${escapeHtml(hint)}">${SPEED_ICONS[kind]}${feet}</span>`;
+      const hint = [
+        `${SPEED_LABELS[kind]} ${feet} feet`,
+        speedHint,
+        overrideNote(characterId, `speed:${kind}`, publishedSpeed(entity, kind), String),
+      ].filter(Boolean).join("\n\n");
+      return `<span class="battle-speed ${modifierClass(mods.speed)} ${overrideClass(characterId, `speed:${kind}`)}" data-speed="${kind}" title="${escapeHtml(hint)}">${SPEED_ICONS[kind]}${feet}</span>`;
     }).join("")
-    : `<span class="battle-speed unknown" title="Not published for this creature">${SPEED_ICONS.walk}&mdash;</span>`;
+    : `<span class="battle-speed unknown" data-speed="walk" title="Not published for this creature">${SPEED_ICONS.walk}&mdash;</span>`;
   const maxHpText = mods.maxHp.total
     ? `<span class="${modifierClass(mods.maxHp)} on-fill">${maxHp}</span>`
     : `${maxHp}`;
@@ -3473,14 +3710,19 @@ function renderCharacterTab(objectBody) {
         </div>
       </div>
       <div class="battle-stat-right">
-        <button type="button" id="battle-hp-bar" class="battle-hp-bar" title="${escapeHtml(hpTitle)}" ${hasHp ? "" : "disabled"}>
+        <!-- Both carry data-stat so the right-click menu reaches them through
+             the same delegated listener as the save tiles. Both are also
+             often disabled — the AC square whenever there's no shield to
+             raise, which is most creatures — so the listener resolves its
+             target with contextTarget() rather than event.target alone. -->
+        <button type="button" id="battle-hp-bar" class="battle-hp-bar" data-stat="maxHp" title="${escapeHtml(hpTitle)}" ${hasHp ? "" : "disabled"}>
           <span class="battle-hp-bar-fill${hpLow ? " low" : ""}" style="width:${hpFillPct}%"></span>
           ${tempHp > 0 ? `<span class="battle-hp-bar-temp-fill" style="left:${hpFillPct}%; width:${tempFillPct}%"></span>` : ""}
           <span class="battle-hp-bar-text">${hasHp ? `${hp} / ${maxHpText}${tempHp > 0 ? ` (+${tempHp})` : ""}` : "&mdash;"}</span>
         </button>
-        <button type="button" id="battle-toggle-shield" class="battle-stat-ac${shieldRaised ? " active" : ""}" title="${escapeHtml(acTitle)}" ${hasShield ? "" : "disabled"}>
+        <button type="button" id="battle-toggle-shield" class="battle-stat-ac${shieldRaised ? " active" : ""}" data-stat="ac" title="${escapeHtml(acTitle)}" ${hasShield ? "" : "disabled"}>
           <span class="stat-label">AC</span>
-          <span class="stat-value ${ac == null ? "unknown" : modifierClass(mods.ac)}">${ac == null ? "&mdash;" : ac}</span>
+          <span class="stat-value ${ac == null ? "unknown" : modifierClass(mods.ac)} ${overrideClass(characterId, "ac")}">${ac == null ? "&mdash;" : ac}</span>
           ${hasShield ? `<span class="battle-stat-ac-shield-icon" aria-hidden="true">&#128737;</span>` : ""}
         </button>
       </div>
@@ -4833,36 +5075,64 @@ let renameEntityId = null;
 
 // --- Right-click menu ------------------------------------------------------
 //
-// One menu, opened from two places: the Character tab's name and an initiative
-// row. Both are rebuilt by render(), which is why the element itself is static
-// markup at body level — a menu inside either would be destroyed between the
-// click that opened it and the click that chose from it.
+// One menu, opened from anything on the page that has something to offer: a
+// creature's name, its HP bar, its AC square, a save tile, a speed chip, an
+// attribute, a skill. All of those are rebuilt by render(), which is why the
+// element itself is static markup at body level — a menu inside any of them
+// would be destroyed between the click that opened it and the click that
+// chose from it. The listeners are delegated to the panels for the same
+// reason: only the box ids survive a render.
 //
 // UI-only state, like selection and the active tool: it never dispatches, and
 // nothing about it survives a reload. What it *chooses* dispatches.
+//
+// The menu is a LIST OF ITEMS rather than a fixed set of actions, and each
+// item carries its own behaviour as a closure. There's no action-name
+// registry to keep in step with the builders, and a right-click that has
+// nothing to offer simply produces no items and lets the browser's own menu
+// through instead.
 const contextMenu = document.getElementById("battle-context-menu");
-let contextMenuEntityId = null;
+let contextMenuItems = [];
 
 // Kept clear of the pointer and of the viewport edge. Measured after showing,
 // because a hidden element has no size to flip against.
 const CONTEXT_MENU_GAP = 2;
 
-function openContextMenu(clientX, clientY, entityId) {
-  const entity = findEntity(entityId);
-  if (!entity) return;
-  contextMenuEntityId = entityId;
+// Everything on either bottom panel that a right-click means something on.
+// One selector, so the handler resolves the target once instead of testing
+// four times over.
+//
+// .battle-stat-speeds is the chips' container. closest() walks up from the
+// target and stops at the nearest match, so a chip always wins over the
+// container that holds it: right-clicking a chip opens the speeds dialog on
+// that row, right-clicking the gap beside them opens it on none.
+const CONTEXT_TARGETS = "[data-speed], .battle-stat-speeds, [data-stat], .battle-stat-name";
 
-  // A character's name belongs to their sheet, which this page never writes
-  // to. The item is shown disabled rather than hidden, with the reason in its
-  // title: a menu that silently has nothing in it for characters reads as
-  // broken, and the same right-click on a monster does work.
-  const renamable = entity.isCustom;
-  contextMenu.innerHTML = `
-    <button type="button" role="menuitem" data-action="rename" ${renamable ? "" : "disabled"}
-            title="${renamable ? "Rename this creature" : "A character's name comes from their sheet and is changed there"}">
-      Rename
-    </button>
-  `;
+// event.target is the honest answer, and the only one a keyboard menu key —
+// which carries no coordinates — can give. It falls short in exactly one
+// case: a DISABLED button, where the browser dispatches the event on an
+// ancestor instead. That covers the AC square whenever there's no shield to
+// raise (most creatures) and the HP bar of a creature with no published HP —
+// precisely the stats a DM most wants to fill in — so a hit test at the
+// pointer picks up what dispatch retargeted away.
+function contextTarget(event, selector) {
+  const direct = event.target.closest(selector);
+  if (direct) return direct;
+  return document.elementFromPoint(event.clientX, event.clientY)?.closest(selector) ?? null;
+}
+
+function openContextMenu(clientX, clientY, items) {
+  const usable = (items ?? []).filter(Boolean);
+  if (!usable.length) return;
+  contextMenuItems = usable;
+
+  // Indexed against the same array the click handler reads, so an item's
+  // identity is its position in the list rather than an action name that
+  // would have to be kept in step with a lookup table somewhere else.
+  contextMenu.innerHTML = usable.map((item, index) => (
+    `<button type="button" role="menuitem" data-index="${index}"${item.disabled ? " disabled" : ""}`
+    + `${item.title ? ` title="${escapeHtml(item.title)}"` : ""}>${escapeHtml(item.label)}</button>`
+  )).join("");
 
   contextMenu.hidden = false;
   // Placed off-screen first so measuring can't scroll the page.
@@ -4877,7 +5147,7 @@ function openContextMenu(clientX, clientY, entityId) {
 
 function closeContextMenu() {
   contextMenu.hidden = true;
-  contextMenuEntityId = null;
+  contextMenuItems = [];
 }
 
 function contextMenuOpen() {
@@ -4885,11 +5155,13 @@ function contextMenuOpen() {
 }
 
 contextMenu.addEventListener("click", (event) => {
-  const item = event.target.closest("button[data-action]");
-  if (!item || item.disabled) return;
-  const entityId = contextMenuEntityId;
+  const button = event.target.closest("button[data-index]");
+  if (!button || button.disabled) return;
+  // Read before closing: closeContextMenu() drops the list the index points
+  // into.
+  const item = contextMenuItems[Number(button.dataset.index)];
   closeContextMenu();
-  if (item.dataset.action === "rename") openEntityRenameDialog(entityId);
+  item?.run?.();
 });
 
 // pointerdown rather than click, and capturing: the menu has to be gone before
@@ -4905,15 +5177,123 @@ window.addEventListener("scroll", () => { if (contextMenuOpen()) closeContextMen
 window.addEventListener("resize", () => { if (contextMenuOpen()) closeContextMenu(); });
 window.addEventListener("blur", () => { if (contextMenuOpen()) closeContextMenu(); });
 
-// The selected square's own name, in the Character tab. Delegated to the panel,
-// whose id is stable, rather than to the name — which is replaced every render.
+// --- What each right-click offers ------------------------------------------
+
+// A character's name belongs to their sheet, which this page never writes to.
+// The item is shown disabled rather than hidden, with the reason in its title:
+// a menu that silently has nothing in it for characters reads as broken, and
+// the same right-click on a monster does work.
+function renameMenuItems(entity) {
+  const renamable = entity.isCustom;
+  return [{
+    label: "Rename",
+    disabled: !renamable,
+    title: renamable ? "Rename this creature" : "A character's name comes from their sheet and is changed there",
+    run: () => openEntityRenameDialog(entity.id),
+  }];
+}
+
+// Set and Reset, for any stat that's a single number. Max HP earns one extra
+// item because the HP bar is also where temporary HP lives, and clearing it
+// otherwise means opening the HP dialog and granting 0.
+function statMenuItems(entityId, key) {
+  const entity = findEntity(entityId);
+  if (!entity) return [];
+  const label = statLabel(key);
+  const items = [
+    { label: `Set ${label}…`, run: () => openStatDialog(entityId, key) },
+    resetMenuItem(entity, key, `Reset ${label}`),
+  ];
+  if (key === "maxHp") {
+    const temp = currentTempHp(entityId);
+    items.push({
+      label: "Remove temporary HP",
+      disabled: temp === 0,
+      title: temp === 0 ? "This creature has no temporary HP" : `Clears all ${temp} temporary HP`,
+      run: () => removeTempHp(entityId),
+    });
+  }
+  return items;
+}
+
+// Speeds go to one dialog listing every movement type, rather than a menu
+// per chip. A creature has up to five of them, and the per-chip menu had to
+// carry Set, Reset and Remove for the type under the cursor plus an Add for
+// each of the four it might not have — eight items to change two numbers,
+// with "add a fly speed" reachable only by right-clicking some *other*
+// speed. All five in one place is both shorter and the thing a DM is
+// actually doing: deciding how this creature moves.
+//
+// The kind under the cursor is passed through so the dialog can open with
+// that row's field selected, which keeps the precision of right-clicking a
+// particular chip.
+function speedMenuItems(entityId, kind) {
+  const entity = findEntity(entityId);
+  if (!entity) return [];
+  return [{
+    label: "Set speeds…",
+    title: "Every movement type this creature has, or could have",
+    run: () => openSpeedsDialog(entityId, kind),
+  }];
+}
+
+// Disabled when there's nothing to undo, with the title saying which — "back
+// to what?" is the question, and the answer differs between a character (a
+// sheet this page can't write to) and a monster (a published statblock).
+function resetMenuItem(entity, key, label) {
+  const overridden = hasOverride(entity.id, key);
+  const source = entity.build ? "the number on their sheet" : "the published statblock";
+  return {
+    label,
+    disabled: !overridden,
+    title: overridden ? `Back to ${source}` : "Nothing to reset — this is the published number",
+    run: () => resetStat(entity.id, key),
+  };
+}
+
+function resetStat(entityId, key) {
+  const entity = findEntity(entityId);
+  if (!entity) return;
+  clearOverride(entityId, key, `Reset ${entity.name}'s ${statLabel(key)}`);
+}
+
+// Reuses adjust-temp-hp rather than inventing a remove-temp-hp: it's the same
+// pool changing, and one event type per pool is what keeps the log readable.
+function removeTempHp(entityId) {
+  const entity = findEntity(entityId);
+  if (!entity || !currentTempHp(entityId)) return;
+  dispatch("adjust-temp-hp", `Removed ${entity.name}'s temporary HP`, (state) => {
+    delete state.tempHp[entityId];
+  });
+}
+
+// --- Where a right-click can land -------------------------------------------
+
+// The Character tab: the name, the HP bar, the AC square, a save tile, a speed
+// chip. Delegated to the panel, whose id is stable, rather than to any of
+// those — all of them are replaced every render.
 objectPanel.addEventListener("contextmenu", (event) => {
-  const name = event.target.closest(".battle-stat-name");
-  if (!name) return;
   const entityId = selectedSquareKey ? battleState.placements[selectedSquareKey] : null;
   if (!entityId) return;
+  const node = contextTarget(event, CONTEXT_TARGETS);
+  if (!node) return;
   event.preventDefault();
-  openContextMenu(event.clientX, event.clientY, entityId);
+  const speeds = node.dataset.speed || node.classList.contains("battle-stat-speeds");
+  if (speeds) openContextMenu(event.clientX, event.clientY, speedMenuItems(entityId, node.dataset.speed ?? null));
+  else if (node.dataset.stat) openContextMenu(event.clientX, event.clientY, statMenuItems(entityId, node.dataset.stat));
+  else openContextMenu(event.clientX, event.clientY, renameMenuItems(findEntity(entityId)));
+});
+
+// The Proficiencies tab's attribute tiles and skill rows, which carry the same
+// data-stat the Character tab's tiles do — so one menu covers stats from both
+// boxes without either panel knowing about the other.
+abilitiesPanel.addEventListener("contextmenu", (event) => {
+  const entityId = selectedSquareKey ? battleState.placements[selectedSquareKey] : null;
+  if (!entityId) return;
+  const node = contextTarget(event, "[data-stat]");
+  if (!node) return;
+  event.preventDefault();
+  openContextMenu(event.clientX, event.clientY, statMenuItems(entityId, node.dataset.stat));
 });
 
 // The same menu from the initiative track, which already renames on
@@ -4922,9 +5302,306 @@ objectPanel.addEventListener("contextmenu", (event) => {
 initiativeList.addEventListener("contextmenu", (event) => {
   const row = event.target.closest("li[data-entity-id]");
   if (!row) return;
+  const entity = findEntity(row.dataset.entityId);
+  if (!entity) return;
   event.preventDefault();
-  openContextMenu(event.clientX, event.clientY, row.dataset.entityId);
+  openContextMenu(event.clientX, event.clientY, renameMenuItems(entity));
 });
+
+// --- Setting a stat by hand --------------------------------------------------
+//
+// A dialog rather than an input in the panel, for the reason every other
+// editor on this page is one: both bottom boxes are rebuilt on every
+// render(), so a field living in one loses half-typed text to any unrelated
+// dispatch. One dialog serves every stat and every movement type — they all
+// come down to a creature, a key and a number.
+
+const statDialog = document.getElementById("battle-stat-dialog");
+const statDialogTitle = document.getElementById("battle-stat-dialog-title");
+const statDialogHint = document.getElementById("battle-stat-dialog-hint");
+const statForm = document.getElementById("battle-stat-form");
+const statInput = document.getElementById("battle-stat-input");
+const statCloseBtn = document.getElementById("battle-stat-close");
+
+let statDialogEntityId = null;
+let statDialogKey = null;
+
+// Reads one key out of an already-built stat block and ability set. Speeds
+// aren't here: they're a list rather than a field, so both callers resolve
+// them through their own speed function first.
+function readStat(key, stats, abilities) {
+  if (key.startsWith("attr:")) return abilities?.attributes?.[key.slice(5)] ?? null;
+  if (key.startsWith("skill:")) {
+    return (abilities?.skills ?? []).find((skill) => skill.name === key.slice(6))?.modifier ?? null;
+  }
+  return stats?.[key] ?? null;
+}
+
+// What the panel is printing now, before conditions — the same layer an
+// override replaces, so the dialog opens on the number the DM is looking at
+// rather than on an empty box they have to work the value out for.
+function currentStatValue(entityId, key) {
+  const entity = findEntity(entityId);
+  if (!entity) return null;
+  const stats = entityStatBlock(entity);
+  if (key.startsWith("speed:")) {
+    return effectiveSpeeds(entityId, stats).find((speed) => speed.kind === key.slice(6))?.feet ?? null;
+  }
+  return readStat(key, stats, entityAbilities(entity));
+}
+
+function publishedStatValue(entity, key) {
+  if (key.startsWith("speed:")) return publishedSpeed(entity, key.slice(6));
+  return readStat(key, publishedStatBlock(entity), publishedAbilities(entity));
+}
+
+function openStatDialog(entityId, key) {
+  const entity = findEntity(entityId);
+  if (!entity) return;
+  statDialogEntityId = entityId;
+  statDialogKey = key;
+  statDialogTitle.textContent = `${statLabel(key)} — ${entity.name}`;
+  statInput.min = statMinimum(key);
+  const current = currentStatValue(entityId, key);
+  statInput.value = current == null ? "" : current;
+  // Naming the published value in the dialog, not just in the panel's
+  // tooltip: this is where a DM decides how far to move a number, and
+  // "AC 18 on the statblock" is the thing they're deciding against.
+  const published = publishedStatValue(entity, key);
+  statDialogHint.textContent = published == null
+    ? "Nothing published for this creature."
+    : `Published: ${published}`;
+  statDialog.showModal();
+  statInput.select();
+}
+
+statForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entity = findEntity(statDialogEntityId);
+  const key = statDialogKey;
+  const raw = Number(statInput.value);
+  if (entity && key && Number.isFinite(raw)) {
+    // The field's own min/step do the real work — the browser refuses to
+    // submit 0 max HP or an AC of 18.5, and says why. This is the backstop
+    // for anything that reaches here without passing through the field.
+    const value = Math.max(statMinimum(key), Math.trunc(raw));
+    const unit = key.startsWith("speed:") ? " feet" : "";
+    setOverride(entity.id, key, value, `Set ${entity.name}'s ${statLabel(key)} to ${value}${unit}`);
+  }
+  statDialog.close();
+});
+
+statCloseBtn.addEventListener("click", () => statDialog.close());
+
+// --- Setting every speed at once ---------------------------------------------
+//
+// All five movement types in one list, each with a switch, a number and a
+// reset. A creature's speeds are one decision — "how does this thing move" —
+// not five, and the DM giving a hydra a swim speed usually wants to trim its
+// walk speed in the same breath.
+//
+// The rows STAGE their values; nothing reaches battle state until Save, and
+// then as a single dispatch. That's the same reasoning resizeGrid() uses:
+// one Ctrl+Z should put a creature's movement back the way it was, not undo
+// three quarters of an edit and leave the rest.
+
+const speedsDialog = document.getElementById("battle-speeds-dialog");
+const speedsDialogName = document.getElementById("battle-speeds-dialog-name");
+const speedsForm = document.getElementById("battle-speeds-form");
+const speedsList = document.getElementById("battle-speeds-list");
+const speedsCloseBtn = document.getElementById("battle-speeds-close");
+
+let speedsDialogEntityId = null;
+
+// The value a row goes back to, and the yardstick for "has this been
+// changed": the movement type as the sheet or the bestiary has it, with null
+// meaning the creature was never published with one.
+function speedRowDefault(entity, kind) {
+  return publishedSpeed(entity, kind);
+}
+
+// A row is at its default when its switch agrees with whether the source
+// published that speed AND, if it did, its number matches. Both halves
+// matter: a fly speed switched off is a change even though its number is
+// untouched.
+function speedRowIsDefault(row, base) {
+  const on = row.querySelector(".battle-speed-switch").checked;
+  const feet = row.querySelector(".battle-speed-feet").value;
+  if (base == null) return !on;
+  return on && Number(feet) === base;
+}
+
+// A row's number only applies while its switch is on, so the field follows
+// it: disabled (and therefore not validated) when off, required when on. That
+// makes "switch it on and leave the box empty" impossible rather than
+// silently meaning zero.
+function syncSpeedRow(row, base) {
+  const on = row.querySelector(".battle-speed-switch").checked;
+  const feet = row.querySelector(".battle-speed-feet");
+  feet.disabled = !on;
+  feet.required = on;
+  row.classList.toggle("off", !on);
+  const reset = row.querySelector(".battle-speed-reset");
+  reset.disabled = speedRowIsDefault(row, base);
+  reset.title = reset.disabled
+    ? "Already at the published value"
+    : base == null
+      ? "Back to no such speed"
+      : `Back to the published ${base} feet`;
+}
+
+function syncSpeedRows() {
+  const entity = findEntity(speedsDialogEntityId);
+  if (!entity) return;
+  for (const row of speedsList.querySelectorAll(".battle-speed-row")) {
+    syncSpeedRow(row, speedRowDefault(entity, row.dataset.kind));
+  }
+}
+
+function openSpeedsDialog(entityId, focusKind) {
+  const entity = findEntity(entityId);
+  if (!entity) return;
+  speedsDialogEntityId = entityId;
+  speedsDialogName.textContent = entity.name;
+
+  // Seeded from what the panel is showing, so the dialog opens agreeing with
+  // the chips behind it — overrides included, since those ARE the current
+  // speeds.
+  const current = new Map(effectiveSpeeds(entityId, entityStatBlock(entity)).map((s) => [s.kind, s.feet]));
+  speedsList.innerHTML = SPEED_KINDS.map((kind) => {
+    const on = current.has(kind);
+    const base = speedRowDefault(entity, kind);
+    // An off row still shows the published number rather than sitting blank:
+    // it's what switching the row back on will restore, and a DM deciding
+    // whether to take a dragon's flight away wants to see what they're
+    // taking.
+    const value = on ? current.get(kind) : (base ?? "");
+    // The checkbox is the state and stays focusable; the span beside it is
+    // the pill that's actually seen. A bare checkbox was the wrong control
+    // here twice over — it reads as "tick this option" rather than "this
+    // creature has this speed", and style.css's `dialog input` rule (written
+    // for text fields, and setting width: 100%) stretched it across the row.
+    return `
+      <li class="battle-speed-row" data-kind="${kind}">
+        <label class="battle-speed-toggle">
+          <input type="checkbox" class="battle-speed-switch"${on ? " checked" : ""} aria-label="Has a ${SPEED_MENU_LABELS[kind]}" />
+          <span class="battle-speed-track" aria-hidden="true"></span>
+          <span class="battle-speed-row-name">${SPEED_ICONS[kind]}${SPEED_MENU_LABELS[kind]}</span>
+        </label>
+        <input type="number" class="battle-speed-feet" min="${statMinimum(`speed:${kind}`)}" step="1" value="${value}" aria-label="${SPEED_MENU_LABELS[kind]} in feet" />
+        <span class="battle-speed-unit">ft</span>
+        <button type="button" class="battle-speed-reset" aria-label="Reset ${SPEED_MENU_LABELS[kind]}">${REFRESH_ICON}</button>
+      </li>`;
+  }).join("");
+
+  syncSpeedRows();
+  speedsDialog.showModal();
+
+  // Right-clicking a particular chip opens on that chip's row, which is what
+  // keeps the one-dialog-for-everything version as precise as the per-chip
+  // menu it replaced.
+  const focus = focusKind && speedsList.querySelector(`.battle-speed-row[data-kind="${focusKind}"] .battle-speed-feet`);
+  if (focus && !focus.disabled) focus.select();
+}
+
+// Delegated, because the rows are rebuilt every time the dialog opens.
+speedsList.addEventListener("change", (event) => {
+  if (event.target.closest(".battle-speed-switch")) syncSpeedRows();
+});
+speedsList.addEventListener("input", (event) => {
+  if (event.target.closest(".battle-speed-feet")) syncSpeedRows();
+});
+
+// Reset stages the published values back into the row; it doesn't dispatch.
+// Nothing in this dialog touches battle state until Save, so a reset the DM
+// changes their mind about costs nothing and leaves no event behind.
+speedsList.addEventListener("click", (event) => {
+  const button = event.target.closest(".battle-speed-reset");
+  if (!button || button.disabled) return;
+  const row = button.closest(".battle-speed-row");
+  const entity = findEntity(speedsDialogEntityId);
+  if (!row || !entity) return;
+  const base = speedRowDefault(entity, row.dataset.kind);
+  row.querySelector(".battle-speed-switch").checked = base != null;
+  row.querySelector(".battle-speed-feet").value = base ?? "";
+  syncSpeedRows();
+});
+
+// The override map the staged rows come to, keys omitted rather than set
+// wherever the row agrees with the source. Same three cases the per-speed
+// menu had, decided in bulk:
+//   off  + published    -> null, "the DM took this away"
+//   off  + unpublished  -> absent; there's nothing to hide
+//   on   + matches book -> absent; an override equal to the source is noise
+//   on   + anything else-> the number
+function stagedSpeedOverrides(entity) {
+  const staged = {};
+  for (const row of speedsList.querySelectorAll(".battle-speed-row")) {
+    const kind = row.dataset.kind;
+    const base = speedRowDefault(entity, kind);
+    const on = row.querySelector(".battle-speed-switch").checked;
+    if (!on) {
+      if (base != null) staged[kind] = null;
+      continue;
+    }
+    const feet = Math.max(0, Math.trunc(Number(row.querySelector(".battle-speed-feet").value) || 0));
+    if (feet !== base) staged[kind] = feet;
+  }
+  return staged;
+}
+
+// One line for one change, a summary for several — the log is one short line
+// per entry, and "Set Hydra's speeds" says nothing when the only edit was
+// trimming its walk speed by 5 feet.
+function speedChangeLabel(entity, staged) {
+  const current = statOverrides(entity.id);
+  const changes = [];
+  for (const kind of SPEED_KINDS) {
+    const key = `speed:${kind}`;
+    const had = key in current;
+    const has = kind in staged;
+    if (!had && !has) continue;
+    if (had && has && current[key] === staged[kind]) continue;
+    const label = (SPEED_MENU_LABELS[kind] ?? kind).toLowerCase();
+    if (!has) changes.push(`Reset ${entity.name}'s ${label}`);
+    else if (staged[kind] === null) changes.push(`Removed ${entity.name}'s ${label}`);
+    else changes.push(`Set ${entity.name}'s ${label} to ${staged[kind]} feet`);
+  }
+  if (!changes.length) return null;
+  return changes.length === 1 ? changes[0] : `Set ${entity.name}'s speeds`;
+}
+
+speedsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const entity = findEntity(speedsDialogEntityId);
+  if (!entity) {
+    speedsDialog.close();
+    return;
+  }
+  const entityId = entity.id;
+  const staged = stagedSpeedOverrides(entity);
+  const label = speedChangeLabel(entity, staged);
+  // Nothing moved — closing without an event, rather than logging a no-op a
+  // later Ctrl+Z would have to step over.
+  if (!label) {
+    speedsDialog.close();
+    return;
+  }
+
+  dispatch("set-speeds", label, (state) => {
+    const next = { ...(state.overrides[entityId] ?? {}) };
+    // Every speed key is rewritten from the staged rows, so a type switched
+    // off loses its old override rather than keeping a stale number under it.
+    // Non-speed overrides are carried through untouched.
+    for (const kind of SPEED_KINDS) delete next[`speed:${kind}`];
+    for (const [kind, value] of Object.entries(staged)) next[`speed:${kind}`] = value;
+    if (Object.keys(next).length) state.overrides[entityId] = next;
+    else delete state.overrides[entityId];
+  });
+  speedsDialog.close();
+});
+
+speedsCloseBtn.addEventListener("click", () => speedsDialog.close());
 
 function openEntityRenameDialog(entityId) {
   const entity = findEntity(entityId);

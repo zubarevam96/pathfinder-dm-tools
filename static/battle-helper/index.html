@@ -209,16 +209,17 @@
     </div>
   </dialog>
 
+  <!-- Right-click menu, opened from a creature's name, its HP bar, its AC
+       square, a save tile, a speed chip, an attribute or a skill. Its items
+       are built fresh for each right-click, which is why it's empty here.
+       Static markup at body level on purpose: every one of those regions is
+       rebuilt by render(), and a menu living inside one would be destroyed
+       between the click that opened it and the click that chose from it. -->
+  <div id="battle-context-menu" class="battle-context-menu" role="menu" hidden></div>
+
   <!-- Renames a creature on the initiative track. Battle-local entities only
        (custom objects and monsters) — a character's name belongs to their
        sheet, and this page never writes to the character store. -->
-  <!-- Right-click menu for a creature, opened from the Character tab's name
-       and from an initiative row. Static markup at body level on purpose: both
-       of those regions are rebuilt by render(), and a menu living inside one
-       would be destroyed between the click that opened it and the click that
-       chose from it. -->
-  <div id="battle-context-menu" class="battle-context-menu" role="menu" hidden></div>
-
   <dialog id="battle-entity-rename-dialog">
     <h2>Rename</h2>
     <form id="battle-entity-rename-form" class="battle-rename-form">
@@ -228,6 +229,49 @@
     <div class="dialog-actions">
       <button type="button" id="battle-entity-rename-close">Cancel</button>
     </div>
+  </dialog>
+
+  <!-- Sets any one number on a creature by hand: max HP, AC, a save,
+       Perception, an attribute, a skill, one movement type. A dialog rather
+       than an input in the panel, because both bottom boxes are rebuilt on
+       every render() and a field living in one loses half-typed text to any
+       unrelated dispatch. The heading and the published-value hint are filled
+       in by openStatDialog() — one dialog for all of them, since they only
+       ever differ by which key is being set. -->
+  <dialog id="battle-stat-dialog">
+    <h2 id="battle-stat-dialog-title">Set value</h2>
+    <p id="battle-stat-dialog-hint" class="battle-stat-dialog-hint"></p>
+    <form id="battle-stat-form" class="battle-rename-form">
+      <input type="number" id="battle-stat-input" step="1" required />
+      <button type="submit" class="subtle">Set</button>
+    </form>
+    <div class="dialog-actions">
+      <button type="button" id="battle-stat-close">Cancel</button>
+    </div>
+  </dialog>
+
+  <!-- Every movement type a creature has or could have, in one list: a
+       switch for whether it has one, a number for how far, and a reset back
+       to the published value. All five together rather than one dialog per
+       speed, because "how does this thing move" is one decision.
+
+       The rows are built by openSpeedsDialog() and STAGE their values — Save
+       is a single dispatch, so one Ctrl+Z puts a creature's movement back the
+       way it was instead of undoing a quarter of an edit. The list lives
+       inside the form so the browser validates the rows that are switched
+       on. -->
+  <dialog id="battle-speeds-dialog">
+    <h2>Speeds — <span id="battle-speeds-dialog-name"></span></h2>
+    <form id="battle-speeds-form">
+      <ul id="battle-speeds-list" class="battle-speeds-list"></ul>
+      <!-- Save is not .subtle here: that class is for a secondary action
+           tucked beside a field, and this is the button the whole dialog
+           exists to reach. -->
+      <div class="dialog-actions">
+        <button type="button" id="battle-speeds-close">Cancel</button>
+        <button type="submit">Save</button>
+      </div>
+    </form>
   </dialog>
 
   <!-- Adds loose items and sets coin on whatever is selected — a monster's

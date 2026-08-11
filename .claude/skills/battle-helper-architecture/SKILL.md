@@ -55,6 +55,7 @@ Everything `emptyBattleState()` returns, and nothing else:
 | `spellSlots` | `entityId -> { "casterKey:level": bool[] }` | `true` = spent; read with a clamp, never written back into shape |
 | `inventory` | `entityId -> { items: [{name, qty}], money }` | DM-added loot and coin; **survives leaving the field**, like `appearance` |
 | `adjustment` | `entityId -> "elite" \| "weak"` | absent = unadjusted; also survives leaving the field |
+| `overrides` | `entityId -> { statKey: number \| null }` | DM-set numbers; absent = not overridden, `null` = a speed removed. Survives leaving the field — see "DM overrides" |
 | `customObjects` | `id -> { name, monster? }` | `monster` = bestiary entry, for monsters |
 | `characterIds` | `characterId[]` | which characters are in THIS battle |
 | `initiative` | `entityId -> number` | the *number* |
@@ -1016,6 +1017,143 @@ Two consequences worth keeping:
   `loadCharacters()`. The damage/heal and temp-HP handlers looked only in
   the character store, which would silently no-op every button in that
   dialog for a monster.
+
+### DM overrides sit on top of the stat block, never inside it
+
+A DM needs a creature's numbers to be whatever they say they are — a boss
+already wounded before the party arrives, a goblin in armour it found, an
+NPC given a swim speed for one encounter. `battleState.overrides` is a thin
+layer over the sheet or the statblock, and the source is never written to:
+the character store is read-only from this page, and a monster's statblock
+isn't ours to change.
+
+`overrides[entityId][key] = value`, with flat string keys so one map covers
+stats from three different renderers:
+
+| key | read back through |
+|---|---|
+| `maxHp` `ac` `fortitude` `reflex` `will` `perception` | `applyStatOverrides()`, in `entityStatBlock()` |
+| `attr:<abbr>`, `skill:<name>` | `applyAbilityOverrides()`, in `entityAbilities()` |
+| `speed:<kind>` | `effectiveSpeeds()`; `speed:walk` also lands on `stats.speed` |
+
+Five rules hold this together:
+
+- **`key in overrides`, never truthiness.** `null` means "this speed is
+  gone", and 0 is a perfectly good AC to force. Absent, null and zero are
+  three different things.
+- **Applied last** — after elite/weak, after the sheet's arithmetic. A typed
+  number is the answer, not a base for a template to scale again. Conditions
+  still stack on top, because those are the fight happening *to* the
+  creature rather than what it is.
+- **Each key stands alone.** Raising Dexterity does not ripple into AC or
+  Reflex. Rippling would mean reimplementing character building for one
+  source and guessing at it for the other; the save has its own right-click.
+- **Reconciled on read, never written back.** Lowering max HP below current
+  HP needs no clamp write — `currentHp()` already clamps on read, so the
+  stored value climbs back when the override is reset.
+- **It survives leaving the field**, like `appearance`/`inventory`/
+  `adjustment` and unlike `hp`/`conditions`. It says what the creature *is*.
+  Cleared only where the entity itself is deleted (`delete-custom-object`,
+  `remove-character`) — never beside the `spellSlots` cleanups, which mark
+  the remove-from-field path.
+
+`publishedStatBlock()` and `publishedAbilities()` exist purely so an
+overridden number can name what it replaced — in the panel's tooltip and in
+the Set dialog's hint. Without that, Reset is a mystery an hour later.
+
+The mark is `.overridden`: a dotted underline, not a colour. Every colour on
+these numbers already means something else (red a penalty, green a bonus,
+grey "not published", the accent a raised shield), an override is orthogonal
+to all four, and underlining costs no layout — so gaining the mark can't
+nudge the tile it sits in.
+
+**A custom object still can't be given stats.** `baseStatBlock()` returns
+null for it, so `renderCharacterTab()` takes the minimal branch, which has
+nothing carrying `data-stat` to right-click. Same for a monster AoN
+published nothing for. Fixing that means synthesising a stat block from
+overrides alone *and* finding a place to set the first one from.
+
+### The right-click menu is a list of items, not a set of actions
+
+One `#battle-context-menu`, static markup at **body level**. Every region it
+opens from — both bottom panels, the initiative track — is rebuilt by
+`render()`, so a menu inside any of them would be destroyed between the
+click that opened it and the click that chose from it. The listeners are
+delegated to the box ids for the same reason.
+
+`openContextMenu(x, y, items)` takes items that each carry their own
+behaviour as a closure. There's no action-name registry to keep in step with
+the builders, and a right-click with nothing to offer produces no items and
+lets the browser's own menu through. `data-index` indexes the item array
+directly, so a `{ separator: true }` entry costs nothing.
+
+Three things that were each a real bug:
+
+- **Read the item before `closeContextMenu()`** — it empties the array the
+  index points into.
+- **`contextTarget()`, not `event.target`.** A *disabled* button doesn't
+  receive the event; the browser dispatches it on an ancestor. That covers
+  the AC square whenever there's no shield to raise — most creatures — and
+  the HP bar of a creature with no published HP, which are precisely the
+  stats a DM wants to fill in. It falls back to `elementFromPoint()`, and
+  tries `event.target` first so a keyboard menu key (no coordinates) works.
+- **The map-keys `keydown` listener must bail while it's open.** The menu
+  traps no focus at all, so "d" over it would grow the board.
+
+Closes on pointerdown outside (capturing, so it's gone before a canvas drag
+reacts), Escape, scroll, resize and blur — a menu pinned to viewport
+coordinates lies the moment anything moves under it.
+
+Editing lands in a dialog, for the reason every other editor here is one: the
+panels rebuild on every `render()`, so a field living in one loses half-typed
+text to any unrelated dispatch. Two of them:
+
+- **`#battle-stat-dialog`** — one number, for every scalar stat. Title, a
+  hint naming the published value, one field.
+- **`#battle-speeds-dialog`** — all five movement types at once, each with a
+  switch, a number and a reset. A creature's speeds are one decision, not
+  five, and the per-chip menu it replaced needed eight items to change two
+  numbers (Set/Reset/Remove for the chip, plus an Add for each type it
+  lacked) with "add a fly speed" reachable only by right-clicking some
+  *other* speed.
+
+The speeds dialog **stages**: nothing reaches battle state until Save, and
+then as one `set-speeds` dispatch, so a single Ctrl+Z puts a creature's
+movement back the way it was. Per-row Reset restages the published values
+rather than dispatching, which is the same "dialog staging is not an event"
+rule the HP dialog's steppers follow. Its log line names the single change
+when there is one and summarises when there are several — `Set Hydra's
+speeds` says nothing when the only edit was trimming its walk speed.
+
+**`style.css`'s dialog rules are written for stacked text fields**, and they
+reach every control in every dialog on this page:
+
+```css
+dialog label { display: block; font-weight: 600; margin-bottom: 0.5rem; }
+dialog input, dialog select { width: 100%; padding: 0.5rem; font-size: 1rem;
+                              border: 1px solid …; background: …; }
+```
+
+`width: 100%` on a **checkbox** is what that looks like when it goes wrong:
+the box stretches across its whole flex line, shoves the label into wrapping,
+and does it by a different amount in each row depending on how long that
+row's text is. Any non-text control added to a dialog has to re-declare every
+property those two rules set — they're two type selectors deep, so a single
+class beats them, but only for the properties it actually names. This is the
+per-property cascade point that the `button:hover` section makes, in a
+second place.
+
+Three details the row model rests on:
+
+- **A row's number field is `disabled` and not `required` while its switch is
+  off**, so "switch it on and leave the box empty" can't happen and an off
+  row can't fail validation.
+- **An off row still shows the published number**, muted. It's what switching
+  the row back on restores, and a DM deciding whether to ground a dragon
+  wants to see what they're taking.
+- **Save rewrites every `speed:*` key** from the rows and carries non-speed
+  overrides through untouched — otherwise a type switched off would keep a
+  stale number underneath it.
 
 ### The Character panel's header row is tight — treat it as full
 

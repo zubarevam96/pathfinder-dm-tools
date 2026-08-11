@@ -2890,3 +2890,198 @@
   background: none;
   border-color: transparent;
 }
+
+/* --- Values a DM has set by hand ---
+   Applied wherever an override is in force: the HP bar, the AC square, a save
+   tile, a speed chip, an attribute, a skill.
+
+   A dotted underline rather than a colour, because every colour on these
+   numbers already means something else — red a penalty, green a bonus, grey
+   "not published", the accent a raised shield — and an override is orthogonal
+   to all four: a DM-set AC can still be penalized by frightened. Underlining
+   also costs no layout, so a number gaining or losing the mark can't nudge
+   the tile it sits in.
+
+   Deliberately quiet. Most numbers on screen aren't overridden, and the ones
+   that are get the full story from the element's title. */
+.overridden {
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* --- Set-a-stat dialog --- */
+
+/* What the sheet or statblock says, under the heading and above the field —
+   this is where a DM decides how far to move a number, and the published
+   value is what they're deciding against. */
+.battle-stat-dialog-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* --- Speeds dialog ---
+   Everything here re-declares something style.css sets on `dialog input` and
+   `dialog label`. Those rules are written for a stacked label-over-text-field
+   form; this is a five-row table of switches and short numbers, and left
+   alone they stretch each checkbox to the full row width and wrap the
+   labels. */
+
+.battle-speeds-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* A fixed grid, not a flex row: the switch and the icon are the same width in
+   every row, so the names all start at the same x and the number fields all
+   land in one column. 1fr on the name cell is what pins the other three to
+   the right edge whatever the creature is called. */
+.battle-speed-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* `dialog label` sets display:block, font-weight 600 and a bottom margin —
+   all three wrong for something sharing a row with three other controls.
+   position: relative anchors the hidden checkbox over its own track. */
+.battle-speed-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+/* Invisible, but neither display:none nor hidden — it stays in the tab order
+   so the switch can be reached and toggled from the keyboard, and it sits
+   exactly over the track so a click on either lands on the same control.
+   Every one of these declarations is undoing `dialog input`. */
+.battle-speed-switch {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2.2rem;
+  height: 1.2rem;
+  margin: -0.6rem 0 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.battle-speed-track {
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 2.2rem;
+  height: 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+/* Travel is measured against the padding box (2.2rem less the two 1px
+   borders), leaving the same 0.15rem gap at each end as the knob's own
+   inset. */
+.battle-speed-track::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-top: -0.4rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.battle-speed-switch:checked + .battle-speed-track {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.battle-speed-switch:checked + .battle-speed-track::after {
+  transform: translateX(0.97rem);
+  background: var(--accent-contrast);
+}
+
+/* The input carries no visible box of its own, so the focus ring has to be
+   drawn on the track — without this the switch is unreachable-looking from
+   the keyboard even though it is reachable. */
+.battle-speed-switch:focus-visible + .battle-speed-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.battle-speed-row-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+/* One square box per icon, so the names line up. The five SVGs have
+   different aspect ratios; a viewBox with the default xMidYMid meet
+   letterboxes each one inside the square instead of distorting it. */
+.battle-speed-row-name .speed-icon {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.battle-speed-feet {
+  width: 4.2rem;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.battle-speed-unit {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* Muted, not hidden: an off row still shows the published number, which is
+   what switching it back on restores — and a DM deciding whether to take a
+   dragon's flight away wants to see what they're taking. */
+.battle-speed-row.off .battle-speed-row-name,
+.battle-speed-row.off .battle-speed-unit {
+  color: var(--muted);
+}
+
+.battle-speed-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+}
+
+/* No sizing rule for the icon: .refresh-icon already sets it, and this is the
+   same glyph at the same size as the Spells tab's corner button. */
+
+/* The global button:hover sets border-color and background, and the cascade
+   resolves per property — so a reset button with nothing left to reset would
+   otherwise still light up as though it were clickable. */
+.battle-speed-reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.battle-speed-reset:disabled:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
