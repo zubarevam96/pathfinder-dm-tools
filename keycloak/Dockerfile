@@ -9,6 +9,10 @@ FROM quay.io/keycloak/keycloak:26.7.1 AS builder
 
 # Build-time only. The URL, credentials and hostname are runtime concerns and
 # deliberately not baked in — see railway.toml's notes.
+#
+# Health stays enabled even though nothing probes it (railway.toml explains
+# why): it costs nothing, and `kc.sh show-config` or a shell on the container
+# can still reach /health/ready on port 9000 to answer "is it actually up?"
 ENV KC_DB=postgres
 ENV KC_HEALTH_ENABLED=true
 

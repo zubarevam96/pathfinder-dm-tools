@@ -41,7 +41,16 @@ dockerfilePath = "Dockerfile"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
 
-# Slow by nature: the JVM starts, migrations run, and the realm import happens
-# on the first boot of a fresh database.
-healthcheckPath = "/health/ready"
-healthcheckTimeout = 300
+# No healthcheckPath, and not by oversight. Since Keycloak 25 the health
+# endpoints live on the *management* interface — port 9000 — while Railway
+# probes the port it routes traffic to, 8080. `/health/ready` there is not
+# "not ready yet", it is "no such endpoint", so the check fails for the full
+# retry window and then marks a perfectly healthy deploy as failed.
+#
+# Moving them back with http-management-health-enabled=false is possible, but
+# it is a build-time option on an --optimized image: get that wrong and the
+# server refuses to boot at all, which is a worse failure than having no
+# readiness gate on a service one person signs in to.
+#
+# The cost of leaving it out: Railway may route a request during the JVM's
+# first few seconds and the browser sees one 502. Reload and it is there.

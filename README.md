@@ -183,6 +183,11 @@ The only time the browser leaves is the sign-in redirect itself.
    read the `pathfinder-web` client's secret from **Credentials** into the
    site's `KEYCLOAK_CLIENT_SECRET`, and create yourself a user under **Users**.
 
+Don't add a Railway healthcheck to this service. Keycloak's `/health/ready`
+is on the management port (9000), not the port Railway routes to, so a check
+against it fails for its whole retry window and marks a working deploy failed
+— with no error in the logs, because nothing was wrong.
+
 The realm file's redirect URIs name
 `pathfinder-dm-tools-production.up.railway.app`. If your domain differs, fix
 them in the console — a redirect URI Keycloak doesn't recognise is refused at
