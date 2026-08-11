@@ -43,11 +43,25 @@ from flask import (
     send_from_directory,
     session,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 import oidc
 from accounts import DOCUMENT_NAMES, Accounts
 
 app = Flask(__name__, static_folder="static", static_url_path="")
+
+# Railway terminates TLS at its edge and forwards to this container over plain
+# HTTP, so Flask sees "http" and builds an http:// callback URL — which is not
+# the https:// one registered in Keycloak, and the login dies at the very end
+# with "Invalid parameter: redirect_uri".
+#
+# Only the scheme is taken from the proxy. The Host header already arrives as
+# the real public domain, and trusting a forwarded host would let a spoofed
+# header decide where this service says it lives. x_for stays 0 deliberately:
+# client_address() reads X-Forwarded-For itself, taking the last entry rather
+# than the first, and ProxyFix rewriting remote_addr underneath it would make
+# two different answers to the same question.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=0, x_for=0)
 
 PATHBUILDER_JSON_URL = "https://pathbuilder2e.com/json.php"
 ID_PATTERN = re.compile(r"^\d+$")
