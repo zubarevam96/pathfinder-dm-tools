@@ -3085,3 +3085,173 @@
   background: var(--surface);
   border-color: var(--border);
 }
+
+/* --- Creature builder ---
+   Wider than the app's default 420px dialog: the fields and the radar have to
+   sit side by side, because the whole point is watching the shape change as
+   you type. */
+
+.battle-build-dialog {
+  width: 46rem;
+  max-width: 94vw;
+}
+
+.battle-build-top {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* `dialog label` is display:block with a bottom margin, written for a stacked
+   form. These are a row. */
+.battle-build-top label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+}
+
+.battle-build-top label span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.battle-build-name-field {
+  flex: 1;
+  min-width: 0;
+}
+
+.battle-build-level-field select {
+  width: 5rem;
+}
+
+.battle-build-body {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.battle-build-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* Three fixed columns, so every field starts at the same x and every "vs
+   average" readout ends at the same one. The readout column is fixed rather
+   than sized by its content: it changes on every keystroke, and letting it
+   set the width would shuffle the inputs sideways as you type. */
+.battle-build-row {
+  display: grid;
+  grid-template-columns: 1fr 4.5rem 9.5rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.battle-build-row label {
+  display: block;
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.battle-build-row input {
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.battle-build-vs {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Three states, and the neutral one is deliberately not green: sitting on the
+   level's average is the expected case, not an achievement. Only a real
+   departure gets a colour. */
+.battle-build-vs.level {
+  color: var(--muted);
+}
+
+.battle-build-vs.above {
+  color: var(--success);
+}
+
+.battle-build-vs.below {
+  color: var(--danger);
+}
+
+.battle-build-chart {
+  flex: none;
+  width: 17rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.battle-build-estimate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  text-align: center;
+}
+
+.battle-build-estimate-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.battle-build-estimate-value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.battle-build-estimate-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* Square, and sized by its own width so the canvas backing store can be set
+   from clientWidth at whatever the dialog ends up being. */
+#battle-build-radar {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.battle-build-legend {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.35;
+}
+
+/* Below the app's narrow breakpoint the two columns don't fit side by side,
+   and a squeezed radar is worse than one under the fields. */
+@media (max-width: 640px) {
+  .battle-build-body {
+    flex-direction: column;
+  }
+
+  .battle-build-chart {
+    width: 100%;
+  }
+}

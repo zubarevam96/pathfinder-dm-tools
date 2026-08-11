@@ -1162,18 +1162,29 @@ const SPEED_MENU_LABELS = {
 };
 
 const STAT_LABELS = {
+  level: "level",
   maxHp: "max HP",
   ac: "AC",
   fortitude: "Fortitude",
   reflex: "Reflex",
   will: "Will",
   perception: "Perception",
+  attack: "Strike attack",
+  damage: "Strike damage",
+  spellDc: "spell DC",
 };
 
 // The stat-block fields a plain scalar override replaces, by key. Speeds are
 // absent: "speed:walk" lands on stats.speed through its own branch below,
 // and the other four movement types aren't stat-block fields at all.
-const OVERRIDABLE_STATS = ["maxHp", "ac", "fortitude", "reflex", "will", "perception"];
+//
+// attack/damage/spellDc are here because the creature builder writes them,
+// and they reach the panel through entityAbilities()' synthetic Strike rather
+// than through a field the bestiary publishes.
+const OVERRIDABLE_STATS = [
+  "level", "maxHp", "ac", "fortitude", "reflex", "will", "perception",
+  "attack", "damage", "spellDc",
+];
 
 function statLabel(key) {
   if (key.startsWith("attr:")) return ABILITY_NAMES[key.slice(5)] ?? key.slice(5).toUpperCase();
@@ -1186,7 +1197,8 @@ function statLabel(key) {
 // are modifiers and genuinely go negative; a quantity does not.
 function statMinimum(key) {
   if (key === "maxHp") return 1;
-  if (key === "ac" || key.startsWith("speed:")) return 0;
+  if (key === "level") return BUILD_LEVEL_MIN;
+  if (key === "ac" || key === "damage" || key === "spellDc" || key.startsWith("speed:")) return 0;
   return -99;
 }
 
@@ -1196,6 +1208,10 @@ function statOverrides(entityId) {
 
 function hasOverride(entityId, key) {
   return key in statOverrides(entityId);
+}
+
+function hasAnyOverride(entityId) {
+  return Object.keys(statOverrides(entityId)).length > 0;
 }
 
 function setOverride(entityId, key, value, label) {
@@ -1344,7 +1360,24 @@ function baseStatBlock(entity) {
 // exempt: these are monster templates, and a PC has a sheet to level up
 // rather than a statblock to adjust.
 function entityStatBlock(entity) {
-  return applyStatOverrides(publishedStatBlock(entity), entity?.id);
+  const published = publishedStatBlock(entity);
+  // A creature built by hand has nothing published underneath, so there's no
+  // block for the overrides to land on. It gets an empty one: every field
+  // null, which is what the panel already renders as a muted em dash, and the
+  // overrides then fill in whichever ones the builder set. Without this a
+  // custom object could never have statistics at all, however many were
+  // typed for it.
+  const base = published ?? (hasAnyOverride(entity?.id) ? blankStatBlock() : null);
+  return applyStatOverrides(base, entity?.id);
+}
+
+// Every field entityStatBlock() promises, with nothing in any of them.
+function blankStatBlock() {
+  return {
+    level: null, maxHp: null, ac: null,
+    fortitude: null, reflex: null, will: null, perception: null,
+    speed: null, speedText: null, recallKnowledge: null, shieldBonus: 0,
+  };
 }
 
 // The block as the sheet or the bestiary has it — adjusted, but with no DM
@@ -3326,11 +3359,41 @@ function loadMonsterAbilities() {
 // Returns the string "loading" for a monster whose abilities file hasn't
 // arrived yet, which is distinct from null ("this thing has none").
 function entityAbilities(entity) {
-  const abilities = publishedAbilities(entity);
+  const abilities = publishedAbilities(entity) ?? builtAbilities(entity);
   // "loading" is a sentinel, not a shape — overriding its attributes would
   // turn the Proficiencies tab's spinner into an empty table.
   if (!abilities || abilities === "loading") return abilities;
   return applyAbilityOverrides(abilities, entity?.id);
+}
+
+// A creature invented in the builder has no statblock to parse, so its Strike
+// is assembled from the two numbers the builder asked for. Without this the
+// attack bonus and damage a DM typed would be stored and never shown — the
+// Actions tab reads strikes and nothing else.
+//
+// One Strike, unnamed beyond "Strike": the builder deliberately doesn't ask
+// what the creature hits you with, only how hard. The standard -5/-10 applies,
+// as it does for a character's weapons.
+function builtAbilities(entity) {
+  const overrides = statOverrides(entity?.id);
+  const bonus = overrides.attack;
+  const damage = overrides.damage;
+  if (!Number.isFinite(bonus) && !Number.isFinite(damage)) return null;
+  const strikes = Number.isFinite(bonus)
+    ? [{
+      kind: null,
+      action: "Single Action",
+      name: "Strike",
+      bonus,
+      map: [bonus - 5, bonus - 10],
+      traits: [],
+      damage: Number.isFinite(damage) ? `${damage} average` : null,
+    }]
+    : [];
+  return {
+    strikes, attributes: {}, special: [], skills: [],
+    languages: null, items: [], senses: null, flavour: null, traits: null,
+  };
 }
 
 // As above: what the sheet or the bestiary published, before any override.
@@ -3701,7 +3764,7 @@ function renderCharacterTab(objectBody) {
                the monster case's <button> it would join the click target. -->
           <div class="battle-stat-name-block">
             <span class="battle-stat-level-row">
-              <span class="battle-stat-level">lvl ${stats.level ?? 1}</span>
+              <span class="battle-stat-level ${overrideClass(characterId, "level")}" data-stat="level" title="${escapeHtml([`Level ${stats.level ?? 1}`, overrideNote(characterId, "level", published?.level, String)].filter(Boolean).join("\n\n"))}">lvl ${stats.level ?? 1}</span>
               ${adjustHtml}
             </span>
             <span class="battle-stat-name-wrap">${nameHtml}</span>
@@ -5185,12 +5248,24 @@ window.addEventListener("blur", () => { if (contextMenuOpen()) closeContextMenu(
 // the same right-click on a monster does work.
 function renameMenuItems(entity) {
   const renamable = entity.isCustom;
-  return [{
+  const items = [{
     label: "Rename",
     disabled: !renamable,
     title: renamable ? "Rename this creature" : "A character's name comes from their sheet and is changed there",
     run: () => openEntityRenameDialog(entity.id),
   }];
+  // Only a battle-local creature with no statblock behind it: a monster's
+  // numbers come from the bestiary and a character's from their sheet, and
+  // both already have per-stat right-clicks for the odd adjustment. The
+  // builder is for something invented outright.
+  if (renamable && !entity.monsterName) {
+    items.push({
+      label: hasAnyOverride(entity.id) ? "Edit statistics…" : "Build statistics…",
+      title: "Set this creature's numbers against the average for its level",
+      run: () => openBuildDialog(entity.id),
+    });
+  }
+  return items;
 }
 
 // Set and Reset, for any stat that's a single number. Max HP earns one extra
@@ -6475,6 +6550,499 @@ addObjectForm.addEventListener("submit", (event) => {
     state.customObjects[id] = { name };
   });
   addObjectNameInput.value = "";
+});
+
+// ---------------------------------------------------------------------------
+// Creature builder.
+//
+// A DM inventing a monster mid-session has one hard question — "is this the
+// right strength for the party?" — and no way to answer it from the rules
+// without the creature-building tables open beside them. This is those tables
+// made interactive: pick a level to start from, adjust anything, and watch
+// what level the numbers you've actually typed add up to.
+//
+// The reference data is static/monster-data/level-averages.json: a 10%
+// trimmed mean per stat over 2,488 published creatures, built by
+// local/scripts/build_level_averages.py. It's committed and published, unlike
+// every other file derived from Archives of Nethys here, because it contains
+// no creature's numbers — twenty-two rows of aggregate statistics survive the
+// averaging, and the app needs them at runtime.
+//
+// What it saves is OVERRIDES, not a new kind of entity. A built creature is a
+// custom object whose numbers happen to be set by hand, which is exactly what
+// the override layer already models — so the stat panel, the HP bar, the
+// right-click editors and undo all work on it with no special case.
+
+const BUILD_LEVEL_MIN = -1;
+const BUILD_LEVEL_MAX = 20;
+
+// The nine numbers the builder works in. `key` is the override written;
+// `avg` is the column in level-averages.json to compare against.
+//
+// Spell DC is deliberately NOT on the radar. A creature that doesn't cast
+// would put a deep dent in the polygon for a stat it simply doesn't have,
+// which reads as a weakness rather than an absence.
+const BUILD_STATS = [
+  { key: "maxHp", avg: "hp", label: "HP", short: "HP", min: 1, axis: true },
+  { key: "ac", avg: "ac", label: "AC", short: "AC", min: 0, axis: true },
+  { key: "attack", avg: "attack", label: "Strike attack", short: "Atk", min: -20, axis: true, signed: true },
+  { key: "damage", avg: "damage", label: "Strike damage", short: "Dmg", min: 0, axis: true },
+  { key: "perception", avg: "perception", label: "Perception", short: "Perc", min: -20, axis: true, signed: true },
+  { key: "fortitude", avg: "fortitude", label: "Fortitude", short: "Fort", min: -20, axis: true, signed: true },
+  { key: "reflex", avg: "reflex", label: "Reflex", short: "Ref", min: -20, axis: true, signed: true },
+  { key: "will", avg: "will", label: "Will", short: "Will", min: -20, axis: true, signed: true },
+  { key: "spellDc", avg: "spellDc", label: "Spell DC", short: "DC", min: 0, axis: false },
+];
+
+const BUILD_AXES = BUILD_STATS.filter((stat) => stat.axis);
+
+// How far from average the radar can show. Beyond five levels either way the
+// polygon would leave the chart, and "more than five levels off" is already
+// the whole message.
+const BUILD_DEVIATION_LIMIT = 5;
+
+let levelAverages = null; // { "8": { hp, ac, ... } }
+let levelAveragesPromise = null;
+
+function loadLevelAverages() {
+  if (levelAveragesPromise) return levelAveragesPromise;
+  levelAveragesPromise = fetchMonsterData("../monster-data/level-averages.json")
+    .then((data) => {
+      levelAverages = data?.levels ?? {};
+      if (buildDialog.open) renderBuilder();
+    })
+    .catch(() => {
+      // The builder is unusable without its reference data, so it says so
+      // rather than comparing against silence.
+      levelAverages = {};
+      if (buildDialog.open) renderBuilder();
+    });
+  return levelAveragesPromise;
+}
+
+function averagesFor(level) {
+  return levelAverages?.[String(level)] ?? null;
+}
+
+// Every level's published average for one stat, ascending. The averages rise
+// monotonically for all nine, which is what makes inverting them well defined.
+function averageCurve(avgKey) {
+  const points = [];
+  for (let level = BUILD_LEVEL_MIN; level <= BUILD_LEVEL_MAX; level += 1) {
+    const value = averagesFor(level)?.[avgKey];
+    if (typeof value === "number") points.push([level, value]);
+  }
+  return points;
+}
+
+// The level at which `value` would be average for this stat — the inverse of
+// the table, linearly interpolated between the two levels that bracket it.
+//
+// Extrapolated past either end using the nearest segment's slope rather than
+// clamped, so a creature with 800 HP reads as "well above 20" instead of
+// sitting exactly on 20 alongside one with 400.
+function impliedLevel(avgKey, value) {
+  const curve = averageCurve(avgKey);
+  if (curve.length < 2 || typeof value !== "number") return null;
+
+  for (let i = 0; i < curve.length - 1; i += 1) {
+    const [levelA, valueA] = curve[i];
+    const [levelB, valueB] = curve[i + 1];
+    if (value >= valueA && value <= valueB && valueB !== valueA) {
+      return levelA + (value - valueA) / (valueB - valueA);
+    }
+  }
+
+  const [first, second] = [curve[0], curve[1]];
+  const [last, secondLast] = [curve[curve.length - 1], curve[curve.length - 2]];
+  if (value < first[1]) {
+    const slope = (second[1] - first[1]) / (second[0] - first[0]);
+    return slope ? first[0] + (value - first[1]) / slope : first[0];
+  }
+  const slope = (last[1] - secondLast[1]) / (last[0] - secondLast[0]);
+  return slope ? last[0] + (value - last[1]) / slope : last[0];
+}
+
+// The mean of the per-stat implied levels with the highest and lowest
+// dropped — the same trimming the reference data itself was built with, and
+// for the same reason: one wild number shouldn't carry the answer, but the
+// answer does have to move when the creature does.
+//
+// A plain median was tried first and is too deaf to be useful here. Raising
+// HP, AC, attack AND damage from level 8 to level 12 moved it from 8.0 to
+// 8.2, because Perception, three saves and the spell DC are five of the nine
+// stats — an outright majority, and the five a DM is least likely to touch.
+// Dropping one value from each end instead leaves that same edit reading 9.7,
+// which is what a creature with four stats four levels up actually is.
+function estimateLevel(values) {
+  const implied = [];
+  for (const stat of BUILD_STATS) {
+    const level = impliedLevel(stat.avg, values[stat.key]);
+    if (level != null) implied.push(level);
+  }
+  if (!implied.length) return null;
+  implied.sort((a, b) => a - b);
+  // Below four values there's nothing to spare: trimming two of three leaves
+  // a single stat deciding the level on its own.
+  const kept = implied.length >= 4 ? implied.slice(1, -1) : implied;
+  const mean = kept.reduce((total, value) => total + value, 0) / kept.length;
+  return {
+    level: mean,
+    spread: implied[implied.length - 1] - implied[0],
+    count: implied.length,
+  };
+}
+
+// --- The dialog ------------------------------------------------------------
+
+const buildDialog = document.getElementById("battle-build-dialog");
+const buildForm = document.getElementById("battle-build-form");
+const buildNameInput = document.getElementById("battle-build-name");
+const buildLevelSelect = document.getElementById("battle-build-level");
+const buildResetBtn = document.getElementById("battle-build-reset");
+const buildFields = document.getElementById("battle-build-fields");
+const buildEstimate = document.getElementById("battle-build-estimate");
+const buildEstimateNote = document.getElementById("battle-build-estimate-note");
+const buildCanvas = document.getElementById("battle-build-radar");
+const buildCloseBtn = document.getElementById("battle-build-close");
+const buildSubmitBtn = document.getElementById("battle-build-submit");
+
+// Twenty-two options, built here rather than written out in index.html:
+// the range is a property of the reference data (level-averages.json stops
+// at 20 because level 21+ has too few creatures to average), and spelling it
+// out in markup would let the two drift.
+buildLevelSelect.innerHTML = Array.from(
+  { length: BUILD_LEVEL_MAX - BUILD_LEVEL_MIN + 1 },
+  (_, index) => {
+    const level = BUILD_LEVEL_MIN + index;
+    return `<option value="${level}">${level}</option>`;
+  },
+).join("");
+
+// null while building something new, an entity id while editing one.
+let buildEntityId = null;
+
+function buildLevel() {
+  return Number(buildLevelSelect.value);
+}
+
+function buildValues() {
+  const values = {};
+  for (const stat of BUILD_STATS) {
+    const field = buildFields.querySelector(`[data-build="${stat.key}"]`);
+    const raw = field?.value.trim();
+    values[stat.key] = raw ? Number(raw) : null;
+    if (!Number.isFinite(values[stat.key])) values[stat.key] = null;
+  }
+  return values;
+}
+
+// Fills every field with the chosen level's average, rounded — the "start
+// from a level" half of the tool. Rounded because a DM types whole numbers
+// and a statblock prints them; 179.7 HP is an artefact of averaging 128
+// creatures, not a hit point total anyone would write down.
+function seedFromLevel() {
+  const averages = averagesFor(buildLevel());
+  for (const stat of BUILD_STATS) {
+    const field = buildFields.querySelector(`[data-build="${stat.key}"]`);
+    if (!field) continue;
+    const value = averages?.[stat.avg];
+    field.value = typeof value === "number" ? String(Math.round(value)) : "";
+  }
+  renderBuilder();
+}
+
+function renderBuilder() {
+  const level = buildLevel();
+  const values = buildValues();
+  const averages = averagesFor(level);
+
+  for (const stat of BUILD_STATS) {
+    const row = buildFields.querySelector(`.battle-build-row[data-stat="${stat.key}"]`);
+    if (!row) continue;
+    const readout = row.querySelector(".battle-build-vs");
+    const average = averages?.[stat.avg];
+    const value = values[stat.key];
+    if (typeof average !== "number") {
+      readout.textContent = "no data";
+      readout.className = "battle-build-vs";
+      continue;
+    }
+    if (value == null) {
+      // The average is still worth showing for an empty field: it's the
+      // number the DM is deciding whether to depart from.
+      readout.textContent = `avg ${formatAverage(average)}`;
+      readout.className = "battle-build-vs";
+      continue;
+    }
+    const delta = value - average;
+    const implied = impliedLevel(stat.avg, value);
+    const levels = implied == null ? null : implied - level;
+    readout.textContent = `${delta >= 0 ? "+" : "−"}${formatAverage(Math.abs(delta))}`
+      + (levels == null ? "" : ` · ${describeLevels(levels)}`);
+    readout.className = "battle-build-vs "
+      + (Math.abs(levels ?? 0) < 0.75 ? "level" : (levels > 0 ? "above" : "below"));
+  }
+
+  const estimate = estimateLevel(values);
+  if (!estimate) {
+    buildEstimate.textContent = "—";
+    buildEstimateNote.textContent = levelAverages === null
+      ? "Loading reference data…"
+      : "Fill in a stat to estimate a level.";
+  } else {
+    buildEstimate.textContent = formatEstimatedLevel(estimate.level);
+    buildEstimateNote.textContent = estimate.spread > 6
+      ? `From ${estimate.count} stats, but they disagree by ${estimate.spread.toFixed(0)} levels`
+      : `From ${estimate.count} stats`;
+  }
+
+  drawRadar(level, values);
+}
+
+function formatAverage(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+// "1 level above", "level", "2 levels below" — the unit a DM thinks in.
+function describeLevels(levels) {
+  const rounded = Math.round(levels);
+  if (rounded === 0) return "on level";
+  const word = Math.abs(rounded) === 1 ? "level" : "levels";
+  return `${Math.abs(rounded)} ${word} ${rounded > 0 ? "above" : "below"}`;
+}
+
+function formatEstimatedLevel(level) {
+  const rounded = Math.round(level);
+  if (rounded > BUILD_LEVEL_MAX) return `${BUILD_LEVEL_MAX}+`;
+  if (rounded < BUILD_LEVEL_MIN) return `${BUILD_LEVEL_MIN}−`;
+  return String(rounded);
+}
+
+// --- The radar -------------------------------------------------------------
+//
+// Each axis is a stat, and the distance from the centre is how many LEVELS
+// above or below average that stat is — not the raw value, and not a ratio of
+// it. A ratio would be useless here: every AC in the game sits within a few
+// percent of its level's average, so a ratio chart would draw a perfect
+// circle for every creature ever built. Level-deviation is both comparable
+// across stats measured in completely different units and the thing a DM
+// actually wants to know.
+//
+// The emphasised middle ring is "average for this level". Inside it is weaker,
+// outside stronger.
+
+function drawRadar(level, values) {
+  const context = buildCanvas.getContext("2d");
+  const ratio = window.devicePixelRatio || 1;
+  const size = buildCanvas.clientWidth || 260;
+  if (buildCanvas.width !== Math.round(size * ratio)) {
+    buildCanvas.width = Math.round(size * ratio);
+    buildCanvas.height = Math.round(size * ratio);
+  }
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, size, size);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  // Room for the labels sitting outside the outer ring.
+  const radius = size / 2 - 26;
+  const border = cssVar("--border") || "#ccc";
+  const muted = cssVar("--muted") || "#888";
+  const accent = cssVar("--accent") || "#8b1e2d";
+
+  // deviation (-limit..+limit levels) -> distance from the centre
+  const distance = (deviation) => {
+    const clamped = Math.max(-BUILD_DEVIATION_LIMIT, Math.min(BUILD_DEVIATION_LIMIT, deviation));
+    return radius * (clamped + BUILD_DEVIATION_LIMIT) / (BUILD_DEVIATION_LIMIT * 2);
+  };
+  const point = (index, deviation) => {
+    // Starts at twelve o'clock and runs clockwise, so the first axis in
+    // BUILD_STATS is the one at the top.
+    const angle = (Math.PI * 2 * index) / BUILD_AXES.length - Math.PI / 2;
+    const r = distance(deviation);
+    return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r];
+  };
+
+  const trace = (deviation) => {
+    context.beginPath();
+    BUILD_AXES.forEach((_, index) => {
+      const [x, y] = point(index, deviation);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.closePath();
+  };
+
+  for (const ring of [-4, -2, 2, 4]) {
+    trace(ring);
+    context.strokeStyle = border;
+    context.lineWidth = 1;
+    context.stroke();
+  }
+
+  for (let index = 0; index < BUILD_AXES.length; index += 1) {
+    const [x, y] = point(index, BUILD_DEVIATION_LIMIT);
+    context.beginPath();
+    context.moveTo(cx, cy);
+    context.lineTo(x, y);
+    context.strokeStyle = border;
+    context.lineWidth = 1;
+    context.stroke();
+  }
+
+  // The average ring last of the guides, so it draws over the spokes — it's
+  // the one line on the chart that means something on its own.
+  trace(0);
+  context.strokeStyle = muted;
+  context.lineWidth = 1.5;
+  context.setLineDash([4, 3]);
+  context.stroke();
+  context.setLineDash([]);
+
+  const deviations = BUILD_AXES.map((stat) => {
+    const implied = impliedLevel(stat.avg, values[stat.key]);
+    return implied == null ? null : implied - level;
+  });
+
+  // A stat left blank has no point on its axis, so the polygon is only drawn
+  // when every axis has one. A partial creature gets the rings and its
+  // per-stat readouts instead of a shape that quietly reads zeros as weakness.
+  if (deviations.every((deviation) => deviation != null)) {
+    context.beginPath();
+    deviations.forEach((deviation, index) => {
+      const [x, y] = point(index, deviation);
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    });
+    context.closePath();
+    context.fillStyle = withAlpha(accent, 0.18);
+    context.fill();
+    context.strokeStyle = accent;
+    context.lineWidth = 2;
+    context.stroke();
+
+    deviations.forEach((deviation, index) => {
+      const [x, y] = point(index, deviation);
+      context.beginPath();
+      context.arc(x, y, 2.5, 0, Math.PI * 2);
+      context.fillStyle = accent;
+      context.fill();
+    });
+  }
+
+  context.font = "11px system-ui, sans-serif";
+  context.fillStyle = muted;
+  BUILD_AXES.forEach((stat, index) => {
+    const [x, y] = point(index, BUILD_DEVIATION_LIMIT + 1.2);
+    context.textAlign = Math.abs(x - cx) < 4 ? "center" : (x > cx ? "left" : "right");
+    context.textBaseline = Math.abs(y - cy) < 4 ? "middle" : (y > cy ? "top" : "bottom");
+    context.fillText(stat.short, x, y);
+  });
+}
+
+// cssVar() returns whatever the stylesheet holds — a hex in this app. Canvas
+// has no "same colour at 18% alpha", so it's spelled out here rather than
+// assuming a particular notation elsewhere.
+function withAlpha(color, alpha) {
+  const hex = color.trim();
+  if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const value = parseInt(hex.slice(1), 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
+// --- Opening, saving -------------------------------------------------------
+
+function openBuildDialog(entityId, presetName) {
+  loadLevelAverages();
+  buildEntityId = entityId ?? null;
+  const entity = entityId ? findEntity(entityId) : null;
+
+  buildFields.innerHTML = BUILD_STATS.map((stat) => `
+    <div class="battle-build-row" data-stat="${stat.key}">
+      <label for="battle-build-${stat.key}">${stat.label}</label>
+      <input type="number" step="1" min="${stat.min}" id="battle-build-${stat.key}" data-build="${stat.key}" />
+      <span class="battle-build-vs"></span>
+    </div>`).join("");
+
+  buildNameInput.value = entity?.name ?? presetName ?? "";
+  buildSubmitBtn.textContent = entity ? "Save" : "Add to roster";
+  buildDialog.querySelector("h2").textContent = entity ? `Statistics — ${entity.name}` : "Build a creature";
+
+  const existing = entityId ? statOverrides(entityId) : {};
+  const startingLevel = Number.isFinite(existing.level) ? existing.level : 1;
+  buildLevelSelect.value = String(Math.max(BUILD_LEVEL_MIN, Math.min(BUILD_LEVEL_MAX, startingLevel)));
+
+  if (Object.keys(existing).length) {
+    // Editing: show what the creature actually has, not the level's average.
+    for (const stat of BUILD_STATS) {
+      const field = buildFields.querySelector(`[data-build="${stat.key}"]`);
+      field.value = Number.isFinite(existing[stat.key]) ? String(existing[stat.key]) : "";
+    }
+    renderBuilder();
+  } else {
+    seedFromLevel();
+  }
+
+  buildDialog.showModal();
+  buildNameInput.select();
+}
+
+// One dispatch for the whole creature: adding it and setting nine numbers is
+// a single act, and a DM who changes their mind wants one Ctrl+Z, not ten.
+buildForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const name = buildNameInput.value.trim();
+  if (!name) return;
+  const level = buildLevel();
+  const values = buildValues();
+
+  const overrides = { level };
+  for (const stat of BUILD_STATS) {
+    if (values[stat.key] != null) overrides[stat.key] = Math.trunc(values[stat.key]);
+  }
+
+  const entityId = buildEntityId;
+  if (entityId) {
+    const entity = findEntity(entityId);
+    dispatch("build-creature", `Rebuilt ${entity?.name ?? name}`, (state) => {
+      // Speeds and skills live in the same map and aren't the builder's
+      // business, so they're carried through rather than replaced wholesale.
+      const kept = Object.fromEntries(
+        Object.entries(state.overrides[entityId] ?? {})
+          .filter(([key]) => !BUILD_STATS.some((stat) => stat.key === key) && key !== "level")
+      );
+      state.overrides[entityId] = { ...kept, ...overrides };
+      if (name !== entity?.name && state.customObjects[entityId]) {
+        state.customObjects[entityId] = { ...state.customObjects[entityId], name };
+      }
+    });
+  } else {
+    const id = `custom-${crypto.randomUUID()}`;
+    dispatch("build-creature", `Built ${name} (level ${level})`, (state) => {
+      state.customObjects[id] = { name };
+      state.overrides[id] = overrides;
+    });
+    addObjectNameInput.value = "";
+  }
+  buildDialog.close();
+});
+
+buildLevelSelect.addEventListener("change", seedFromLevel);
+buildResetBtn.addEventListener("click", seedFromLevel);
+buildFields.addEventListener("input", renderBuilder);
+buildCloseBtn.addEventListener("click", () => buildDialog.close());
+
+// The canvas reads its colours from the stylesheet, so a theme change has to
+// repaint it — nothing else on the page does that for a canvas.
+if (window.matchMedia) {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (buildDialog.open) renderBuilder();
+  });
+}
+
+document.getElementById("battle-build-open").addEventListener("click", () => {
+  openBuildDialog(null, addObjectNameInput.value.trim());
 });
 
 // Clears the event LOG itself, not battle state — there's nothing to

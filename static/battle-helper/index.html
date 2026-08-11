@@ -27,9 +27,14 @@
           <h2>Roster</h2>
           <p class="battle-panel-hint">Drag a character onto a square, or click them and then click the square.</p>
           <ul id="battle-roster" class="battle-roster"></ul>
+          <!-- Two ways to add the same thing, and the split is by whether it
+               has numbers. "Add" makes a name-only object — a chest, a lever,
+               a wall. "Build" opens the creature builder for something that
+               has to fight. -->
           <form id="battle-add-object-form" class="battle-add-object-form">
             <input type="text" id="battle-add-object-name" placeholder="Custom object name" maxlength="60" />
             <button type="submit" class="subtle">Add</button>
+            <button type="button" id="battle-build-open" class="subtle" title="Build a creature with statistics">Build&hellip;</button>
           </form>
           <div class="battle-roster-actions">
             <button type="button" id="battle-add-character" class="subtle">Add characters</button>
@@ -260,6 +265,53 @@
        way it was instead of undoing a quarter of an edit. The list lives
        inside the form so the browser validates the rows that are switched
        on. -->
+  <!-- The creature builder. Level at the top seeds every field from the
+       average for that level; everything is then editable, and the estimate
+       and radar answer the question the seeding raises — "after all my
+       edits, what level is this actually?"
+
+       The radar's axes are LEVELS above or below average, not raw values: a
+       ratio chart would draw a near-perfect circle for every creature ever
+       built, since every AC in the game sits within a few percent of its
+       level's average. The rows are built by openBuildDialog() from
+       BUILD_STATS, so the fields and the radar axes cannot drift apart. -->
+  <dialog id="battle-build-dialog" class="battle-build-dialog">
+    <h2>Build a creature</h2>
+    <form id="battle-build-form">
+      <div class="battle-build-top">
+        <label class="battle-build-name-field">
+          <span>Name</span>
+          <input type="text" id="battle-build-name" maxlength="60" required autocomplete="off" />
+        </label>
+        <label class="battle-build-level-field">
+          <span>Level</span>
+          <select id="battle-build-level"></select>
+        </label>
+        <button type="button" id="battle-build-reset" class="subtle"
+                title="Set every stat back to the average for this level">Reset to average</button>
+      </div>
+
+      <div class="battle-build-body">
+        <div id="battle-build-fields" class="battle-build-fields"></div>
+        <div class="battle-build-chart">
+          <div class="battle-build-estimate">
+            <span class="battle-build-estimate-label">Approximate level</span>
+            <span id="battle-build-estimate" class="battle-build-estimate-value">—</span>
+            <span id="battle-build-estimate-note" class="battle-build-estimate-note"></span>
+          </div>
+          <canvas id="battle-build-radar" width="260" height="260"
+                  role="img" aria-label="How far each statistic sits above or below the average for this level"></canvas>
+          <p class="battle-build-legend">Dashed ring is average for the chosen level. Each ring is 2 levels.</p>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button type="button" id="battle-build-close">Cancel</button>
+        <button type="submit" id="battle-build-submit">Add to roster</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="battle-speeds-dialog">
     <h2>Speeds — <span id="battle-speeds-dialog-name"></span></h2>
     <form id="battle-speeds-form">
