@@ -193,17 +193,27 @@ PENDING_KEYS = ("oidc_state", "oidc_nonce", "oidc_verifier", "oidc_return")
 def client_address():
     """The browser's address, as well as this hop can know it.
 
-    Railway's edge appends the address it saw to ``X-Forwarded-For``, so the
-    *last* entry is the one entry a client cannot write for itself — reading the
-    first, as the header's own definition suggests, would let anyone reset their
-    rate limit by inventing a hop. The bot reads it the same way, on purpose.
+    ``X-Forwarded-For`` is oldest first, and Railway's edge appends its own
+    address — from a rotating pool, so it is a different one request to
+    request. Reading that last entry, which this used to do, named the edge
+    rather than the browser: the bot was handed 152.233.13.164 for a request
+    that came from 79.140.146.155, and every browser landed in a fresh
+    rate-limit bucket each time. 200 requests went through a budget of 120 a
+    minute without one being refused.
+
+    So it steps back over exactly the one hop the edge adds. Anything a client
+    invented for itself stays to the left of that and is never reached, which
+    is the property the old reading was after and had backwards. The bot reads
+    it the same way, on purpose.
     """
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
-        if hops:
-            return hops[-1]
-    return request.remote_addr
+    hops = [
+        hop.strip()
+        for hop in (request.headers.get("X-Forwarded-For") or "").split(",")
+        if hop.strip()
+    ]
+    if not hops:
+        return request.remote_addr
+    return hops[max(len(hops) - 2, 0)]
 
 
 def extract_character_id(link_or_id: str) -> str | None:
