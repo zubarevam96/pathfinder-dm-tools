@@ -3087,7 +3087,7 @@
 }
 
 /* --- Creature builder ---
-   Wider than the app's default 420px dialog: the fields and the radar have to
+   Wider than the app's default 420px dialog: the fields and the chart have to
    sit side by side, because the whole point is watching the shape change as
    you type. */
 
@@ -3141,6 +3141,38 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+/* Reuses .battle-object-tab for the buttons -- one tab pattern on the page --
+   but not .battle-object-tabs, whose sticky positioning and negative margins
+   exist to cancel a .battle-box's padding while content scrolls under it. A
+   dialog has neither, and var(--box-pad-x) isn't even defined here. */
+.battle-build-tabs {
+  display: flex;
+  gap: 0.15rem;
+  margin-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Every tab's fields stay in the DOM so switching pages can't lose what was
+   typed on another one. The group declares its own display, so the
+   user-agent [hidden] rule loses to it -- without this line every tab is
+   visible at once. */
+.battle-build-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.battle-build-group[hidden] {
+  display: none;
+}
+
+/* The four tabs hold 5, 3, 6 and 4 rows. Without a floor the dialog would
+   resize as the DM moved between them, which on the Offence tab would drag
+   the chart and the estimate up the screen mid-edit. */
+.battle-build-fields {
+  min-height: 12.5rem;
 }
 
 /* Three fixed columns, so every field starts at the same x and every "vs
@@ -3228,9 +3260,12 @@
   color: var(--muted);
 }
 
-/* Square, and sized by its own width so the canvas backing store can be set
-   from clientWidth at whatever the dialog ends up being. */
-#battle-build-radar {
+/* Square for every tab, including the one that draws bars rather than a radar
+   -- the bars are centred in it instead of shrinking the box, so switching
+   tabs can't resize the dialog under the cursor. Sized by its own width so the
+   canvas backing store can be set from clientWidth at whatever the dialog
+   ends up being. */
+#battle-build-canvas {
   width: 100%;
   height: auto;
   aspect-ratio: 1;

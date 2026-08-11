@@ -3390,7 +3390,19 @@ function builtAbilities(entity) {
   const overrides = statOverrides(entity?.id);
   const bonus = overrides.attack;
   const damage = overrides.damage;
-  if (!Number.isFinite(bonus) && !Number.isFinite(damage)) return null;
+  // Skill rows have to exist before applyAbilityOverrides() can write to
+  // them: it maps overrides onto rows a source published, and a built
+  // creature has no source. The attributes need no such scaffolding — that
+  // half writes into a plain object.
+  const skills = Object.keys(overrides)
+    .filter((key) => key.startsWith("skill:"))
+    .map((key) => ({ name: key.slice(6), modifier: overrides[key], notes: [] }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const hasAttributes = ABILITIES.some((key) => `attr:${key}` in overrides);
+  if (!Number.isFinite(bonus) && !Number.isFinite(damage) && !skills.length && !hasAttributes) {
+    return null;
+  }
+
   const strikes = Number.isFinite(bonus)
     ? [{
       kind: null,
@@ -3403,7 +3415,7 @@ function builtAbilities(entity) {
     }]
     : [];
   return {
-    strikes, attributes: {}, special: [], skills: [],
+    strikes, attributes: {}, special: [], skills,
     languages: null, items: [], senses: null, flavour: null, traits: null,
   };
 }
@@ -6629,28 +6641,78 @@ addObjectForm.addEventListener("submit", (event) => {
 const BUILD_LEVEL_MIN = -1;
 const BUILD_LEVEL_MAX = 20;
 
-// The nine numbers the builder works in. `key` is the override written;
-// `avg` is the column in level-averages.json to compare against.
+// Four pages, each with its own fields and its own chart. One chart of
+// eighteen axes would be unreadable, and the four groups are things a DM
+// tunes separately anyway — the same split the abilities panel already makes.
 //
-// Spell DC is deliberately NOT on the radar. A creature that doesn't cast
-// would put a deep dent in the polygon for a stat it simply doesn't have,
-// which reads as a weakness rather than an absence.
-const BUILD_STATS = [
-  { key: "maxHp", avg: "hp", label: "HP", short: "HP", min: 1, axis: true },
-  { key: "ac", avg: "ac", label: "AC", short: "AC", min: 0, axis: true },
-  { key: "attack", avg: "attack", label: "Strike attack", short: "Atk", min: -20, axis: true, signed: true },
-  { key: "damage", avg: "damage", label: "Strike damage", short: "Dmg", min: 0, axis: true },
-  { key: "perception", avg: "perception", label: "Perception", short: "Perc", min: -20, axis: true, signed: true },
-  { key: "fortitude", avg: "fortitude", label: "Fortitude", short: "Fort", min: -20, axis: true, signed: true },
-  { key: "reflex", avg: "reflex", label: "Reflex", short: "Ref", min: -20, axis: true, signed: true },
-  { key: "will", avg: "will", label: "Will", short: "Will", min: -20, axis: true, signed: true },
-  { key: "spellDc", avg: "spellDc", label: "Spell DC", short: "DC", min: 0, axis: false },
+// Offence charts as bars, not a radar, for two reasons that are really one:
+// a radar needs at least three axes to enclose an area, and offence has three
+// numbers of which two-thirds of creatures don't have the third. Two axes draw
+// a straight line, and a triangle would vanish entirely for a non-caster,
+// because a polygon can only be drawn when every axis has a point. Bars
+// degrade a row at a time — a creature with no spells is missing one bar, not
+// its whole chart.
+const BUILD_TABS = [
+  { id: "defence", label: "Defence" },
+  { id: "offence", label: "Offence", chart: "bars" },
+  { id: "attributes", label: "Attributes" },
+  { id: "skills", label: "Skills" },
 ];
 
-const BUILD_AXES = BUILD_STATS.filter((stat) => stat.axis);
+// Every number the builder works in. `key` is the override written — the same
+// key space the panel's own right-click editors use, so a built creature's
+// attributes and skills show up on the Proficiencies tab. `avg` is the column
+// in level-averages.json to compare against.
+//
+// `levels` is whether the stat counts toward the estimated level, and only
+// nine do. Pathfinder's creature-building tables set a level from defences
+// and offence; attributes and skills are chosen for character, and a high
+// Athletics doesn't make a creature higher level. Letting all eighteen vote
+// would also make the estimate deaf again — the reason it isn't a median.
+//
+// `axis` is whether the stat is charted. Spell DC was off the chart while
+// offence was a radar, because a creature that doesn't cast would have put a
+// deep dent in the polygon for a stat it simply doesn't have — reading as a
+// weakness rather than an absence. Bars have no such problem: a blank spell DC
+// is a row that says so, next to bars that are still drawn.
+const BUILD_STATS = [
+  { key: "maxHp", avg: "hp", label: "HP", short: "HP", min: 1, tab: "defence", axis: true, levels: true },
+  { key: "ac", avg: "ac", label: "AC", short: "AC", min: 0, tab: "defence", axis: true, levels: true },
+  { key: "fortitude", avg: "fortitude", label: "Fortitude", short: "Fort", min: -20, tab: "defence", axis: true, levels: true },
+  { key: "reflex", avg: "reflex", label: "Reflex", short: "Ref", min: -20, tab: "defence", axis: true, levels: true },
+  { key: "will", avg: "will", label: "Will", short: "Will", min: -20, tab: "defence", axis: true, levels: true },
 
-// How far from average the radar can show. Beyond five levels either way the
-// polygon would leave the chart, and "more than five levels off" is already
+  { key: "attack", avg: "attack", label: "Strike attack", short: "Atk", min: -20, tab: "offence", axis: true, levels: true },
+  { key: "damage", avg: "damage", label: "Strike damage", short: "Dmg", min: 0, tab: "offence", axis: true, levels: true },
+  { key: "spellDc", avg: "spellDc", label: "Spell DC", short: "DC", min: 0, tab: "offence", axis: true, levels: true },
+
+  { key: "attr:str", avg: "str", label: "Strength", short: "STR", min: -20, tab: "attributes", axis: true },
+  { key: "attr:dex", avg: "dex", label: "Dexterity", short: "DEX", min: -20, tab: "attributes", axis: true },
+  { key: "attr:con", avg: "con", label: "Constitution", short: "CON", min: -20, tab: "attributes", axis: true },
+  { key: "attr:int", avg: "int", label: "Intelligence", short: "INT", min: -20, tab: "attributes", axis: true },
+  { key: "attr:wis", avg: "wis", label: "Wisdom", short: "WIS", min: -20, tab: "attributes", axis: true },
+  { key: "attr:cha", avg: "cha", label: "Charisma", short: "CHA", min: -20, tab: "attributes", axis: true },
+
+  { key: "perception", avg: "perception", label: "Perception", short: "Perc", min: -20, tab: "skills", axis: true, levels: true },
+  { key: "skill:Acrobatics", avg: "acrobatics", label: "Acrobatics", short: "Acro", min: -20, tab: "skills", axis: true },
+  { key: "skill:Athletics", avg: "athletics", label: "Athletics", short: "Athl", min: -20, tab: "skills", axis: true },
+  { key: "skill:Stealth", avg: "stealth", label: "Stealth", short: "Stea", min: -20, tab: "skills", axis: true },
+];
+
+function buildStatsFor(tabId) {
+  return BUILD_STATS.filter((stat) => stat.tab === tabId);
+}
+
+function buildAxesFor(tabId) {
+  return buildStatsFor(tabId).filter((stat) => stat.axis);
+}
+
+function buildTabFor(tabId) {
+  return BUILD_TABS.find((tab) => tab.id === tabId) ?? BUILD_TABS[0];
+}
+
+// How far from average either chart can show. Beyond five levels either way
+// the shape would leave the frame, and "more than five levels off" is already
 // the whole message.
 const BUILD_DEVIATION_LIMIT = 5;
 
@@ -6730,6 +6792,7 @@ function impliedLevel(avgKey, value) {
 function estimateLevel(values) {
   const implied = [];
   for (const stat of BUILD_STATS) {
+    if (!stat.levels) continue;
     const level = impliedLevel(stat.avg, values[stat.key]);
     if (level != null) implied.push(level);
   }
@@ -6753,10 +6816,12 @@ const buildForm = document.getElementById("battle-build-form");
 const buildNameInput = document.getElementById("battle-build-name");
 const buildLevelSelect = document.getElementById("battle-build-level");
 const buildResetBtn = document.getElementById("battle-build-reset");
+const buildTabStrip = document.getElementById("battle-build-tabs");
 const buildFields = document.getElementById("battle-build-fields");
 const buildEstimate = document.getElementById("battle-build-estimate");
 const buildEstimateNote = document.getElementById("battle-build-estimate-note");
-const buildCanvas = document.getElementById("battle-build-radar");
+const buildCanvas = document.getElementById("battle-build-canvas");
+const buildLegend = document.getElementById("battle-build-legend");
 const buildCloseBtn = document.getElementById("battle-build-close");
 const buildSubmitBtn = document.getElementById("battle-build-submit");
 
@@ -6774,9 +6839,46 @@ buildLevelSelect.innerHTML = Array.from(
 
 // null while building something new, an entity id while editing one.
 let buildEntityId = null;
+let buildTab = BUILD_TABS[0].id;
+
+// The tab strip reuses .battle-object-tab — one tab pattern on the page, not
+// two — but not .battle-object-tabs, whose sticky positioning and negative
+// margins exist to cancel a .battle-box's padding while its content scrolls
+// underneath. A dialog has neither.
+buildTabStrip.innerHTML = BUILD_TABS.map(({ id, label }) => `
+  <button type="button" class="battle-object-tab" data-build-tab="${id}" role="tab">${label}</button>`).join("");
+
+buildTabStrip.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-build-tab]");
+  if (!button || button.dataset.buildTab === buildTab) return;
+  buildTab = button.dataset.buildTab;
+  showBuildTab();
+});
+
+// Every field for every tab stays in the DOM; only its group is hidden. A tab
+// that rebuilt its fields would lose whatever was typed on the other three
+// the moment someone looked at them.
+function showBuildTab() {
+  for (const button of buildTabStrip.querySelectorAll("[data-build-tab]")) {
+    const active = button.dataset.buildTab === buildTab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  }
+  for (const group of buildFields.querySelectorAll(".battle-build-group")) {
+    group.hidden = group.dataset.tab !== buildTab;
+  }
+  renderBuilder();
+}
 
 function buildLevel() {
   return Number(buildLevelSelect.value);
+}
+
+// "skill:Acrobatics" -> "skill-acrobatics", for the id that ties a label to
+// its input. Attribute selectors take the raw key quite happily, so
+// data-build keeps it; only ids get flattened.
+function statSlug(key) {
+  return key.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
 }
 
 function buildValues() {
@@ -6794,7 +6896,7 @@ function buildValues() {
 // from a level" half of the tool. Rounded because a DM types whole numbers
 // and a statblock prints them; 179.7 HP is an artefact of averaging 128
 // creatures, not a hit point total anyone would write down.
-function seedFromLevel() {
+function seedFields() {
   const averages = averagesFor(buildLevel());
   for (const stat of BUILD_STATS) {
     const field = buildFields.querySelector(`[data-build="${stat.key}"]`);
@@ -6802,6 +6904,10 @@ function seedFromLevel() {
     const value = averages?.[stat.avg];
     field.value = typeof value === "number" ? String(Math.round(value)) : "";
   }
+}
+
+function seedFromLevel() {
+  seedFields();
   renderBuilder();
 }
 
@@ -6833,8 +6939,7 @@ function renderBuilder() {
     const levels = implied == null ? null : implied - level;
     readout.textContent = `${delta >= 0 ? "+" : "−"}${formatAverage(Math.abs(delta))}`
       + (levels == null ? "" : ` · ${describeLevels(levels)}`);
-    readout.className = "battle-build-vs "
-      + (Math.abs(levels ?? 0) < 0.75 ? "level" : (levels > 0 ? "above" : "below"));
+    readout.className = `battle-build-vs ${deviationTone(levels)}`;
   }
 
   const estimate = estimateLevel(values);
@@ -6850,11 +6955,20 @@ function renderBuilder() {
       : `From ${estimate.count} stats`;
   }
 
-  drawRadar(level, values);
+  drawChart(level, values);
 }
 
 function formatAverage(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+// Which of the three states a level deviation is in. Shared by the per-row
+// readout and the bars so a row's colour and its bar's colour can't disagree
+// about what counts as "on level". A stat with no value reads as neutral
+// rather than as a shortfall.
+function deviationTone(levels) {
+  if (levels == null || Math.abs(levels) < 0.75) return "level";
+  return levels > 0 ? "above" : "below";
 }
 
 // "1 level above", "level", "2 levels below" — the unit a DM thinks in.
@@ -6872,20 +6986,33 @@ function formatEstimatedLevel(level) {
   return String(rounded);
 }
 
-// --- The radar -------------------------------------------------------------
+// --- The charts ------------------------------------------------------------
 //
-// Each axis is a stat, and the distance from the centre is how many LEVELS
-// above or below average that stat is — not the raw value, and not a ratio of
-// it. A ratio would be useless here: every AC in the game sits within a few
-// percent of its level's average, so a ratio chart would draw a perfect
-// circle for every creature ever built. Level-deviation is both comparable
-// across stats measured in completely different units and the thing a DM
-// actually wants to know.
+// Both chart types plot the same quantity: how many LEVELS above or below
+// average each stat is — not the raw value, and not a ratio of it. A ratio
+// would be useless here: every AC in the game sits within a few percent of its
+// level's average, so a ratio chart would draw a perfect circle for every
+// creature ever built. Level-deviation is both comparable across stats
+// measured in completely different units and the thing a DM actually wants to
+// know.
 //
-// The emphasised middle ring is "average for this level". Inside it is weaker,
-// outside stronger.
+// A radar where the axes enclose an area, bars where they don't — see
+// BUILD_TABS for why Offence is the tab that doesn't.
 
-function drawRadar(level, values) {
+const CHART_LEGENDS = {
+  radar: "Dashed ring is average for the chosen level. Each ring is 2 levels.",
+  bars: "Dashed line is average for the chosen level. Each gridline is 2 levels.",
+};
+
+function drawChart(level, values) {
+  // Only the tab on screen. Each group gets its own chart because one shape
+  // over eighteen axes says nothing a DM can read.
+  const axes = buildAxesFor(buildTab);
+  // Fewer than three axes is a line with no area, so a radar isn't an option
+  // whether or not the tab asked for one.
+  const kind = buildTabFor(buildTab).chart === "bars" || axes.length < 3 ? "bars" : "radar";
+  buildLegend.textContent = CHART_LEGENDS[kind];
+
   const context = buildCanvas.getContext("2d");
   const ratio = window.devicePixelRatio || 1;
   const size = buildCanvas.clientWidth || 260;
@@ -6896,6 +7023,143 @@ function drawRadar(level, values) {
   context.setTransform(ratio, 0, 0, ratio, 0, 0);
   context.clearRect(0, 0, size, size);
 
+  const deviations = axes.map((stat) => {
+    const implied = impliedLevel(stat.avg, values[stat.key]);
+    return implied == null ? null : implied - level;
+  });
+
+  if (kind === "bars") drawBars(context, size, axes, deviations);
+  else drawRadar(context, size, axes, deviations);
+}
+
+// Beyond the chart's reach in either direction, because a stat five levels off
+// has already made its point and a point outside the frame just draws over the
+// labels. The row's own readout still shows the true figure.
+function clampDeviation(deviation) {
+  return Math.max(-BUILD_DEVIATION_LIMIT, Math.min(BUILD_DEVIATION_LIMIT, deviation));
+}
+
+function toneColor(tone) {
+  if (tone === "above") return cssVar("--success") || "#2e7d32";
+  if (tone === "below") return cssVar("--danger") || "#b00020";
+  return cssVar("--muted") || "#888";
+}
+
+// One row per stat, running left (weaker) and right (stronger) from a shared
+// centre line. Unlike the radar this draws row by row, so a stat left blank
+// costs its own row and nothing else — which is what lets the spell DC be
+// charted at all.
+function drawBars(context, size, axes, deviations) {
+  const border = cssVar("--border") || "#ccc";
+  const muted = cssVar("--muted") || "#888";
+  context.font = "11px system-ui, sans-serif";
+
+  // The gutter is measured rather than guessed: "Strike damage" and "DC" want
+  // very different amounts of room, and one fixed width either clips the long
+  // label or wastes a third of the plot on the short one.
+  //
+  // The gutter is capped at 45% of the canvas, though — past that the plot has
+  // no room left to say anything. When the full names don't fit under that
+  // cap, the chart falls back to the abbreviations the radar uses rather than
+  // drawing names with their first letters cut off.
+  const cap = size * 0.45;
+  const measure = (key) => Math.max(...axes.map((stat) => context.measureText(stat[key]).width));
+  const naming = measure("label") + 10 <= cap ? "label" : "short";
+  const left = Math.min(Math.ceil(measure(naming)) + 10, cap);
+  const right = size - 8;
+  const centre = left + (right - left) / 2;
+  const perLevel = (right - left) / (BUILD_DEVIATION_LIMIT * 2);
+  const at = (deviation) => centre + clampDeviation(deviation) * perLevel;
+
+  // Vertically centred in a canvas that stays square across all four tabs, so
+  // moving between them can't resize the dialog under the cursor.
+  const rowHeight = 34;
+  const barHeight = 13;
+  const scaleHeight = 18; // the tick labels under the plot
+  const top = Math.max(4, (size - (axes.length * rowHeight + scaleHeight)) / 2);
+  const bottom = top + axes.length * rowHeight;
+
+  for (const gridline of [-4, -2, 2, 4]) {
+    context.beginPath();
+    context.moveTo(at(gridline), top);
+    context.lineTo(at(gridline), bottom);
+    context.strokeStyle = border;
+    context.lineWidth = 1;
+    context.stroke();
+  }
+
+  // The average line last of the guides, so it draws over the rest — it's the
+  // one line on the chart that means something on its own.
+  context.beginPath();
+  context.moveTo(centre, top);
+  context.lineTo(centre, bottom);
+  context.strokeStyle = muted;
+  context.lineWidth = 1.5;
+  context.setLineDash([4, 3]);
+  context.stroke();
+  context.setLineDash([]);
+
+  axes.forEach((stat, index) => {
+    const middle = top + rowHeight * index + rowHeight / 2;
+
+    context.font = "11px system-ui, sans-serif";
+    context.fillStyle = muted;
+    context.textAlign = "right";
+    context.textBaseline = "middle";
+    context.fillText(stat[naming], left - 8, middle);
+
+    const deviation = deviations[index];
+    if (deviation == null) {
+      context.textAlign = "left";
+      context.fillStyle = muted;
+      context.fillText("not set", centre + 6, middle);
+      return;
+    }
+
+    const end = at(deviation);
+    const color = toneColor(deviationTone(deviation));
+    // A creature exactly on level has a bar of no width, which would leave the
+    // row looking unanswered. The minimum keeps a mark on the average line.
+    const width = Math.max(2, Math.abs(end - centre));
+    const x = end < centre ? centre - width : centre;
+    context.fillStyle = withAlpha(color, 0.3);
+    context.fillRect(x, middle - barHeight / 2, width, barHeight);
+    context.strokeStyle = color;
+    context.lineWidth = 1.5;
+    context.strokeRect(x, middle - barHeight / 2, width, barHeight);
+
+    // The deviation in levels, past the bar's outer end — flipped inside the
+    // bar when it runs far enough that the text wouldn't fit beyond it. The
+    // left-hand test is against the gutter, not the canvas edge: there's room
+    // there, but the stat's own name is already in it.
+    const text = `${deviation >= 0 ? "+" : "−"}${Math.abs(deviation).toFixed(1)}`;
+    context.font = "10px system-ui, sans-serif";
+    context.fillStyle = color;
+    const textWidth = context.measureText(text).width;
+    const outward = end >= centre ? 1 : -1;
+    const fits = outward > 0
+      ? end + 5 + textWidth <= size - 2
+      : end - 5 - textWidth >= left;
+    context.textAlign = (outward > 0) === fits ? "left" : "right";
+    context.fillText(text, end + (fits ? outward : -outward) * 5, middle);
+  });
+
+  // Three ticks, not five: the gridlines already carry the spacing, and the
+  // ends plus the centre are what the reader needs named.
+  context.font = "10px system-ui, sans-serif";
+  context.fillStyle = muted;
+  context.textBaseline = "top";
+  context.textAlign = "left";
+  context.fillText(`−${BUILD_DEVIATION_LIMIT}`, left, bottom + 5);
+  context.textAlign = "center";
+  context.fillText("avg", centre, bottom + 5);
+  context.textAlign = "right";
+  context.fillText(`+${BUILD_DEVIATION_LIMIT}`, right, bottom + 5);
+}
+
+// The emphasised middle ring is "average for this level". Inside it is weaker,
+// outside stronger.
+function drawRadar(context, size, axes, deviations) {
   const cx = size / 2;
   const cy = size / 2;
   // Room for the labels sitting outside the outer ring.
@@ -6905,21 +7169,19 @@ function drawRadar(level, values) {
   const accent = cssVar("--accent") || "#8b1e2d";
 
   // deviation (-limit..+limit levels) -> distance from the centre
-  const distance = (deviation) => {
-    const clamped = Math.max(-BUILD_DEVIATION_LIMIT, Math.min(BUILD_DEVIATION_LIMIT, deviation));
-    return radius * (clamped + BUILD_DEVIATION_LIMIT) / (BUILD_DEVIATION_LIMIT * 2);
-  };
+  const distance = (deviation) =>
+    radius * (clampDeviation(deviation) + BUILD_DEVIATION_LIMIT) / (BUILD_DEVIATION_LIMIT * 2);
   const point = (index, deviation) => {
     // Starts at twelve o'clock and runs clockwise, so the first axis in
     // BUILD_STATS is the one at the top.
-    const angle = (Math.PI * 2 * index) / BUILD_AXES.length - Math.PI / 2;
+    const angle = (Math.PI * 2 * index) / axes.length - Math.PI / 2;
     const r = distance(deviation);
     return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r];
   };
 
   const trace = (deviation) => {
     context.beginPath();
-    BUILD_AXES.forEach((_, index) => {
+    axes.forEach((_, index) => {
       const [x, y] = point(index, deviation);
       if (index === 0) context.moveTo(x, y);
       else context.lineTo(x, y);
@@ -6934,7 +7196,7 @@ function drawRadar(level, values) {
     context.stroke();
   }
 
-  for (let index = 0; index < BUILD_AXES.length; index += 1) {
+  for (let index = 0; index < axes.length; index += 1) {
     const [x, y] = point(index, BUILD_DEVIATION_LIMIT);
     context.beginPath();
     context.moveTo(cx, cy);
@@ -6952,11 +7214,6 @@ function drawRadar(level, values) {
   context.setLineDash([4, 3]);
   context.stroke();
   context.setLineDash([]);
-
-  const deviations = BUILD_AXES.map((stat) => {
-    const implied = impliedLevel(stat.avg, values[stat.key]);
-    return implied == null ? null : implied - level;
-  });
 
   // A stat left blank has no point on its axis, so the polygon is only drawn
   // when every axis has one. A partial creature gets the rings and its
@@ -6986,7 +7243,7 @@ function drawRadar(level, values) {
 
   context.font = "11px system-ui, sans-serif";
   context.fillStyle = muted;
-  BUILD_AXES.forEach((stat, index) => {
+  axes.forEach((stat, index) => {
     const [x, y] = point(index, BUILD_DEVIATION_LIMIT + 1.2);
     context.textAlign = Math.abs(x - cx) < 4 ? "center" : (x > cx ? "left" : "right");
     context.textBaseline = Math.abs(y - cy) < 4 ? "middle" : (y > cy ? "top" : "bottom");
@@ -7011,11 +7268,18 @@ function openBuildDialog(entityId, presetName) {
   buildEntityId = entityId ?? null;
   const entity = entityId ? findEntity(entityId) : null;
 
-  buildFields.innerHTML = BUILD_STATS.map((stat) => `
-    <div class="battle-build-row" data-stat="${stat.key}">
-      <label for="battle-build-${stat.key}">${stat.label}</label>
-      <input type="number" step="1" min="${stat.min}" id="battle-build-${stat.key}" data-build="${stat.key}" />
-      <span class="battle-build-vs"></span>
+  // Ids are slugged: an override key like "skill:Acrobatics" or "attr:str"
+  // carries a colon, which is a valid id but needs escaping in every selector
+  // that ever reaches for it. data-build stays the real key.
+  buildFields.innerHTML = BUILD_TABS.map(({ id }) => `
+    <div class="battle-build-group" data-tab="${id}">
+      ${buildStatsFor(id).map((stat) => `
+      <div class="battle-build-row" data-stat="${escapeHtml(stat.key)}">
+        <label for="battle-build-${statSlug(stat.key)}">${stat.label}</label>
+        <input type="number" step="1" min="${stat.min}" id="battle-build-${statSlug(stat.key)}"
+               data-build="${escapeHtml(stat.key)}" />
+        <span class="battle-build-vs"></span>
+      </div>`).join("")}
     </div>`).join("");
 
   buildNameInput.value = entity?.name ?? presetName ?? "";
@@ -7026,16 +7290,17 @@ function openBuildDialog(entityId, presetName) {
   const startingLevel = Number.isFinite(existing.level) ? existing.level : 1;
   buildLevelSelect.value = String(Math.max(BUILD_LEVEL_MIN, Math.min(BUILD_LEVEL_MAX, startingLevel)));
 
+  buildTab = BUILD_TABS[0].id;
   if (Object.keys(existing).length) {
     // Editing: show what the creature actually has, not the level's average.
     for (const stat of BUILD_STATS) {
       const field = buildFields.querySelector(`[data-build="${stat.key}"]`);
       field.value = Number.isFinite(existing[stat.key]) ? String(existing[stat.key]) : "";
     }
-    renderBuilder();
   } else {
-    seedFromLevel();
+    seedFields();
   }
+  showBuildTab();
 
   buildDialog.showModal();
   buildNameInput.select();

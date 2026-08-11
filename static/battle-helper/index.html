@@ -274,7 +274,7 @@
        ratio chart would draw a near-perfect circle for every creature ever
        built, since every AC in the game sits within a few percent of its
        level's average. The rows are built by openBuildDialog() from
-       BUILD_STATS, so the fields and the radar axes cannot drift apart. -->
+       BUILD_STATS, so the fields and the chart axes cannot drift apart. -->
   <dialog id="battle-build-dialog" class="battle-build-dialog">
     <h2>Build a creature</h2>
     <form id="battle-build-form">
@@ -291,6 +291,12 @@
                 title="Set every stat back to the average for this level">Reset to average</button>
       </div>
 
+      <!-- Four pages, each with its own fields and its own chart: one radar
+           over eighteen axes would say nothing a DM can read. The strip and
+           the groups are both built from BUILD_TABS, so they can't disagree
+           about how many there are. -->
+      <div id="battle-build-tabs" class="battle-build-tabs" role="tablist"></div>
+
       <div class="battle-build-body">
         <div id="battle-build-fields" class="battle-build-fields"></div>
         <div class="battle-build-chart">
@@ -299,9 +305,13 @@
             <span id="battle-build-estimate" class="battle-build-estimate-value">—</span>
             <span id="battle-build-estimate-note" class="battle-build-estimate-note"></span>
           </div>
-          <canvas id="battle-build-radar" width="260" height="260"
+          <!-- One canvas, two chart types: a radar for the tabs with enough
+               axes to enclose an area, bars for Offence, which has three
+               numbers and one of them optional. drawChart() picks; the legend
+               is written to match. -->
+          <canvas id="battle-build-canvas" width="260" height="260"
                   role="img" aria-label="How far each statistic sits above or below the average for this level"></canvas>
-          <p class="battle-build-legend">Dashed ring is average for the chosen level. Each ring is 2 levels.</p>
+          <p id="battle-build-legend" class="battle-build-legend"></p>
         </div>
       </div>
 
