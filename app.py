@@ -45,6 +45,7 @@ from flask import (
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import monsters
 import oidc
 from accounts import DOCUMENT_NAMES, Accounts
 
@@ -140,6 +141,14 @@ ACCOUNTS_DB_PATH = Path(
 )
 accounts = Accounts(ACCOUNTS_DB_PATH)
 
+# Deliberately a different file from the accounts database. This one holds a
+# cache of somebody else's public data and can be deleted at any time; that one
+# holds people's accounts. They should not share a blast radius.
+MONSTER_CACHE_PATH = Path(
+    os.environ.get("MONSTER_CACHE_PATH") or LOCAL_DIR / "data" / "monster-cache.sqlite3"
+)
+monster_cache = monsters.Cache(MONSTER_CACHE_PATH)
+
 # Signs the session cookie, which carries nothing but a random session id — the
 # tokens are in the database, not in the cookie. A generated fallback means a
 # dev run works with no configuration; it also means restarting the dev server
@@ -234,6 +243,50 @@ def monster_data(filename):
     if (MONSTER_DATA_DIR / filename).is_file():
         return send_from_directory(MONSTER_DATA_DIR, filename)
     return send_from_directory(PUBLIC_MONSTER_DATA_DIR, filename)
+
+
+@app.get("/api/monster")
+def monster_lookup():
+    """One creature's statistics, fetched from Archives of Nethys on demand.
+
+    This exists because the browser cannot do it: AoN's backend 403s any
+    request carrying an Origin header, which a browser cannot omit. See
+    monsters.py.
+
+    Cached forever after the first fetch — a statblock is a published number in
+    a printed book, not a feed. `?refresh=1` re-reads one, which is the whole
+    invalidation story and enough of one.
+    """
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify(error="Which monster?"), 400
+
+    raw_id = request.args.get("id")
+    try:
+        aon_id = int(raw_id) if raw_id else None
+    except ValueError:
+        aon_id = None
+
+    # Keyed with the id, because names are not unique — "Hydra" resolves to
+    # more than one creature, and caching by name alone would serve whichever
+    # one was asked for first to everyone who asked afterwards.
+    key = f"{name}#{aon_id if aon_id is not None else ''}"
+
+    if request.args.get("refresh") != "1":
+        cached = monster_cache.get(key)
+        if cached is not None:
+            return jsonify(cached)
+
+    try:
+        payload = monsters.fetch(name, aon_id)
+    except monsters.MonsterError as error:
+        # A third party being unreachable is an ordinary state: the panel falls
+        # back to the minimal one, exactly as it does for a monster with no
+        # stats, and the battle carries on.
+        return jsonify(error=str(error)), 502
+
+    monster_cache.put(key, payload)
+    return jsonify(payload)
 
 
 @app.route(

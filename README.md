@@ -201,6 +201,23 @@ The realm file's redirect URIs name
 them in the console — a redirect URI Keycloak doesn't recognise is refused at
 the very end of an otherwise successful login.
 
+**Monster statistics no longer need the volume.** The battle helper fetches
+each creature from Archives of Nethys the first time you select it, through
+`GET /api/monster` on this server, and caches the answer in
+`MONSTER_CACHE_PATH` (put it on the volume so a redeploy doesn't re-fetch).
+The committed index still supplies the picker's names and AoN ids.
+
+That request has to go through the server: AoN's backend returns 403 to any
+request carrying an `Origin` header, and a browser cannot omit one — so no
+amount of client-side cleverness makes a direct fetch work.
+
+Uploading the generated `monster-data/` files is still supported and still
+slightly better where it exists: the build script also reads each creature's
+rendered page, which is the only place conditional skill bonuses
+("Athletics +5 (+9 to Climb)") and Recall Knowledge DCs appear. The live path
+skips that second request, so those two fields stay empty. Where the bulk file
+has a creature, it wins and nothing is fetched.
+
 **The volume holds two things now.** `local/static/monster-data/` is gitignored,
 so it isn't in the repo and can't be in the image: mount a volume at `/data`,
 upload the generated files once, and point `MONSTER_DATA_DIR` at them. The

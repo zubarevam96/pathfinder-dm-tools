@@ -817,25 +817,73 @@ function findEntity(id) {
   return null;
 }
 
-// A monster's stats, or null when this build of monsters.json carries none.
+// Monster statistics, fetched one creature at a time the first time anyone
+// looks at it.
 //
-// Stats are baked into the file rather than fetched, because Archives of
-// Nethys is unreachable from a browser on this origin: its elasticsearch
-// backend allowlists exactly one Origin (2e.aonprd.com) and 403s everything
-// else, and its HTML pages send no CORS header at all. A browser can't
-// suppress the Origin header, so no amount of client-side caching would
-// make a runtime fetch work. See local/scripts/build_monster_entities.py,
-// which takes these out of the same response that already resolved the
-// statblock link — the app makes zero requests to AoN for stats, however
-// many battles are opened.
+// The page still cannot talk to Archives of Nethys itself — its elasticsearch
+// backend 403s any request carrying an Origin header, and a browser cannot
+// omit that. So the request goes to this site's own server, which fetches and
+// parses it (monsters.py) and caches the answer. The committed index supplies
+// names and AoN ids for the picker; everything else arrives on demand.
 //
-// Which is why null is the normal case on the deployed site and not a bug:
-// only the stats-free index is committed and published, so GitHub Pages
-// serves entries with no `stats` key. Local dev gets the full file from
-// app.py. Callers already fall back to the minimal panel on null, so the
-// difference needs no branch beyond this one.
+// The id is sent because names are not unique: "Hydra" matches several
+// creatures, and the index already knows which one its statblock link means.
+//
+// One request per monster per page load, memoised by name. `null` in the map
+// means "asked, and AoN had nothing" — distinct from "not asked yet", so a
+// creature AoN doesn't know isn't re-requested on every render.
+const monsterFetches = new Map();
+// Names whose request has come back, however it came back. Separate from the
+// map above because "in flight" and "answered with nothing" need different
+// answers — the first is "loading", the second is "this creature has none" —
+// and a Map of promises can't tell them apart without awaiting.
+const monsterFetched = new Set();
+
+function requestMonster(monsterName) {
+  if (monsterFetches.has(monsterName)) return monsterFetches.get(monsterName);
+
+  const entry = monsterByName.get(monsterName);
+  const query = new URLSearchParams({ name: monsterName });
+  if (entry?.archives_of_nexus_id) query.set("id", entry.archives_of_nexus_id);
+
+  const pending = fetch(`../api/monster?${query}`)
+    .then((response) => (response.ok ? response.json() : null))
+    .then((payload) => {
+      if (payload?.stats && entry) entry.stats = payload.stats;
+      if (payload?.abilities) {
+        // The map may not exist yet: nothing has opened an abilities panel.
+        // Creating it here is what lets a monster fetched from the stat panel
+        // already have its actions when that tab is first opened.
+        if (monsterAbilitiesByName === null) monsterAbilitiesByName = new Map();
+        // Info's fields are folded in rather than kept beside, because
+        // entityAbilities() is the only reader and it takes one object —
+        // languages, items, senses, flavour and traits all come through there.
+        monsterAbilitiesByName.set(monsterName, { ...payload.abilities, ...(payload.info ?? {}) });
+      }
+      return payload;
+    })
+    .catch(() => null)
+    .finally(() => {
+      monsterFetched.add(monsterName);
+      // Repaint whatever asked. Safe against a loop: the memoised promise
+      // means the next render finds the data, or finds this name already
+      // fetched and asks for nothing.
+      render();
+    });
+
+  monsterFetches.set(monsterName, pending);
+  return pending;
+}
+
+// A monster's stats, fetching them if this is the first time anyone asked.
+//
+// Returns null while a fetch is in flight, which is the same answer callers
+// already handle for "this thing has no stats" — they render the minimal
+// panel, and the render() above swaps in the full one when it lands.
 function monsterStats(monsterName) {
-  return monsterByName.get(monsterName)?.stats ?? null;
+  const entry = monsterByName.get(monsterName);
+  if (entry && !entry.stats) requestMonster(monsterName);
+  return entry?.stats ?? null;
 }
 
 // Base stats — before conditions — in one shape whichever kind of entity
@@ -3128,7 +3176,17 @@ function entityAbilities(entity) {
     return "loading";
   }
   const abilities = monsterAbilitiesByName.get(entity.monsterName);
-  if (!abilities) return null;
+  if (!abilities) {
+    // Not in the bulk file — either it was never built, or none is deployed.
+    // Ask the server for this one creature. "loading" until the request comes
+    // back; after that, still nothing here means AoN had nothing to give, and
+    // null is the honest answer rather than a spinner that never stops.
+    if (!monsterFetched.has(entity.monsterName)) {
+      requestMonster(entity.monsterName);
+      return "loading";
+    }
+    return null;
+  }
   // Everything the Info, Proficiencies and Inventory tabs read comes through
   // here — this function is the only reader of monsterAbilitiesByName, so a
   // field it doesn't copy out cannot reach a panel however well the build

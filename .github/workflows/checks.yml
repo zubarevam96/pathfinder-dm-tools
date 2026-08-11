@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Byte-compile the Python modules
-        run: python -m py_compile app.py accounts.py oidc.py
+        run: python -m py_compile app.py accounts.py oidc.py monsters.py
       - name: Check frontend JS syntax
         run: |
           node --check static/pf2e-math.js
