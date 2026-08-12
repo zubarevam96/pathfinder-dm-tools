@@ -132,6 +132,18 @@ class Accounts:
                 "SELECT * FROM users WHERE id = ?", (user_id,)
             ).fetchone()
 
+    def user_by_telegram_id(self, telegram_id: int) -> sqlite3.Row | None:
+        """The account linked to a Telegram person, if one is.
+
+        Asked before an account is made for somebody: the column is UNIQUE, so
+        a second one could not be linked, and an account that the bot can never
+        reach again is worse than being told you already have one.
+        """
+        with self._connect() as connection:
+            return connection.execute(
+                "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
+            ).fetchone()
+
     def set_email(self, user_id: int, email: str | None) -> None:
         """Mirror an address Keycloak has already accepted. Not a change itself."""
         with self._connect() as connection:
@@ -141,12 +153,14 @@ class Accounts:
             )
 
     def set_telegram_id(self, user_id: int, telegram_id: int | None) -> None:
-        """TODO: nothing calls this yet.
+        """The join to the bot's database, whose every table keys on ``persons.telegram_id``.
 
-        It is the join to the bot's database, whose every table keys on
-        ``persons.telegram_id``. Until something proves the person here and the
-        person in Telegram are the same — a code issued in chat, most likely —
-        writing this would be asserting a link nobody verified.
+        Written by exactly one caller: ``/internal/accounts``, where the bot
+        asks for an account on behalf of somebody it has already identified in
+        a chat. That is what proves the person here and the person in Telegram
+        are the same, and it happens in the same breath as the account being
+        created — an account linked "later" is one that belongs to nobody in
+        between, and later might never come.
         """
         with self._connect() as connection:
             connection.execute(

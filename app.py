@@ -9,12 +9,15 @@ somewhere to *put* a copy — two of them, for two different ideas of who you ar
   character imported in chat with one opened here.
 - ``/auth/*`` and ``/api/account/*`` are an account of this site's own, backed
   by Keycloak for authentication and by ``accounts.py`` for everything else.
-  Nobody has a Telegram id here yet; ``users.telegram_id`` is the column where
-  the two will meet, and it is empty on purpose.
+- ``/internal/accounts`` is where the two meet. The bot asks it to create an
+  account for somebody it has already identified in a chat, and it writes the
+  Keycloak user and ``users.telegram_id`` in one operation — so an account made
+  this way is linked from the moment it exists, rather than waiting for a first
+  sign-in that might never come.
 
 Two identity systems is a cost, not a design goal. It buys the site a way in for
-someone who has never spoken to the bot, and it is meant to end: once a signed-in
-account can prove a Telegram id, one of these becomes a link rather than a login.
+someone who has never spoken to the bot, and it is meant to end: registering
+through the bot is the first half of that ending.
 
 Serving all of it from one origin is why this runs in production at all rather
 than only in local dev. The site and the bot's API used to be two origins —
@@ -45,6 +48,7 @@ from flask import (
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import keycloak_admin
 import monsters
 import oidc
 from accounts import DOCUMENT_NAMES, Accounts
@@ -132,6 +136,22 @@ KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID") or "pathfinder-web"
 KEYCLOAK_CLIENT_SECRET = os.environ.get("KEYCLOAK_CLIENT_SECRET") or ""
 
 auth = oidc.Client(KEYCLOAK_ISSUER, KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET)
+
+# A second client, for the other direction: making an account nobody has signed
+# into yet. Its service account holds manage-users and nothing else, so a leak
+# of the login client's secret cannot also mint users, and vice versa.
+KEYCLOAK_BOT_CLIENT_ID = os.environ.get("KEYCLOAK_BOT_CLIENT_ID") or "pathfinder-bot"
+KEYCLOAK_BOT_CLIENT_SECRET = os.environ.get("KEYCLOAK_BOT_CLIENT_SECRET") or ""
+
+admin = keycloak_admin.Admin(
+    KEYCLOAK_ISSUER, KEYCLOAK_BOT_CLIENT_ID, KEYCLOAK_BOT_CLIENT_SECRET
+)
+
+# What makes /internal/* answer the bot rather than whoever reaches it. Unset
+# means that route is off entirely -- an internal endpoint with no secret is an
+# open one, and defaulting to a known string would be worse than defaulting to
+# nothing.
+BOT_SHARED_SECRET = os.environ.get("BOT_SHARED_SECRET") or ""
 
 # Beside the monster data, on the same volume: this is the one piece of state
 # the service owns, and it has to outlive a redeploy. The default is under
@@ -355,6 +375,70 @@ def sync_proxy(subpath):
         if name.lower() not in HOP_BY_HOP
     ]
     return Response(upstream.content, status=upstream.status_code, headers=passed)
+
+
+@app.post("/internal/accounts")
+def internal_create_account():
+    """Make an account for someone the bot has already identified.
+
+    This is the other direction from ``/sync/*``: the bot asks, and this
+    service — which owns the realm and the ``users`` row — does both halves of
+    the job at once. Both halves is the whole point. An account created here
+    and linked later is an account that belongs to nobody in the meantime, and
+    the row it would be linked to is only written at first sign-in, so "later"
+    might never come.
+
+    ``telegram_id`` is *not* taken as a claim about who is asking — it is taken
+    as a claim by the bot, which is the only thing that can prove it, and the
+    shared secret is what makes it the bot. Nothing about this endpoint is safe
+    without that secret, so it is off entirely when none is set.
+    """
+    if not BOT_SHARED_SECRET:
+        return jsonify(error="Registration isn't configured on this deployment."), 503
+    # compare_digest so a wrong secret takes the same time as a right one.
+    presented = request.headers.get("X-Bot-Secret") or ""
+    if not secrets.compare_digest(presented, BOT_SHARED_SECRET):
+        return jsonify(error="Not for you."), 403
+    if not admin.configured:
+        return jsonify(error="Accounts aren't configured on this deployment."), 503
+
+    payload = request.get_json(silent=True) or {}
+    email = str(payload.get("email") or "").strip()
+    telegram_id = payload.get("telegram_id")
+    display_name = payload.get("display_name")
+    if not email or "@" not in email:
+        return jsonify(error="That isn't an email address."), 400
+    if not isinstance(telegram_id, int) or isinstance(telegram_id, bool):
+        return jsonify(error="A telegram_id is required."), 400
+
+    # Checked before Keycloak is touched: a second account for a person who
+    # already has one would be an orphan, since telegram_id is unique here and
+    # the link is the reason this endpoint exists.
+    if accounts.user_by_telegram_id(telegram_id) is not None:
+        return jsonify(error="You already have an account here. Sign in instead."), 409
+
+    try:
+        subject, password = admin.create_user(
+            email, display_name=display_name if isinstance(display_name, str) else None
+        )
+    except keycloak_admin.EmailTaken as taken:
+        return jsonify(error=str(taken)), 409
+    except keycloak_admin.AdminError as error:
+        app.logger.warning("Could not create an account: %s", error)
+        return jsonify(error="Couldn't create that account."), 502
+
+    user = accounts.upsert_user(subject, email)
+    accounts.set_telegram_id(user["id"], telegram_id)
+    app.logger.info("Account created for telegram id %s", telegram_id)
+
+    return (
+        jsonify(
+            username=email,
+            temporary_password=password,
+            sign_in_url=f"{request.url_root.rstrip('/')}/account/",
+        ),
+        201,
+    )
 
 
 # --- Signing in ------------------------------------------------------------
