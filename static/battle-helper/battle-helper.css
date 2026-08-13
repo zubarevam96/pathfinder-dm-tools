@@ -44,11 +44,76 @@
   white-space: nowrap;
 }
 
-/* No margin-left of its own: the sync button beside it already claimed the
+/* No margin-left of their own: the sync button beside them already claimed the
    gap, and a second auto margin would split the space between them instead. */
-.battle-account-btn {
+.battle-account-btn,
+.battle-tell-btn {
   font-size: 0.85rem;
   white-space: nowrap;
+}
+
+/* The dialog reuses .sync-status / .sync-hint / .sync-body from style.css --
+   one visual language for "talking to the bot", since that is what both
+   dialogs do. Only the message form itself is new. */
+.tell-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* `dialog label` is display:block with a bottom margin, written for a stacked
+   form of single-line fields. These carry their own caption above the control. */
+.tell-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0;
+}
+
+.tell-field span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* style.css styles `dialog input, dialog select` and a textarea is neither, so
+   every property that rule sets is repeated here — otherwise the message box
+   sits at its own default width, in its own font, beside a select it is meant
+   to line up with. Only `resize` is this element's own. */
+.tell-form textarea {
+  width: 100%;
+  padding: 0.5rem;
+  font-family: inherit;
+  font-size: 1rem;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
+
+.tell-form textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.tell-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+/* Empty until the message is nearly at the cap, so the row keeps its height
+   either way and the Send button doesn't move when the counter appears. */
+.tell-count {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-height: 1rem;
 }
 
 .battle-header .app-title {

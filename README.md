@@ -71,6 +71,32 @@ This replaced a Google Drive backup, which is gone. If you set one up, the
 OAuth client in Google Cloud Console is now unused and can be deleted; the
 site clears what it stored in the browser by itself.
 
+## Telling the table (battle helper)
+
+The 💬 button in the battle helper's header sends a line into a campaign's
+Telegram chats — "round 3, Vex is up" — without leaving the fight. It uses the
+same pairing as ⇅ Sync, so a browser that can sync can already do this; one
+that isn't paired is told to pair rather than offered a second way to.
+
+You pick a **table**, not a chat. A campaign can answer in several chats and
+topics, and the bot delivers to all of them, which is how everything else it
+announces already works. Tables with no chat linked are listed but can't be
+posted to, and say so.
+
+Two things are worth knowing before using it:
+
+- **Every message carries your name**, because it arrives in the bot's voice
+  and an unattributed message there would borrow the bot's authority.
+- **What you type is text, never markup.** It's escaped before sending, so a
+  link or a @handle in the box arrives as the characters you typed.
+
+Anyone at the table can send, not only the DM — they can all already talk in
+that chat. Somebody who is *not* at the table gets the same answer as for a
+campaign that doesn't exist. Ten messages a minute per browser.
+
+The bot needs to be running with `WEB_ENABLED=true`, as for sync; an API built
+without a Telegram connection answers 503 here and serves everything else.
+
 ## Accounts (Keycloak)
 
 The 👤 button is a second, separate way in — an account on this site, for

@@ -13,6 +13,7 @@
       <a class="sidebar-link" href="../">&larr; Pathfinder DM Tools</a>
       <h1 class="app-title">Battle Helper</h1>
       <button type="button" id="sync-btn" class="battle-sync-btn" title="Campaign sync">&#8645; Sync</button>
+      <button type="button" id="tell-btn" class="battle-tell-btn" title="Send a message to a campaign's Telegram chat">&#128172; Tell the table</button>
       <button type="button" id="account-btn" class="battle-account-btn" title="Account" hidden>&#128100; Account</button>
     </header>
 
@@ -409,6 +410,10 @@
   <!-- Syncs both stores, so it lives on both pages. Self-contained: it reaches
        localStorage by key and nothing here calls into it. -->
   <script src="../railway-sync.js"></script>
+  <!-- This page only: telling the table where the fight is up to is a battle
+       thing. Self-contained the same way, and it reads the pairing the file
+       above writes without either one knowing about the other. -->
+  <script src="telegram-message.js"></script>
   <script src="../account.js"></script>
 </body>
 </html>

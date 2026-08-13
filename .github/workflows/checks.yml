@@ -34,5 +34,6 @@ jobs:
           node --check static/account.js
           node --check static/account/account-page.js
           node --check static/battle-helper/battle-helper.js
+          node --check static/battle-helper/telegram-message.js
       - name: Check the Keycloak realm import is valid JSON
         run: python -m json.tool keycloak/realm-pathfinder.json > /dev/null

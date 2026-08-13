@@ -118,6 +118,8 @@ static/
   railway-sync.js               Telegram-identified sync with the bot
   account.js                    Signed-in account: state, backup and restore
   account/                      The personal info page
+  battle-helper/
+    telegram-message.js         Sends a line into a campaign's Telegram chats
 .github/workflows/checks.yml    CI: syntax checks only. It deploys nothing
 data/                           Legacy server-side storage (gitignored; see below)
 ```
@@ -201,6 +203,20 @@ saved via `loadStore()`/`persist()` in `app.js`. Shape:
   - It is self-contained (no file imports from it, it imports from none) and
     reaches storage by key exactly as the two pages do, which is what makes it
     impossible for it to change how either behaves.
+- **`static/battle-helper/telegram-message.js` is the third file that talks to
+  the bot**, and the only one that makes it *speak*: 💬 in the battle helper
+  header sends a line into a campaign's Telegram chats. It reads the pairing
+  `railway-sync.js` writes — the same two localStorage keys — and deliberately
+  does **not** import from it. That file's isolation is load-bearing, and a
+  consumer would end it; thirty lines of duplicated fetch plumbing is the
+  cheaper half of that trade. Nothing pairs from here either: one dialog pairs
+  a browser, and an unpaired one is pointed at ⇅ Sync rather than offered a
+  second form to keep in step.
+  The rules that matter live in the bot (`web/messages.py`), not here: a
+  **campaign** is addressed rather than a chat id the browser chose, a campaign
+  you aren't a member of is 404, every message carries the sender's name, and
+  the text is escaped before it reaches Telegram. A client-side check would be
+  a courtesy; these are the authorization.
 - **`static/account.js` is the second exception**, and the two are not rivals.
   It stores whole documents against an account of this site's own, in the
   SQLite file `accounts.py` owns. Backup and restore, not a merge: unlike the
