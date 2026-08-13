@@ -64,9 +64,16 @@
       "serviceAccountsEnabled": true,
 
       "redirectUris": [],
-      "webOrigins": [],
+      "webOrigins": []
+    }
+  ],
 
-      "serviceAccountClientRoles": {
+  "users": [
+    {
+      "username": "service-account-pathfinder-bot",
+      "enabled": true,
+      "serviceAccountClientId": "pathfinder-bot",
+      "clientRoles": {
         "realm-management": ["manage-users"]
       }
     }

@@ -12,7 +12,11 @@ ENV PYTHONUNBUFFERED=1 \
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py accounts.py oidc.py monsters.py ./
+# By name, not by wildcard, so nothing unexpected ends up in the image -- which
+# means a new module at the top level has to be added HERE as well as imported,
+# or the build succeeds and the workers fail to boot on it. That has now cost
+# one production outage (keycloak_admin.py, ModuleNotFoundError at app.py:51).
+COPY app.py accounts.py oidc.py monsters.py keycloak_admin.py ./
 COPY static ./static
 
 # Railway injects PORT and routes the generated domain at it. The default is
