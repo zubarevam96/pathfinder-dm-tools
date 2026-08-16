@@ -8,17 +8,16 @@
 // imported by nothing, and a pull reloads afterwards because both pages read
 // storage once at startup and hold live state in module-level variables.
 //
-// The two answer different questions. railway-sync.js asks "which Telegram
-// person is this", and its answer unifies a character with one the bot imported.
-// This asks "which account on this site is this", which is the way in for
-// somebody who has never spoken to the bot. They will meet at users.telegram_id
-// when something can prove they are the same person; until then, keeping both
-// is the honest arrangement.
+// Both now start from the same place — a /link code from the bot — and still do
+// different things with it. railway-sync.js redeems the code *in the browser*
+// and keeps the token, because it goes on to call the bot's API as you. This
+// one hands the code to our own server, which redeems it out of sight and keeps
+// nothing here but a cookie the page cannot read.
 //
-// **There is no token in this file, and no password.** The server runs the
-// OpenID Connect flow and hands back an HttpOnly cookie the page cannot read,
-// so there is nothing here for a script on this page to steal. Passwords are
-// only ever typed on Keycloak's own origin.
+// **There is no token in this file, and no password.** Not "no password yet" —
+// the site has no password to have. Identity is a Telegram account the bot
+// vouched for, and the only secret that ever reaches this page is an
+// eight-character code that stops working the moment it is spent.
 //
 // Storage here is backup and restore of whole documents, not the name-by-name
 // merge railway-sync.js does. The account store is this browser's copy kept
@@ -173,20 +172,44 @@
 
     if (!account) {
       body.innerHTML = `
-        <div class="account-actions">
-          <a class="account-button" href="/auth/login?next=${encodeURIComponent(location.pathname)}">Sign in</a>
-        </div>
         <p class="account-hint">
-          Accounts are created by the site's administrator — there is no public
-          sign-up. Signing in gives this browser's characters and battles
-          somewhere to live that isn't this browser.
+          Send <strong>/link</strong> to the bot in a private Telegram chat. It
+          replies with an eight-character code, good for five minutes.
+        </p>
+        <form id="account-pair-form" class="account-field">
+          <input type="text" id="account-code-input" placeholder="ABCD1234" maxlength="16"
+                 autocomplete="off" spellcheck="false" />
+          <button type="submit">Sign in</button>
+        </form>
+        <p class="account-hint">
+          Signing in gives this browser's characters and battles somewhere to
+          live that isn't this browser. Your Telegram account has to be on this
+          site's list — ask the DM if it isn't.
         </p>
       `;
+      body.querySelector("#account-pair-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const input = body.querySelector("#account-code-input");
+        const code = input.value.trim();
+        if (!code) return;
+        run(async () => {
+          setStatus("Signing in…");
+          await api("/auth/pair", { method: "POST", body: JSON.stringify({ code }) });
+          // Re-read rather than trusting the response: this is the same call
+          // every page makes on load, so whatever it says here is exactly what
+          // they will say, and a disagreement would show up now rather than as
+          // a button in the wrong state on the next page.
+          await loadAccount();
+          renderBody();
+          refreshButton();
+          setStatus(`Signed in as ${who(account)}.`, "ok");
+        });
+      });
       return;
     }
 
     body.innerHTML = `
-      <p class="account-who">Signed in as <strong>${escapeHtml(account.email ?? "an account with no address")}</strong></p>
+      <p class="account-who">Signed in as <strong>${escapeHtml(who(account))}</strong></p>
       <div class="account-actions">
         <button type="button" id="account-push">Send to account</button>
         <button type="button" id="account-pull">Get from account</button>
@@ -220,10 +243,22 @@
 
     body.querySelector("#account-signout").addEventListener("click", () => run(async () => {
       const result = await api("/auth/logout", { method: "POST" });
-      // The server has already dropped the session; this only tells Keycloak,
-      // so a failure to arrive there is not a failure to sign out here.
+      // Only this browser. The token it was holding is dropped rather than
+      // revoked at the bot — /sessions in Telegram is where somebody sees every
+      // browser they have paired and picks, and signing out on a laptop should
+      // not quietly sign out the phone as well.
       location.href = result?.next || "/";
     }));
+  }
+
+  // Telegram gives all three of these, any of them optionally: someone with no
+  // handle and no display name is unusual but allowed, and the id is always
+  // there. Falling through to it means this never renders "signed in as".
+  function who(user) {
+    if (!user) return "signed out";
+    if (user.display_name) return user.display_name;
+    if (user.username) return `@${user.username}`;
+    return `Telegram ${user.telegram_id}`;
   }
 
   function storedSummary() {
@@ -272,22 +307,7 @@
     // working with no server-side identity behind it.
     button.hidden = !configured;
     button.classList.toggle("connected", Boolean(account));
-    button.title = account ? `Account — ${account.email ?? "signed in"}` : "Account — signed out";
-  }
-
-  // A failed sign-in comes back as a query parameter on a top-level navigation,
-  // because the callback is a redirect and has nowhere else to say it.
-  function showRedirectError() {
-    const params = new URLSearchParams(location.search);
-    const message = params.get("auth_error");
-    if (!message) return;
-    params.delete("auth_error");
-    const query = params.toString();
-    history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
-    buildDialog();
-    renderBody();
-    setStatus(message, "error");
-    dialog.showModal();
+    button.title = account ? `Account — ${who(account)}` : "Account — signed out";
   }
 
   async function init() {
@@ -296,7 +316,6 @@
     buildDialog();
     await loadAccount();
     refreshButton();
-    showRedirectError();
     button.addEventListener("click", () => {
       setStatus("");
       renderBody();

@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Byte-compile the Python modules
-        run: python -m py_compile app.py accounts.py oidc.py monsters.py
+        run: python -m py_compile app.py accounts.py monsters.py
       - name: Check frontend JS syntax
         run: |
           node --check static/pf2e-math.js
@@ -35,5 +35,3 @@ jobs:
           node --check static/account/account-page.js
           node --check static/battle-helper/battle-helper.js
           node --check static/battle-helper/telegram-message.js
-      - name: Check the Keycloak realm import is valid JSON
-        run: python -m json.tool keycloak/realm-pathfinder.json > /dev/null

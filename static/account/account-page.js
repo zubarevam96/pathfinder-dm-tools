@@ -7,8 +7,9 @@
 // to stay small and quiet, while this one only exists at /account/ and can
 // afford to be a page. Neither imports the other; both talk to the same API.
 //
-// Nothing here handles a password. "Change password" is a link to the server,
-// which redirects to Keycloak's own form and back — see /auth/password.
+// Nothing here handles a password, because the site has none to handle. Signing
+// in is an eight-character code from the bot, spent by the server — see
+// /auth/pair — and what comes back is a cookie this page cannot read.
 // ---------------------------------------------------------------------------
 
 (() => {
@@ -16,8 +17,8 @@
   const signedOut = document.getElementById("account-signed-out");
   const unconfigured = document.getElementById("account-unconfigured");
   const signedIn = document.getElementById("account-signed-in");
-  const emailForm = document.getElementById("account-email-form");
-  const emailInput = document.getElementById("account-email-input");
+  const pairForm = document.getElementById("account-pair-form");
+  const codeInput = document.getElementById("account-code-input");
   const telegramEl = document.getElementById("account-telegram");
   const storedEl = document.getElementById("account-stored");
   const signOutButton = document.getElementById("account-page-signout");
@@ -74,10 +75,21 @@
   }
 
   function renderAccount(user) {
-    emailInput.value = user.email ?? "";
-    telegramEl.textContent = user.telegram_id ? String(user.telegram_id) : "Not linked";
+    telegramEl.textContent = describe(user);
     renderStored(user.documents);
     show(signedIn);
+  }
+
+  // Name, handle and id are each optional except the last. Showing all three
+  // that exist is deliberate on this page: it is the one place somebody checks
+  // that the account they are signed into is the account the bot knows, and the
+  // id is the only part of that which cannot be renamed out from under them.
+  function describe(user) {
+    const parts = [];
+    if (user.display_name) parts.push(user.display_name);
+    if (user.username) parts.push(`@${user.username}`);
+    parts.push(`id ${user.telegram_id}`);
+    return parts.join(" · ");
   }
 
   async function load() {
@@ -100,21 +112,19 @@
     renderAccount(me.user);
   }
 
-  emailForm.addEventListener("submit", async (event) => {
+  pairForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const email = emailInput.value.trim();
-    if (!email) return;
-    setStatus("Saving…");
-    const button = emailForm.querySelector("button");
+    const code = codeInput.value.trim();
+    if (!code) return;
+    setStatus("Signing in…");
+    const button = pairForm.querySelector("button");
     button.disabled = true;
     try {
-      await api("/api/account/email", {
-        method: "PUT",
-        body: JSON.stringify({ email }),
-      });
-      setStatus("Email updated.", "ok");
-      // Re-read rather than trusting the round trip: the sign-in service may
-      // have normalised the address, and this page should show what it stored.
+      await api("/auth/pair", { method: "POST", body: JSON.stringify({ code }) });
+      codeInput.value = "";
+      setStatus("Signed in.", "ok");
+      // Re-read rather than trusting the round trip, so this page shows the same
+      // answer every other page will get from /api/account/me.
       await load();
     } catch (error) {
       setStatus(error.message, "error");
@@ -133,22 +143,6 @@
       signOutButton.disabled = false;
     }
   });
-
-  // The password change comes back here with kc_action_status in the query.
-  const params = new URLSearchParams(location.search);
-  const action = params.get("kc_action_status");
-  if (action) {
-    setStatus(
-      action === "success" ? "Password changed." : "Password was not changed.",
-      action === "success" ? "ok" : "error"
-    );
-    history.replaceState(null, "", location.pathname);
-  }
-  const authError = params.get("auth_error");
-  if (authError) {
-    setStatus(authError, "error");
-    history.replaceState(null, "", location.pathname);
-  }
 
   load();
 })();

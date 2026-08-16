@@ -19,12 +19,16 @@
     <section id="account-signed-out" class="account-card" hidden>
       <p>You're not signed in.</p>
       <p class="account-hint">
-        Accounts are created by the site's administrator — there is no public
-        sign-up here.
+        Send <strong>/link</strong> to the DM assistant bot in a private Telegram
+        chat. It replies with an eight-character code, good for five minutes.
+        Your Telegram account has to be on this site's list — ask the DM if it
+        isn't.
       </p>
-      <div class="account-actions">
-        <a class="account-button" href="/auth/login?next=%2Faccount%2F">Sign in</a>
-      </div>
+      <form id="account-pair-form" class="account-field">
+        <input type="text" id="account-code-input" placeholder="ABCD1234" maxlength="16"
+               autocomplete="off" spellcheck="false" />
+        <button type="submit">Sign in</button>
+      </form>
     </section>
 
     <section id="account-unconfigured" class="account-card" hidden>
@@ -37,37 +41,17 @@
 
     <div id="account-signed-in" hidden>
       <section class="account-card">
-        <h2>Email</h2>
-        <p class="account-hint">
-          Used to sign in, and the only way to reset a password. Changing it here
-          changes it in the sign-in service too.
-        </p>
-        <form id="account-email-form" class="account-field">
-          <input type="email" id="account-email-input" autocomplete="email" required />
-          <button type="submit">Save</button>
-        </form>
-      </section>
-
-      <section class="account-card">
-        <h2>Password</h2>
-        <p class="account-hint">
-          Set on the sign-in service's own page, which is the only place a
-          password is ever typed — this site never sees one.
-        </p>
-        <div class="account-actions">
-          <a class="account-button" href="/auth/password">Change password</a>
-        </div>
-      </section>
-
-      <section class="account-card">
         <h2>Telegram</h2>
-        <p class="account-field-value" id="account-telegram">Not linked</p>
+        <p class="account-field-value" id="account-telegram">—</p>
         <p class="account-hint">
-          <strong>Not built yet.</strong> The DM assistant bot keys everything it
-          stores on a Telegram account, so linking one here is what would let a
-          character imported in chat and one opened here be the same character.
-          Until something can prove the two are the same person, this stays
-          empty rather than guessing.
+          This is who you are here. The DM assistant bot keys everything it
+          stores on a Telegram account, so a character imported in a chat and one
+          opened here are the same character because they are the same person.
+        </p>
+        <p class="account-hint">
+          There is no password and no email on this site — nothing to change, and
+          nothing to lose. The name and handle above are whatever Telegram last
+          told the bot; edit them in Telegram and they follow you here.
         </p>
       </section>
 

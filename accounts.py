@@ -1,24 +1,30 @@
-"""The account store: who has signed in, and what they asked us to keep.
+"""The account store: who may use this site, and what they asked us to keep.
 
 SQLite, for the same reason the bot uses it: a tabletop group is a handful of
 rows, and a file on the volume this service already mounts costs nothing to run.
-Keycloak has Postgres because Keycloak insists; this does not.
 
-**Keycloak owns authentication, this owns the profile.** The split matters when
-deciding where a new field goes:
+**The bot owns identity; this owns access.** The split is what decides where a
+new field goes:
 
-- Keycloak holds the password, the email as a *login credential*, and the
-  session. Nothing here can read or set a password, by construction.
-- This holds the row the application hangs off — ``telegram_id`` above all,
-  which is the one field that has to line up with the bot's Telegram-keyed
-  database later. Putting it in a Keycloak user attribute would have meant
-  declaring it in Keycloak's user-profile config and reading it back out
-  through a second API, to end up with the same value in a worse place.
+- The bot knows *who* somebody is. Telegram proved it to them, and spending a
+  ``/link`` code at ``POST /auth/pair`` is how that proof reaches a browser.
+  Nothing in this file can establish who anybody is, by construction.
+- This knows *whether they may use this site* — the ``allowed`` flag — and holds
+  the row the application hangs its documents off.
 
-``email`` is therefore a *mirror*: Keycloak is canonical, and this copy is
-refreshed from the ID token on every sign-in and after every change. Read it
-for display; never treat it as the identity. The identity is ``subject``, the
-Keycloak ``sub`` claim, which never changes even when the address does.
+``telegram_id`` is the identity, and it is the same integer the bot keys every
+one of its own tables on. That is the point: a character imported in a chat and
+one opened here are the same character because they are the same person, and
+this column is where that stops being a coincidence.
+
+**It is never taken from the browser.** The only writer is a pairing code
+redeemed *server side*, in the one exchange where the bot is the thing saying
+who this is. A telegram_id a page claimed would be somebody else's characters
+handed over on request.
+
+``display_name`` and ``username`` mirror whatever Telegram last told the bot.
+Show them; never key on them. People rename themselves and give up handles, and
+the id never changes.
 """
 
 from __future__ import annotations
@@ -39,24 +45,37 @@ DOCUMENT_NAMES = frozenset({"characters", "battles"})
 #: Long enough that guessing is not a strategy: 32 bytes, URL-safe.
 SESSION_ID_BYTES = 32
 
+#: Bumped whenever the tables below change shape, and a bump **drops and
+#: rebuilds** rather than migrating -- see :meth:`Accounts._apply_schema`.
+#:
+#: That is a deliberate trade, not laziness. Everything here is either a copy of
+#: data the browser holds canonically (``documents``) or something one ``/link``
+#: code rebuilds in ten seconds (``users``, ``sessions``). Against that, a
+#: migration is more code than the data is worth and strictly more ways to be
+#: subtly wrong. If this ever stores something the browser cannot recreate, that
+#: reasoning expires and this needs to become a real migration.
+#:
+#: Version 2 dropped Keycloak: ``users`` was keyed on the OIDC ``sub`` claim
+#: with an email beside it, and is now keyed on ``telegram_id``.
+SCHEMA_VERSION = 2
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
-    id          INTEGER PRIMARY KEY,
-    subject     TEXT    NOT NULL UNIQUE,
-    email       TEXT,
-    telegram_id INTEGER UNIQUE,
-    created_at  REAL    NOT NULL,
-    updated_at  REAL    NOT NULL
+    id           INTEGER PRIMARY KEY,
+    telegram_id  INTEGER NOT NULL UNIQUE,
+    display_name TEXT,
+    username     TEXT,
+    allowed      INTEGER NOT NULL DEFAULT 1,
+    created_at   REAL    NOT NULL,
+    updated_at   REAL    NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
-    id                TEXT    PRIMARY KEY,
-    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    access_token      TEXT,
-    refresh_token     TEXT,
-    access_expires_at REAL    NOT NULL DEFAULT 0,
-    created_at        REAL    NOT NULL,
-    seen_at           REAL    NOT NULL
+    id         TEXT    PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    bot_token  TEXT,
+    created_at REAL    NOT NULL,
+    seen_at    REAL    NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
@@ -68,6 +87,13 @@ CREATE TABLE IF NOT EXISTS documents (
     updated_at REAL    NOT NULL,
     PRIMARY KEY (user_id, name)
 );
+"""
+
+#: Dropped in dependency order, so the foreign keys above never refuse.
+DROP = """
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS sessions;
+DROP TABLE IF EXISTS users;
 """
 
 
@@ -87,7 +113,26 @@ class Accounts:
             # WAL so a reader never blocks on the writer. The site polls nothing,
             # but a push and a page load can still overlap.
             connection.execute("PRAGMA journal_mode = WAL")
-            connection.executescript(SCHEMA)
+            self._apply_schema(connection)
+
+    @staticmethod
+    def _apply_schema(connection: sqlite3.Connection) -> None:
+        """Bring the file up to :data:`SCHEMA_VERSION`, rebuilding if it is behind.
+
+        ``user_version`` is SQLite's own four bytes of header set aside for
+        exactly this and costs no table to read. A fresh file reports 0, so a
+        first run takes the same path as an upgrade — the drops are all
+        ``IF EXISTS`` and do nothing on an empty file, which means there is one
+        code path here rather than one that runs and one that only ever runs in
+        production.
+        """
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        if version < SCHEMA_VERSION:
+            connection.executescript(DROP)
+        connection.executescript(SCHEMA)
+        # Not a parameter: PRAGMA does not take one. Safe because the value is
+        # this module's own integer constant and never comes from outside.
+        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     @contextmanager
     def _connect(self):
@@ -104,28 +149,6 @@ class Accounts:
 
     # -- users ---------------------------------------------------------------
 
-    def upsert_user(self, subject: str, email: str | None) -> sqlite3.Row:
-        """The row for this Keycloak subject, created on first sign-in.
-
-        ``telegram_id`` is deliberately untouched: it is not Keycloak's to
-        know, and a re-sign-in must never clear a link someone has made.
-        """
-        now = time.time()
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO users (subject, email, created_at, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(subject) DO UPDATE SET
-                    email = excluded.email,
-                    updated_at = excluded.updated_at
-                """,
-                (subject, email, now, now),
-            )
-            return connection.execute(
-                "SELECT * FROM users WHERE subject = ?", (subject,)
-            ).fetchone()
-
     def user(self, user_id: int) -> sqlite3.Row | None:
         with self._connect() as connection:
             return connection.execute(
@@ -133,79 +156,113 @@ class Accounts:
             ).fetchone()
 
     def user_by_telegram_id(self, telegram_id: int) -> sqlite3.Row | None:
-        """The account linked to a Telegram person, if one is.
+        """The row for a Telegram person, or None if they have never been here.
 
-        Asked before an account is made for somebody: the column is UNIQUE, so
-        a second one could not be linked, and an account that the bot can never
-        reach again is worse than being told you already have one.
+        None is not the same as "not allowed": the whitelist is consulted by the
+        caller, which also has an environment variable to check. This only says
+        whether a row exists.
         """
         with self._connect() as connection:
             return connection.execute(
                 "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
             ).fetchone()
 
-    def set_email(self, user_id: int, email: str | None) -> None:
-        """Mirror an address Keycloak has already accepted. Not a change itself."""
-        with self._connect() as connection:
-            connection.execute(
-                "UPDATE users SET email = ?, updated_at = ? WHERE id = ?",
-                (email, time.time(), user_id),
-            )
+    def touch_user(
+        self, telegram_id: int, display_name: str | None, username: str | None
+    ) -> sqlite3.Row:
+        """The row for this person, created on first pairing, names refreshed.
 
-    def set_telegram_id(self, user_id: int, telegram_id: int | None) -> None:
-        """The join to the bot's database, whose every table keys on ``persons.telegram_id``.
+        ``allowed`` is deliberately **not** in the UPDATE. This runs on every
+        sign-in, and letting it write that column would mean each pairing quietly
+        re-granted access that may have been taken away — the revocation would
+        last exactly until its owner tried again.
 
-        Written by exactly one caller: ``/internal/accounts``, where the bot
-        asks for an account on behalf of somebody it has already identified in
-        a chat. That is what proves the person here and the person in Telegram
-        are the same, and it happens in the same breath as the account being
-        created — an account linked "later" is one that belongs to nobody in
-        between, and later might never come.
+        A row created here defaults to allowed, which is safe only because the
+        caller has already decided this person may be here. Nothing calls this
+        before that check.
         """
+        now = time.time()
         with self._connect() as connection:
             connection.execute(
-                "UPDATE users SET telegram_id = ?, updated_at = ? WHERE id = ?",
-                (telegram_id, time.time(), user_id),
+                """
+                INSERT INTO users (telegram_id, display_name, username, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(telegram_id) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    username     = excluded.username,
+                    updated_at   = excluded.updated_at
+                """,
+                (telegram_id, display_name, username, now, now),
             )
+            return connection.execute(
+                "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
+            ).fetchone()
+
+    def set_allowed(self, telegram_id: int, allowed: bool) -> sqlite3.Row:
+        """Put somebody on the list, or take them off, without touching their data.
+
+        A flag rather than a DELETE because ``documents`` cascades: removing
+        access should not also throw away the characters somebody backed up, and
+        the day a revocation turns out to be a mistake is the day that matters.
+        """
+        now = time.time()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO users (telegram_id, allowed, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(telegram_id) DO UPDATE SET
+                    allowed    = excluded.allowed,
+                    updated_at = excluded.updated_at
+                """,
+                (telegram_id, 1 if allowed else 0, now, now),
+            )
+            return connection.execute(
+                "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
+            ).fetchone()
 
     # -- sessions ------------------------------------------------------------
 
-    def create_session(
-        self,
-        user_id: int,
-        access_token: str | None,
-        refresh_token: str | None,
-        access_expires_at: float,
-    ) -> str:
+    def create_session(self, user_id: int, bot_token: str | None) -> str:
+        """Start a signed-in session and return the id the cookie will carry.
+
+        ``bot_token`` is this browser's token for the bot's API, kept here rather
+        than handed to the page. The page never needs it — every call it makes
+        goes through this service — and a token in ``localStorage`` is readable
+        by any script that ever gets onto the page, permanently.
+        """
         session_id = secrets.token_urlsafe(SESSION_ID_BYTES)
         now = time.time()
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO sessions
-                    (id, user_id, access_token, refresh_token,
-                     access_expires_at, created_at, seen_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO sessions (id, user_id, bot_token, created_at, seen_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (
-                    session_id,
-                    user_id,
-                    access_token,
-                    refresh_token,
-                    access_expires_at,
-                    now,
-                    now,
-                ),
+                (session_id, user_id, bot_token, now, now),
             )
         return session_id
 
     def session(self, session_id: str) -> sqlite3.Row | None:
+        """The session behind a cookie, or None if it is over.
+
+        ``users.allowed = 1`` is part of the lookup rather than something the
+        caller checks afterwards. Taking somebody off the whitelist has to end
+        the sessions they already have — otherwise a revocation does nothing at
+        all until an open browser happens to sign out — and the caller reads this
+        on every request precisely so that takes effect on the next one.
+
+        Revoked and expired are answered identically, and by design: they call
+        for the same thing from whoever is looking at the screen, and telling a
+        stranger which of the two they hit says more than it needs to.
+        """
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT sessions.*, users.subject, users.email, users.telegram_id
+                SELECT sessions.*, users.telegram_id, users.display_name,
+                       users.username, users.allowed
                 FROM sessions JOIN users ON users.id = sessions.user_id
-                WHERE sessions.id = ?
+                WHERE sessions.id = ? AND users.allowed = 1
                 """,
                 (session_id,),
             ).fetchone()
@@ -216,22 +273,30 @@ class Accounts:
                 )
             return row
 
-    def refresh_session(
-        self, session_id: str, access_token: str, refresh_token: str | None, expires_at: float
-    ) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                UPDATE sessions
-                SET access_token = ?, refresh_token = ?, access_expires_at = ?
-                WHERE id = ?
-                """,
-                (access_token, refresh_token, expires_at, session_id),
-            )
-
     def delete_session(self, session_id: str) -> None:
         with self._connect() as connection:
             connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+    def delete_sessions_for(self, telegram_id: int) -> int:
+        """End every session this person has, and return how many there were.
+
+        Called when somebody is taken off the whitelist. The join filter in
+        :meth:`session` has already made those rows unusable, so this is not what
+        enforces the revocation — it is what stops the rows *outliving* it. Each
+        one holds a bot token, and leaving a revoked person's credentials in this
+        database indefinitely is the kind of thing that is nobody's bug until it
+        is everybody's.
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                DELETE FROM sessions WHERE user_id IN (
+                    SELECT id FROM users WHERE telegram_id = ?
+                )
+                """,
+                (telegram_id,),
+            )
+            return cursor.rowcount
 
     # -- documents -----------------------------------------------------------
 

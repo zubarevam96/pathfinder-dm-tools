@@ -2,63 +2,68 @@
 
 Character/group data still lives in the browser (localStorage), and that is
 still the source of truth every render path reads. What this server adds is
-somewhere to *put* a copy — two of them, for two different ideas of who you are:
+somewhere to *put* a copy, and a way to know whose copy it is:
 
-- ``/sync/*`` forwards to the DM assistant bot, where identity is a Telegram
-  account and a pairing code. Unchanged, and still the path that unifies a
-  character imported in chat with one opened here.
-- ``/auth/*`` and ``/api/account/*`` are an account of this site's own, backed
-  by Keycloak for authentication and by ``accounts.py`` for everything else.
-- ``/internal/accounts`` is where the two meet. The bot asks it to create an
-  account for somebody it has already identified in a chat, and it writes the
-  Keycloak user and ``users.telegram_id`` in one operation — so an account made
-  this way is linked from the moment it exists, rather than waiting for a first
-  sign-in that might never come.
+- ``/sync/*`` forwards to the DM assistant bot. The browser carries its own
+  bearer token there and this hop reads nothing.
+- ``/auth/pair`` spends a ``/link`` code *server side* and turns it into an
+  HttpOnly session cookie. This is how somebody signs in.
+- ``/api/account/*`` is what that cookie unlocks: a durable copy of this
+  browser's characters and battles.
+- ``/internal/allow`` is where the bot puts somebody on the whitelist.
 
-Two identity systems is a cost, not a design goal. It buys the site a way in for
-someone who has never spoken to the bot, and it is meant to end: registering
-through the bot is the first half of that ending.
+**There is one identity here, and it belongs to the bot.** A Telegram account
+proves who you are, the bot is what checked, and a pairing code is how that
+crosses into a browser. This service decides only *whether you may use it* —
+``users.allowed`` — which is authorization, not identity, and is the one
+question a site-specific store is the right place to answer.
+
+There used to be a second identity system: a Keycloak realm, its Postgres, an
+OIDC flow, and an account minted by the bot whose temporary password travelled
+back through a Telegram chat for somebody to retype. It answered the same
+question the pairing code already answered, and it did so through a password in
+a chat log. Removing it deleted two Railway services, ~500 lines, and the last
+password this project could have leaked.
 
 Serving all of it from one origin is why this runs in production at all rather
 than only in local dev. The site and the bot's API used to be two origins —
 GitHub Pages and a Railway domain — which meant a CORS allowlist, a public API,
 and the site having to be told an address. Here the browser only ever talks to
-this service; the bot is reached over Railway's private network, and Keycloak is
-only ever reached by *this server* or by a top-level redirect, never by script.
+this service, and the bot is reached over Railway's private network. That is
+also what keeps sign-in cheap: the server that sets the cookie is the server
+that served the page, so there is no redirect protocol to run and no token for
+a script on the page to find.
 """
 
 import json
 import os
 import re
 import secrets
-import time
 from functools import wraps
 from pathlib import Path
-from urllib.parse import quote
 
 import requests
 from flask import (
     Flask,
     Response,
     jsonify,
-    redirect,
     request,
     send_from_directory,
     session,
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-import keycloak_admin
 import monsters
-import oidc
 from accounts import DOCUMENT_NAMES, Accounts
 
 app = Flask(__name__, static_folder="static", static_url_path="")
 
 # Railway terminates TLS at its edge and forwards to this container over plain
-# HTTP, so Flask sees "http" and builds an http:// callback URL — which is not
-# the https:// one registered in Keycloak, and the login dies at the very end
-# with "Invalid parameter: redirect_uri".
+# HTTP, so Flask sees "http" and every URL it builds for itself comes out
+# http://. That used to break sign-in outright, when the callback had to match a
+# redirect_uri registered elsewhere. Nothing fails that loudly now — the URL this
+# builds is the sign-in address handed to the bot, so without this somebody gets
+# sent an http:// link that works and quietly downgrades them on the way in.
 #
 # Only the scheme is taken from the proxy. The Host header already arrives as
 # the real public domain, and trusting a forwarded host would let a spoofed
@@ -98,7 +103,15 @@ PUBLIC_MONSTER_DATA_DIR = Path(app.static_folder) / "monster-data"
 # The bot service. On Railway this is its private address —
 # <service>.railway.internal — which is reachable only from inside the project,
 # so the bot needs no public domain. Locally it's the bot's own dev port.
-BOT_API_URL = (os.environ.get("BOT_API_URL") or "http://127.0.0.1:8080").rstrip("/")
+#
+# Unset and set-to-empty are deliberately different, which `or` would have
+# flattened: unset means "nobody said, assume the dev port", and empty means
+# "this deployment has no bot" — which turns off sign-in and /sync/* rather than
+# pointing them at a port with nothing behind it.
+_BOT_API_URL = os.environ.get("BOT_API_URL")
+BOT_API_URL = (
+    "http://127.0.0.1:8080" if _BOT_API_URL is None else _BOT_API_URL
+).rstrip("/")
 PROXY_TIMEOUT_SECONDS = 15
 
 # Set per-connection by whichever server is speaking, and meaningless to pass
@@ -127,25 +140,35 @@ def _flag(name, default):
 
 # --- Accounts --------------------------------------------------------------
 #
-# All three of these are absent in local dev by default, and the site is built
-# to be entirely usable that way: no sign-in button, no account page, and every
-# /api/account route answering 503 rather than 500. The app predates having any
-# server-side identity and must not start requiring one.
-KEYCLOAK_ISSUER = (os.environ.get("KEYCLOAK_ISSUER") or "").rstrip("/")
-KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID") or "pathfinder-web"
-KEYCLOAK_CLIENT_SECRET = os.environ.get("KEYCLOAK_CLIENT_SECRET") or ""
+# The site is built to be entirely usable with none of this configured: no
+# sign-in button, no account page, and every /api/account route answering 503
+# rather than 500. The app predates having any server-side identity and must not
+# start requiring one.
 
-auth = oidc.Client(KEYCLOAK_ISSUER, KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET)
 
-# A second client, for the other direction: making an account nobody has signed
-# into yet. Its service account holds manage-users and nothing else, so a leak
-# of the login client's secret cannot also mint users, and vice versa.
-KEYCLOAK_BOT_CLIENT_ID = os.environ.get("KEYCLOAK_BOT_CLIENT_ID") or "pathfinder-bot"
-KEYCLOAK_BOT_CLIENT_SECRET = os.environ.get("KEYCLOAK_BOT_CLIENT_SECRET") or ""
+def _telegram_ids(raw):
+    """Parse ``ALLOWED_TELEGRAM_IDS``, ignoring anything that isn't an id.
 
-admin = keycloak_admin.Admin(
-    KEYCLOAK_ISSUER, KEYCLOAK_BOT_CLIENT_ID, KEYCLOAK_BOT_CLIENT_SECRET
-)
+    Silently, and on purpose. This is read once at import, and a stray comma or
+    a trailing newline from however the variable got pasted in must not stop the
+    site booting — the cost of being strict is a deploy that dies on start, and
+    the cost of being lax is one person having to ask why they can't sign in.
+    """
+    ids = set()
+    for piece in re.split(r"[\s,]+", raw or ""):
+        if piece.lstrip("-").isdigit():
+            ids.add(int(piece))
+    return frozenset(ids)
+
+
+#: The whitelist's seed. Anyone here may sign in whether or not they have a row
+#: yet, which is what makes the very first sign-in possible on a fresh database
+#: — the bot cannot vouch for anybody until somebody is already inside.
+#:
+#: Beyond that, membership lives in ``users.allowed``. Two sources rather than
+#: one because they answer different needs: this one survives the database being
+#: wiped, and the table can be changed without a redeploy.
+ALLOWED_TELEGRAM_IDS = _telegram_ids(os.environ.get("ALLOWED_TELEGRAM_IDS"))
 
 # What makes /internal/* answer the bot rather than whoever reaches it. Unset
 # means that route is off entirely -- an internal endpoint with no secret is an
@@ -177,9 +200,11 @@ monster_cache = monsters.Cache(MONSTER_CACHE_PATH)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    # Lax, not Strict: the sign-in flow comes back as a top-level navigation
-    # from Keycloak's origin, and Strict would withhold the cookie on exactly
-    # that request — the callback would arrive with no idea what it had started.
+    # Lax, not Strict. Sign-in no longer leaves this origin, so Strict would now
+    # work — but people arrive here by tapping a link the bot sent them in
+    # Telegram, and Strict withholds the cookie on a navigation from another
+    # site. They would land signed out, and reloading would fix it, which is a
+    # bug report rather than a behaviour.
     SESSION_COOKIE_SAMESITE="Lax",
     # Secure everywhere except a plain-HTTP dev run, where setting it would
     # mean the cookie is never stored and sign-in silently never completes.
@@ -198,17 +223,6 @@ app.config.update(
         ),
     ),
 )
-
-#: Where the browser comes back to. Registered in Keycloak, so it has to match
-#: to the character; derived from the request rather than configured so that
-#: localhost and 127.0.0.1 each get their own (they are different origins to
-#: both Keycloak and the cookie jar).
-CALLBACK_PATH = "/auth/callback"
-
-#: Session keys for one in-flight sign-in. Cleared the moment it completes, so a
-#: replayed callback has nothing left to match.
-PENDING_KEYS = ("oidc_state", "oidc_nonce", "oidc_verifier", "oidc_return")
-
 
 def client_address():
     """The browser's address, as well as this hop can know it.
@@ -335,6 +349,9 @@ def sync_proxy(subpath):
     There is no CORS handling because there is nothing to handle: the browser
     is talking to its own origin, and this hop is server to server.
     """
+    if not BOT_API_URL:
+        return jsonify(error="This site has no bot service configured."), 503
+
     headers = {}
     authorization = request.headers.get("Authorization")
     if authorization:
@@ -377,21 +394,24 @@ def sync_proxy(subpath):
     return Response(upstream.content, status=upstream.status_code, headers=passed)
 
 
-@app.post("/internal/accounts")
-def internal_create_account():
-    """Make an account for someone the bot has already identified.
+@app.post("/internal/allow")
+def internal_allow():
+    """Put somebody on the whitelist, at the bot's request.
 
-    This is the other direction from ``/sync/*``: the bot asks, and this
-    service — which owns the realm and the ``users`` row — does both halves of
-    the job at once. Both halves is the whole point. An account created here
-    and linked later is an account that belongs to nobody in the meantime, and
-    the row it would be linked to is only written at first sign-in, so "later"
-    might never come.
+    This is the other direction from ``/sync/*``: the bot has already
+    established who it is talking to in a chat, and asks this service — which
+    owns the question of who may use the *site* — to let them in.
 
-    ``telegram_id`` is *not* taken as a claim about who is asking — it is taken
-    as a claim by the bot, which is the only thing that can prove it, and the
-    shared secret is what makes it the bot. Nothing about this endpoint is safe
-    without that secret, so it is off entirely when none is set.
+    ``telegram_id`` is *not* taken as a claim about who is asking. It is taken
+    as a claim by the bot, which is the only thing here that can prove it, and
+    the shared secret is what makes it the bot. Nothing about this endpoint is
+    safe without that secret, so it is off entirely when none is set.
+
+    No account is created and no credential is issued, because there is no
+    longer any such thing: this writes one row saying a person is welcome, and
+    they become signed in later by spending a ``/link`` code at ``/auth/pair``.
+    Being on the list is not being signed in, and that separation is what lets
+    the list be edited by somebody who is not the person it concerns.
     """
     if not BOT_SHARED_SECRET:
         return jsonify(error="Registration isn't configured on this deployment."), 503
@@ -399,95 +419,110 @@ def internal_create_account():
     presented = request.headers.get("X-Bot-Secret") or ""
     if not secrets.compare_digest(presented, BOT_SHARED_SECRET):
         return jsonify(error="Not for you."), 403
-    if not admin.configured:
-        return jsonify(error="Accounts aren't configured on this deployment."), 503
 
     payload = request.get_json(silent=True) or {}
-    email = str(payload.get("email") or "").strip()
     telegram_id = payload.get("telegram_id")
-    display_name = payload.get("display_name")
-    if not email or "@" not in email:
-        return jsonify(error="That isn't an email address."), 400
+    # isinstance(True, int) is True in Python, and a JSON `true` arriving where
+    # an id belongs would otherwise whitelist person number one.
     if not isinstance(telegram_id, int) or isinstance(telegram_id, bool):
         return jsonify(error="A telegram_id is required."), 400
+    allowed = payload.get("allowed", True)
+    if not isinstance(allowed, bool):
+        return jsonify(error="`allowed` is true or false."), 400
 
-    # Checked before Keycloak is touched: a second account for a person who
-    # already has one would be an orphan, since telegram_id is unique here and
-    # the link is the reason this endpoint exists.
-    if accounts.user_by_telegram_id(telegram_id) is not None:
-        return jsonify(error="You already have an account here. Sign in instead."), 409
+    existing = accounts.user_by_telegram_id(telegram_id)
+    was = existing is not None and bool(existing["allowed"])
+    accounts.set_allowed(telegram_id, allowed)
 
-    try:
-        subject, password = admin.create_user(
-            email, display_name=display_name if isinstance(display_name, str) else None
+    # Revoking takes effect on that person's very next request whatever happens
+    # here — accounts.session() joins `users.allowed = 1`, and current_session()
+    # re-reads on every call rather than caching. What this adds is cleaning up
+    # after it: each session row holds a bot token, and a revoked person's
+    # credentials should not sit in this database waiting for a mistake.
+    #
+    # It also means being put back on the list means signing in again. That is
+    # the honest outcome rather than a chosen one: the first request they made
+    # while revoked already dropped the session id from their cookie, so the row
+    # was unreachable from that moment regardless.
+    ended = 0
+    if not allowed:
+        ended = accounts.delete_sessions_for(telegram_id)
+    if was != allowed:
+        app.logger.info(
+            "%s telegram id %s%s",
+            "Whitelisted" if allowed else "Revoked",
+            telegram_id,
+            f" ({ended} session(s) ended)" if ended else "",
         )
-    except keycloak_admin.EmailTaken as taken:
-        return jsonify(error=str(taken)), 409
-    except keycloak_admin.AdminError as error:
-        app.logger.warning("Could not create an account: %s", error)
-        return jsonify(error="Couldn't create that account."), 502
-
-    user = accounts.upsert_user(subject, email)
-    accounts.set_telegram_id(user["id"], telegram_id)
-    app.logger.info("Account created for telegram id %s", telegram_id)
 
     return (
         jsonify(
-            username=email,
-            temporary_password=password,
+            telegram_id=telegram_id,
+            allowed=allowed,
+            already=was == allowed,
             sign_in_url=f"{request.url_root.rstrip('/')}/account/",
         ),
-        201,
+        200 if was == allowed else 201,
     )
 
 
 # --- Signing in ------------------------------------------------------------
+#
+# One exchange, server side: a /link code from the bot goes in, an HttpOnly
+# cookie comes out. The browser is never given the bot token that arrives with
+# it, and there is no password anywhere in this file to give it instead.
 
 
-def callback_url():
-    return request.url_root.rstrip("/") + CALLBACK_PATH
+def accounts_configured():
+    """Whether signing in is possible on this deployment at all.
 
+    Sign-in needs the bot, because the bot is the only thing that knows who
+    anybody is. ``BOT_API_URL`` has a local-dev default, so this is normally true
+    and the account button is normally there — which is a change from the
+    Keycloak arrangement, where three unset variables hid it. Setting the
+    variable to empty is how a deployment says it has no bot and wants no button.
 
-def safe_return_to(value):
-    """A path on this site to come back to, or the front page.
-
-    Whatever comes back from the query string ends up in a ``Location`` header,
-    so an absolute URL here would be an open redirect: a link to this site that
-    lands somewhere else, with this site's name on it. Only a path is allowed,
-    and ``//evil.example`` is a path that browsers read as a host — hence the
-    second check rather than just the first.
+    The bot merely being *down* is not this. That is an ordinary state, reported
+    when somebody tries, exactly as the campaign-sync dialog has always done —
+    hiding the control would tell them the feature does not exist.
     """
-    if not value or not value.startswith("/") or value.startswith("//"):
-        return "/"
-    return value
+    return bool(BOT_API_URL)
 
 
-def begin_sign_in(action=None, return_to="/"):
-    verifier = oidc.new_verifier()
-    state = secrets.token_urlsafe(24)
-    nonce = secrets.token_urlsafe(24)
-    session["oidc_state"] = state
-    session["oidc_nonce"] = nonce
-    session["oidc_verifier"] = verifier
-    session["oidc_return"] = return_to
-    return redirect(
-        auth.authorization_url(callback_url(), state, nonce, verifier, action=action)
-    )
+def may_sign_in(telegram_id, row):
+    """The whitelist check, in one place because it is the whole security model.
+
+    Two ways to be on the list, and they cover different moments. The
+    environment variable is how the *first* person gets in — on a fresh database
+    nobody can be vouched for, because there is nobody inside to do the
+    vouching. The row is how everybody after them gets in, and can be changed
+    without a redeploy.
+
+    A row that exists with ``allowed = 0`` does not block somebody named in the
+    variable. That is deliberate: the variable is the operator's own way back in
+    after a mistake, and having it overridable from the database it is meant to
+    rescue would make it useless exactly when it is needed.
+    """
+    if telegram_id in ALLOWED_TELEGRAM_IDS:
+        return True
+    return row is not None and bool(row["allowed"])
 
 
 def current_session():
     """The signed-in session for this request, or None.
 
     Reads the store on every call rather than caching on ``g``: sign-out has to
-    take effect immediately, including the sign-out that happens in another tab.
+    take effect immediately, including the sign-out that happens in another tab,
+    and so does being taken off the whitelist — ``accounts.session()`` will not
+    return a row for somebody no longer allowed.
     """
     session_id = session.get("sid")
     if not session_id:
         return None
     row = accounts.session(session_id)
     if row is None:
-        # The cookie outlived its row — a signed-out session, or a database that
-        # was replaced. Drop it so the browser stops sending it.
+        # The cookie outlived its row — a signed-out session, a revoked one, or
+        # a database that was replaced. Drop it so the browser stops sending it.
         session.pop("sid", None)
         return None
     return row
@@ -498,7 +533,7 @@ def signed_in(view):
 
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if not auth.configured:
+        if not accounts_configured():
             return jsonify(error="This site has no sign-in configured."), 503
         row = current_session()
         if row is None:
@@ -508,148 +543,132 @@ def signed_in(view):
     return wrapped
 
 
-def access_token_for(row):
-    """A live access token for this session, refreshing it if it has expired.
+@app.post("/auth/pair")
+def auth_pair():
+    """Spend a /link code and start a session.
 
-    Keycloak's default access token lasts five minutes, so anything that talks
-    to Keycloak on the user's behalf — changing an email, say — will usually
-    find an expired one. The refresh token is good for the SSO session, which
-    is measured in weeks.
+    The code is redeemed by *this server*, not by the page, and that is the
+    whole reason this route exists rather than the browser calling the bot
+    through ``/sync/auth/pair`` as the campaign-sync dialog does. What comes
+    back is a bearer token good for everything that person owns; it goes in the
+    sessions table, and the browser gets a cookie it cannot read.
+
+    Pairing twice is fine and is not treated as an error. Codes are single-use
+    at the bot, so a second sign-in means a second code, and a second session
+    row — one per browser, which is what makes signing out of one not sign out
+    of the rest.
     """
-    if row["access_token"] and row["access_expires_at"] > time.time() + 15:
-        return row["access_token"]
-    if not row["refresh_token"]:
-        raise oidc.OidcError("This session has expired. Sign in again.")
-    issued = auth.refresh(row["refresh_token"])
-    token = issued.get("access_token")
-    accounts.refresh_session(
-        row["id"],
-        token,
-        issued.get("refresh_token") or row["refresh_token"],
-        time.time() + float(issued.get("expires_in") or 0),
-    )
-    return token
-
-
-@app.get("/auth/login")
-def auth_login():
-    if not auth.configured:
+    if not accounts_configured():
         return jsonify(error="This site has no sign-in configured."), 503
+
+    payload = request.get_json(silent=True) or {}
+    code = payload.get("code")
+    if not isinstance(code, str) or not code.strip():
+        return jsonify(error="Enter the code the bot gave you."), 400
+
+    headers = {"Content-Type": "application/json"}
+    # The bot rations pairing attempts per address, and without this every
+    # browser reaches it wearing this service's address and shares one budget —
+    # so one person mistyping a code spends everybody else's attempts. Same
+    # reasoning, and same single-entry rule, as the /sync proxy.
+    caller = client_address()
+    if caller:
+        headers["X-Forwarded-For"] = caller
+
     try:
-        return begin_sign_in(return_to=safe_return_to(request.args.get("next")))
-    except oidc.OidcError as error:
-        return jsonify(error=str(error)), 502
-
-
-@app.get("/auth/password")
-def auth_password():
-    """Send someone to Keycloak's own change-password form and back again.
-
-    There is no password field anywhere in this application, and this route is
-    why: Keycloak collects it on Keycloak's origin, and this service never sees
-    one. Signing in again on the way is not a detour — it is what makes the
-    request trustworthy.
-    """
-    if not auth.configured:
-        return jsonify(error="This site has no sign-in configured."), 503
-    try:
-        return begin_sign_in(action="UPDATE_PASSWORD", return_to="/account/")
-    except oidc.OidcError as error:
-        return jsonify(error=str(error)), 502
-
-
-@app.get(CALLBACK_PATH)
-def auth_callback():
-    if not auth.configured:
-        return jsonify(error="This site has no sign-in configured."), 503
-
-    expected_state = session.get("oidc_state")
-    verifier = session.get("oidc_verifier")
-    nonce = session.get("oidc_nonce")
-    return_to = safe_return_to(session.get("oidc_return"))
-    for key in PENDING_KEYS:
-        session.pop(key, None)
-
-    # Keycloak's own refusal (a cancelled login, a required action declined)
-    # comes back here as a query parameter, not as an HTTP error.
-    if request.args.get("error"):
-        return _auth_failed(
-            request.args.get("error_description") or request.args["error"]
+        upstream = requests.post(
+            f"{BOT_API_URL}/auth/pair",
+            json={"code": code.strip(), "label": "pathfinder-dm-tools"},
+            headers=headers,
+            timeout=PROXY_TIMEOUT_SECONDS,
         )
+    except requests.RequestException as exc:
+        return jsonify(error=f"Couldn't reach the bot service: {exc}"), 502
 
-    code = request.args.get("code")
-    if not code or not expected_state or not verifier:
-        return _auth_failed("That sign-in didn't start here. Try again.")
-    if not secrets.compare_digest(request.args.get("state", ""), expected_state):
-        return _auth_failed("That sign-in didn't match the one that started here.")
+    if upstream.status_code >= 400:
+        # Passed through rather than reworded. The bot already answers a bad
+        # code, an expired one and too many attempts in words meant for the
+        # person reading them, and it deliberately says the same thing for the
+        # first two — rewriting that here could only make it leakier.
+        try:
+            message = (upstream.json() or {}).get("error")
+        except ValueError:
+            message = None
+        return jsonify(error=message or "That code didn't work."), upstream.status_code
 
     try:
-        issued = auth.exchange_code(code, callback_url(), verifier)
-        claims = auth.claims_of(issued["id_token"], nonce)
-    except (oidc.OidcError, KeyError) as error:
-        return _auth_failed(
-            str(error) if isinstance(error, oidc.OidcError) else "Keycloak sent no ID token."
-        )
+        body = upstream.json() or {}
+        person = body["person"]
+        telegram_id = person["telegram_id"]
+        token = body["token"]
+    except (ValueError, KeyError, TypeError):
+        return jsonify(error="The bot service answered with something unexpected."), 502
+    if not isinstance(telegram_id, int) or isinstance(telegram_id, bool):
+        return jsonify(error="The bot service identified nobody."), 502
 
-    subject = claims.get("sub")
-    if not subject:
-        return _auth_failed("That sign-in identified nobody.")
+    existing = accounts.user_by_telegram_id(telegram_id)
+    if telegram_id in ALLOWED_TELEGRAM_IDS and existing is not None and not existing["allowed"]:
+        # The variable overrides the row, so the row has to be brought along or
+        # the override only half works: pairing would succeed and hand back a
+        # cookie, and then every request after it would fail, because sessions
+        # are looked up with `users.allowed = 1` joined in. A sign-in that
+        # reports success and is not signed in is the worst of both answers.
+        accounts.set_allowed(telegram_id, True)
+        existing = accounts.user_by_telegram_id(telegram_id)
+    if not may_sign_in(telegram_id, existing):
+        # The code was real and has now been spent, so this is not "wrong code".
+        # Saying so plainly beats a generic refusal: whoever hits this is a
+        # known Telegram person who simply is not on the list, and the thing
+        # they need to do is ask, not guess.
+        app.logger.info("Refused sign-in for telegram id %s: not whitelisted", telegram_id)
+        return jsonify(
+            error="That Telegram account isn't on this site's list. Ask the DM to add you."
+        ), 403
 
-    user = accounts.upsert_user(subject, claims.get("email"))
-    session["sid"] = accounts.create_session(
-        user["id"],
-        issued.get("access_token"),
-        issued.get("refresh_token"),
-        time.time() + float(issued.get("expires_in") or 0),
+    user = accounts.touch_user(
+        telegram_id,
+        person.get("display_name") if isinstance(person.get("display_name"), str) else None,
+        person.get("username") if isinstance(person.get("username"), str) else None,
     )
-    # The ID token is kept only to hand back as id_token_hint on the way out, so
-    # Keycloak knows which session to end without asking.
-    session["id_token"] = issued["id_token"]
-
-    # Keycloak reports the outcome of an application-initiated action — the
-    # change-password form — on the callback, which is not a page anyone sees.
-    # Carry it to the one that does, or "Change password" would always look
-    # like it silently did nothing.
-    status = request.args.get("kc_action_status")
-    if status:
-        separator = "&" if "?" in return_to else "?"
-        return_to = f"{return_to}{separator}kc_action_status={quote(status, safe='')}"
-    return redirect(return_to)
-
-
-def _auth_failed(message):
-    """Say what went wrong on the page, not in a JSON body nobody will see.
-
-    The callback is a top-level navigation: whatever this returns is what the
-    person is looking at.
-    """
-    return redirect("/?auth_error=" + quote(message, safe=""))
+    session["sid"] = accounts.create_session(user["id"], token if isinstance(token, str) else None)
+    app.logger.info("Signed in telegram id %s", telegram_id)
+    return jsonify(user=_user_json(user))
 
 
 @app.post("/auth/logout")
 def auth_logout():
-    """Sign out here first, then at Keycloak.
+    """End the session here. There is nowhere else to end it.
 
-    In that order deliberately: if the redirect to Keycloak fails, or someone
-    closes the tab mid-way, the session that mattered — the one this site
-    accepts — is already gone.
+    The bot token this session held is dropped with the row rather than revoked
+    at the bot. Revoking is ``/sessions`` in Telegram, which is where somebody
+    can see every browser they have paired and pick — a sign-out on one machine
+    should not silently cut off the others.
     """
     session_id = session.get("sid")
     if session_id:
         accounts.delete_session(session_id)
-    id_token = session.get("id_token")
     session.clear()
-
-    if not auth.configured:
-        return jsonify(next="/")
-    try:
-        return jsonify(next=auth.end_session_url(id_token, request.url_root))
-    except oidc.OidcError:
-        # Keycloak being unreachable must not leave someone stuck signed in.
-        return jsonify(next="/")
+    return jsonify(next="/")
 
 
 # --- The account -----------------------------------------------------------
+
+
+def _user_json(row):
+    """A signed-in person as every page shows them.
+
+    No email, because there is no longer anywhere for one to come from. Keycloak
+    held the address as a login credential and this mirrored it; identity is now
+    a Telegram id, and Telegram does not hand out addresses. What is shown
+    instead is what the bot knows: a display name, a handle, or failing both the
+    id itself — one of the three is always there, so the page never has to say
+    "signed in as nobody".
+    """
+    return {
+        "telegram_id": row["telegram_id"],
+        "display_name": row["display_name"],
+        "username": row["username"],
+    }
 
 
 @app.get("/api/account/me")
@@ -660,70 +679,15 @@ def account_me():
     an ordinary answer with a 200, not a 401. A 401 here would put a red error
     in the console of a page that is working perfectly.
     """
-    if not auth.configured:
+    if not accounts_configured():
         return jsonify(configured=False, user=None)
     row = current_session()
     if row is None:
         return jsonify(configured=True, user=None)
     return jsonify(
         configured=True,
-        user={
-            "email": row["email"],
-            "telegram_id": row["telegram_id"],
-            "documents": accounts.summary(row["user_id"]),
-        },
+        user={**_user_json(row), "documents": accounts.summary(row["user_id"])},
     )
-
-
-@app.put("/api/account/email")
-@signed_in
-def account_set_email(row):
-    """Change the address, at Keycloak, then mirror what it accepted.
-
-    Keycloak is asked first and its answer is final: it owns uniqueness, format
-    and whatever verification the realm turns on. Writing here first would mean
-    a local row claiming an address the login system rejected.
-    """
-    payload = request.get_json(silent=True) or {}
-    email = (payload.get("email") or "").strip()
-    if "@" not in email or " " in email:
-        return jsonify(error="That doesn't look like an email address."), 400
-
-    try:
-        token = access_token_for(row)
-        response = requests.post(
-            f"{auth.issuer}/account/",
-            json={"email": email},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=oidc.TIMEOUT_SECONDS,
-        )
-    except oidc.OidcError as error:
-        return jsonify(error=str(error)), 401
-    except requests.RequestException as error:
-        return jsonify(error=f"Couldn't reach the sign-in service: {error}"), 502
-
-    if response.status_code >= 400:
-        return jsonify(error=_account_api_error(response)), response.status_code
-
-    accounts.set_email(row["user_id"], email)
-    return jsonify(email=email)
-
-
-def _account_api_error(response):
-    """Keycloak's account API reports field errors in its own shape."""
-    try:
-        body = response.json()
-    except ValueError:
-        return f"The sign-in service refused that address ({response.status_code})."
-    if isinstance(body, list) and body:
-        first = body[0]
-        if isinstance(first, dict) and first.get("errorMessage"):
-            return first["errorMessage"]
-    if isinstance(body, dict):
-        for key in ("errorMessage", "error_description", "error"):
-            if body.get(key):
-                return str(body[key])
-    return f"The sign-in service refused that address ({response.status_code})."
 
 
 # --- Data kept against the account -----------------------------------------
