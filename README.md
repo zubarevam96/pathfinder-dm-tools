@@ -118,19 +118,41 @@ token ⇅ already holds to `POST /auth/adopt`, which checks it against the bot's
 person — and signs them in. It happens on page load, so pairing once is enough.
 
 If that comes back refused, the message names the Telegram id it refused. That
-is the id which goes in `ALLOWED_TELEGRAM_IDS`, and on a fresh deployment it is
-the only way to find out what to put there.
+is the id which goes in `ADMIN_TELEGRAM_ID`, or the one to hand the admin for
+`/whitelist add`. On a fresh deployment it is the only way to find out what to
+put there.
 
 **Whether you may use it is this site's own question**, and the answer is
-`users.allowed`. Two ways onto that list:
+`users.allowed`. One person decides: `ADMIN_TELEGRAM_ID`, below.
 
-- `ALLOWED_TELEGRAM_IDS`, below. This is how the *first* person gets in, because
-  on an empty database there is nobody inside to vouch for anybody.
-- `/register` to the bot, in a private chat, by the DM of a named campaign. The
-  bot calls `POST /internal/allow` here with the shared secret.
+The admin may always sign in, whatever the table says. That is what makes the
+first sign-in possible on an empty database — nobody can be vouched for when
+there is nobody inside to do the vouching — and what makes a mistaken
+revocation recoverable. A list nobody can get back into is a locked door with
+the key inside.
+
+Everybody else is added by the admin, from a private chat with the bot:
+
+```
+/whitelist                  who may use it
+/whitelist add @handle      let somebody in
+/whitelist remove @handle    take them off
+```
+
+A numeric id works in place of a @handle, and is the only way to name somebody
+who has never written to the bot — Telegram gives bots no way to resolve a
+handle they have not seen.
+
+**The bot does not decide who may run that.** It reports who typed the command
+as `X-Actor-Telegram-Id`, and this service checks it against `ADMIN_TELEGRAM_ID`
+— the list is the site's, so who may edit it is the site's question, and a copy
+of the answer in the bot would be a copy to drift. The bot is trusted for one
+thing only: honestly saying who is talking to it.
 
 Taking somebody off the list ends the sessions they already have on their very
-next request, and keeps everything they had stored.
+next request, and keeps everything they had stored. Putting them back means
+pairing again. The admin cannot be taken off at all — that is refused rather
+than performed and quietly undone.
 
 **There is no password anywhere in this project.** Not stored, not hashed, not
 temporary, and not in a chat log — there is none to leak or reset. A pairing
@@ -148,7 +170,7 @@ first, then reloads.
 
 | Variable | What it is |
 |---|---|
-| `ALLOWED_TELEGRAM_IDS` | Telegram ids that may sign in, comma- or space-separated. **Set this to your own id before deploying, or nobody can get in.** It overrides the database, so it is also the way back in after revoking yourself by mistake |
+| `ADMIN_TELEGRAM_ID` | The one Telegram id that runs this site. **Set this to your own before deploying, or nobody can get in and nobody can let them.** It overrides the table, so it is also the way back in after a revocation that shouldn't have happened |
 | `SECRET_KEY` | Signs the session cookie. Any long random string; changing it signs everyone out |
 | `ACCOUNTS_DB_PATH` | `/data/accounts.sqlite3` — **on the volume**, or accounts vanish on redeploy |
 | `BOT_SHARED_SECRET` | Shared with the bot as its `ACCOUNTS_API_SECRET`. Unset means `/internal/allow` answers 503 — an internal endpoint with no secret is an open one |
@@ -194,7 +216,7 @@ heap floor is a percentage of the container rather than of the work.
    - `BOT_API_URL` = `http://<bot-service-name>.railway.internal:8080`
    - `MONSTER_DATA_DIR` = `/data/monster-data` (see below)
    - `ACCOUNTS_DB_PATH` = `/data/accounts.sqlite3`
-   - `ALLOWED_TELEGRAM_IDS`, `SECRET_KEY` and `BOT_SHARED_SECRET` from the
+   - `ADMIN_TELEGRAM_ID`, `SECRET_KEY` and `BOT_SHARED_SECRET` from the
      Accounts section
 3. Settings → Networking → **Generate Domain**, port **8080**.
 4. On the *bot* service you can now remove the public domain, and

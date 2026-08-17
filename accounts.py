@@ -192,6 +192,21 @@ class Accounts:
                 "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
             ).fetchone()
 
+    def everyone(self) -> list[sqlite3.Row]:
+        """Every row, allowed or not, for the admin to read the list back.
+
+        Revoked people are included rather than filtered. A whitelist you can
+        only see the *allowed* half of cannot answer "did that removal work?",
+        which is the question somebody asks immediately after making one.
+        """
+        with self._connect() as connection:
+            return connection.execute(
+                """
+                SELECT * FROM users
+                ORDER BY allowed DESC, COALESCE(display_name, username, ''), telegram_id
+                """
+            ).fetchall()
+
     def set_allowed(self, telegram_id: int, allowed: bool) -> sqlite3.Row:
         """Put somebody on the list, or take them off, without touching their data.
 

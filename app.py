@@ -13,7 +13,8 @@ somewhere to *put* a copy, and a way to know whose copy it is:
   same thing twice.
 - ``/api/account/*`` is what that cookie unlocks: a durable copy of this
   browser's characters and battles.
-- ``/internal/allow`` is where the bot puts somebody on the whitelist.
+- ``/internal/allow`` and ``/internal/allowlist`` are where the site's admin
+  changes and reads who may sign in, from a Telegram chat with the bot.
 
 **There is one identity here, and it belongs to the bot.** A Telegram account
 proves who you are, the bot is what checked, and a pairing code is how that
@@ -149,29 +150,33 @@ def _flag(name, default):
 # start requiring one.
 
 
-def _telegram_ids(raw):
-    """Parse ``ALLOWED_TELEGRAM_IDS``, ignoring anything that isn't an id.
+def _telegram_id(raw):
+    """One Telegram id from the environment, or None if it isn't one.
 
-    Silently, and on purpose. This is read once at import, and a stray comma or
-    a trailing newline from however the variable got pasted in must not stop the
-    site booting — the cost of being strict is a deploy that dies on start, and
-    the cost of being lax is one person having to ask why they can't sign in.
+    Lenient on purpose: this is read once at import, and a stray space or a
+    newline from however the variable got pasted in must not stop the site
+    booting. The cost of being strict is a deploy that dies on start; the cost
+    of being lax is one person being told to check the value.
     """
-    ids = set()
-    for piece in re.split(r"[\s,]+", raw or ""):
-        if piece.lstrip("-").isdigit():
-            ids.add(int(piece))
-    return frozenset(ids)
+    text = (raw or "").strip()
+    return int(text) if text.lstrip("-").isdigit() else None
 
 
-#: The whitelist's seed. Anyone here may sign in whether or not they have a row
-#: yet, which is what makes the very first sign-in possible on a fresh database
-#: — the bot cannot vouch for anybody until somebody is already inside.
+#: The one Telegram account that runs this site. Two powers, and they are the
+#: same power seen from either end:
 #:
-#: Beyond that, membership lives in ``users.allowed``. Two sources rather than
-#: one because they answer different needs: this one survives the database being
-#: wiped, and the table can be changed without a redeploy.
-ALLOWED_TELEGRAM_IDS = _telegram_ids(os.environ.get("ALLOWED_TELEGRAM_IDS"))
+#: - It may always sign in, whatever ``users.allowed`` says. That is what makes
+#:   the first sign-in possible on an empty database, and what makes a mistaken
+#:   revocation recoverable — a list nobody can get back into is a locked door
+#:   with the key inside.
+#: - It is the only account that may change who else is on the list, which is
+#:   enforced here rather than in the bot: the list is this service's, so who
+#:   may edit it is this service's question, and the bot holding a second copy
+#:   of the answer is a second copy to drift.
+#:
+#: One id, not a list. A list of equals has no one to appeal to when it is
+#: wrong, and everybody on it can remove everybody else.
+ADMIN_TELEGRAM_ID = _telegram_id(os.environ.get("ADMIN_TELEGRAM_ID"))
 
 # What makes /internal/* answer the bot rather than whoever reaches it. Unset
 # means that route is off entirely -- an internal endpoint with no secret is an
@@ -397,24 +402,12 @@ def sync_proxy(subpath):
     return Response(upstream.content, status=upstream.status_code, headers=passed)
 
 
-@app.post("/internal/allow")
-def internal_allow():
-    """Put somebody on the whitelist, at the bot's request.
+def bot_asked():
+    """Check the shared secret, or say why not. None means the request is the bot's.
 
-    This is the other direction from ``/sync/*``: the bot has already
-    established who it is talking to in a chat, and asks this service — which
-    owns the question of who may use the *site* — to let them in.
-
-    ``telegram_id`` is *not* taken as a claim about who is asking. It is taken
-    as a claim by the bot, which is the only thing here that can prove it, and
-    the shared secret is what makes it the bot. Nothing about this endpoint is
-    safe without that secret, so it is off entirely when none is set.
-
-    No account is created and no credential is issued, because there is no
-    longer any such thing: this writes one row saying a person is welcome, and
-    they become signed in later by spending a ``/link`` code at ``/auth/pair``.
-    Being on the list is not being signed in, and that separation is what lets
-    the list be edited by somebody who is not the person it concerns.
+    Nothing about ``/internal/*`` is safe without this: the routes below take an
+    id and act on it, and the secret is the whole of what makes the claim that
+    the bot is asking. Unset turns them off rather than opening them.
     """
     if not BOT_SHARED_SECRET:
         return jsonify(error="Registration isn't configured on this deployment."), 503
@@ -422,6 +415,87 @@ def internal_allow():
     presented = request.headers.get("X-Bot-Secret") or ""
     if not secrets.compare_digest(presented, BOT_SHARED_SECRET):
         return jsonify(error="Not for you."), 403
+    return None
+
+
+def admin_asked():
+    """As above, and that the person behind the request is the admin.
+
+    The bot sends whoever typed the command as ``X-Actor-Telegram-Id``; this
+    decides whether that person may. Deliberately not the bot's decision to
+    make — the list belongs to this service, so who may edit it is this
+    service's question, and a copy of the answer in the bot is a copy to drift.
+
+    The header is only as trustworthy as the secret checked first, which is the
+    point: the bot is trusted to report who is talking to it, and nothing else.
+    """
+    refusal = bot_asked()
+    if refusal is not None:
+        return None, refusal
+    raw = request.headers.get("X-Actor-Telegram-Id") or ""
+    actor = int(raw) if raw.strip().lstrip("-").isdigit() else None
+    if ADMIN_TELEGRAM_ID is None:
+        return None, (
+            jsonify(error="This site has no admin configured, so the list cannot be changed."),
+            503,
+        )
+    if actor is None or not is_admin(actor):
+        return None, (jsonify(error="Only the site's admin can change who may sign in."), 403)
+    return actor, None
+
+
+@app.get("/internal/allowlist")
+def internal_allowlist():
+    """Who may sign in, for the admin to read back in a chat.
+
+    The admin is listed whether or not they have a row, because they may sign in
+    whether or not they have one — a list that leaves out the one account that
+    is always allowed would be a lie in the direction that matters.
+    """
+    _, refusal = admin_asked()
+    if refusal is not None:
+        return refusal
+
+    people = [
+        {
+            "telegram_id": row["telegram_id"],
+            "display_name": row["display_name"],
+            "username": row["username"],
+            "allowed": bool(row["allowed"]),
+            "admin": is_admin(row["telegram_id"]),
+        }
+        for row in accounts.everyone()
+    ]
+    if not any(person["admin"] for person in people):
+        people.append(
+            {
+                "telegram_id": ADMIN_TELEGRAM_ID,
+                "display_name": None,
+                "username": None,
+                "allowed": True,
+                "admin": True,
+            }
+        )
+    return jsonify(people=people)
+
+
+@app.post("/internal/allow")
+def internal_allow():
+    """Put somebody on the whitelist, or take them off, at the admin's request.
+
+    This is the other direction from ``/sync/*``: the bot has established who is
+    talking to it, and asks this service — which owns the question of who may
+    use the *site* — to change the list.
+
+    No account is created and no credential is issued, because there is no
+    longer any such thing: this writes one row saying a person is welcome, and
+    they become signed in later by pairing a browser. Being on the list is not
+    being signed in, and that separation is what lets the list be edited by
+    somebody who is not the person it concerns.
+    """
+    actor, refusal = admin_asked()
+    if refusal is not None:
+        return refusal
 
     payload = request.get_json(silent=True) or {}
     telegram_id = payload.get("telegram_id")
@@ -432,6 +506,13 @@ def internal_allow():
     allowed = payload.get("allowed", True)
     if not isinstance(allowed, bool):
         return jsonify(error="`allowed` is true or false."), 400
+
+    if is_admin(telegram_id) and not allowed:
+        # Refused rather than performed-and-undone. The admin overrides the row,
+        # so this would appear to work, end their sessions, and then let them
+        # straight back in on the next pairing — a control that reports success
+        # and does the opposite is worse than one that says no.
+        return jsonify(error="The admin can't be taken off the list."), 400
 
     existing = accounts.user_by_telegram_id(telegram_id)
     was = existing is not None and bool(existing["allowed"])
@@ -452,9 +533,10 @@ def internal_allow():
         ended = accounts.delete_sessions_for(telegram_id)
     if was != allowed:
         app.logger.info(
-            "%s telegram id %s%s",
+            "%s telegram id %s by admin %s%s",
             "Whitelisted" if allowed else "Revoked",
             telegram_id,
+            actor,
             f" ({ended} session(s) ended)" if ended else "",
         )
 
@@ -492,21 +574,31 @@ def accounts_configured():
     return bool(BOT_API_URL)
 
 
+def is_admin(telegram_id):
+    """Whether this is the account named in ``ADMIN_TELEGRAM_ID``.
+
+    Unset means *nobody* is admin, rather than everybody: an unconfigured
+    deployment should refuse to hand out the power to change who may sign in,
+    not hand it to whoever asks first.
+    """
+    return ADMIN_TELEGRAM_ID is not None and telegram_id == ADMIN_TELEGRAM_ID
+
+
 def may_sign_in(telegram_id, row):
     """The whitelist check, in one place because it is the whole security model.
 
-    Two ways to be on the list, and they cover different moments. The
-    environment variable is how the *first* person gets in — on a fresh database
-    nobody can be vouched for, because there is nobody inside to do the
-    vouching. The row is how everybody after them gets in, and can be changed
-    without a redeploy.
+    Two ways to be allowed, covering different moments. The admin is how the
+    *first* person gets in — on a fresh database nobody can be vouched for,
+    because there is nobody inside to do the vouching. The row is how everybody
+    after them gets in, and can be changed from a Telegram chat without a
+    redeploy.
 
-    A row that exists with ``allowed = 0`` does not block somebody named in the
-    variable. That is deliberate: the variable is the operator's own way back in
-    after a mistake, and having it overridable from the database it is meant to
-    rescue would make it useless exactly when it is needed.
+    A row saying ``allowed = 0`` does not block the admin. That is deliberate:
+    the variable is the way back in after a mistake, and having it overridable
+    from the database it exists to rescue would make it useless exactly when it
+    is needed.
     """
-    if telegram_id in ALLOWED_TELEGRAM_IDS:
+    if is_admin(telegram_id):
         return True
     return row is not None and bool(row["allowed"])
 
@@ -583,7 +675,7 @@ def start_session(person, token):
     """
     telegram_id = person["telegram_id"]
     existing = accounts.user_by_telegram_id(telegram_id)
-    if telegram_id in ALLOWED_TELEGRAM_IDS and existing is not None and not existing["allowed"]:
+    if is_admin(telegram_id) and existing is not None and not existing["allowed"]:
         # The variable overrides the row, so the row has to be brought along or
         # the override only half works: signing in would succeed and hand back a
         # cookie, and then every request after it would fail, because sessions
@@ -599,7 +691,7 @@ def start_session(person, token):
         #
         # Telling them their own id is safe (they proved it is theirs a line
         # ago) and is the one fact they cannot easily look up but need: it is
-        # what goes in ALLOWED_TELEGRAM_IDS, and on a fresh deployment there is
+        # what the admin puts on the list, and on a fresh deployment there is
         # nobody inside to ask on their behalf.
         app.logger.info("Refused sign-in for telegram id %s: not whitelisted", telegram_id)
         return jsonify(
