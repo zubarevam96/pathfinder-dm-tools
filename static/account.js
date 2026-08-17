@@ -29,6 +29,11 @@
   const CHARACTER_STORE = "pathfinder-dm-tools";
   const BATTLE_STORE = "pathfinder-dm-tools:battle";
 
+  // railway-sync.js's key, read by name and never imported — the same way
+  // telegram-message.js reaches it. That isolation is the point: neither file
+  // can change how the other behaves, and a consumer would end it.
+  const SYNC_TOKEN_KEY = "pathfinder-dm-tools:api-token";
+
   // What the server will accept, and which localStorage key each one is.
   const DOCUMENTS = [
     { name: "characters", storageKey: CHARACTER_STORE, label: "Characters" },
@@ -61,11 +66,18 @@
   }
 
   async function api(path, options = {}) {
+    const { headers, ...rest } = options;
     const response = await fetch(path, {
       // The session cookie is the whole authentication story, so it has to go.
       credentials: "same-origin",
-      headers: options.body ? { "Content-Type": "application/json" } : {},
-      ...options,
+      // Merged, not replaced. Spreading `options` wholesale used to drop the
+      // computed Content-Type the moment a caller passed a header of its own,
+      // which is a bug that only appears on whichever call adds one first.
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(headers || {}),
+      },
+      ...rest,
     });
     let payload = null;
     try {
@@ -74,7 +86,12 @@
       payload = null;
     }
     if (!response.ok) {
-      throw new Error(payload?.error || `The server answered ${response.status}.`);
+      const error = new Error(payload?.error || `The server answered ${response.status}.`);
+      error.status = response.status;
+      // Carried through so a refusal can say which account was refused — it is
+      // the one thing whoever is reading it needs and cannot look up.
+      error.telegram_id = payload?.telegram_id ?? null;
+      throw error;
     }
     return payload;
   }
@@ -91,6 +108,37 @@
       account = null;
     }
     return account;
+  }
+
+  // Why a signing-in browser might already be signed in elsewhere: ⇅ and 👤 ask
+  // the same question — which Telegram person is this — and used to make people
+  // answer it twice with two /link codes. If ⇅ has a token, this hands it to the
+  // server, which checks it with the bot and starts a session from it.
+  //
+  // Tried once per page, and only when there is a token and no session. A refusal
+  // is remembered so a browser whose owner is not on the whitelist doesn't fire a
+  // 403 on every page load; a reload retries, which is what makes it self-healing
+  // once somebody is added.
+  let adoptRefusal = null;
+
+  async function adoptSyncPairing() {
+    if (account || !configured || adoptRefusal) return false;
+    const token = read(SYNC_TOKEN_KEY);
+    if (!token) return false;
+    try {
+      const result = await api("/auth/adopt", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      account = result?.user ?? null;
+      return Boolean(account);
+    } catch (error) {
+      // 401 means ⇅'s token was revoked from /sessions and is stale — nothing to
+      // say about it, since the code form below is the answer either way. A 403
+      // is worth repeating: they are somebody, just not somebody allowed yet.
+      adoptRefusal = error?.telegram_id ? error : null;
+      return false;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -171,7 +219,20 @@
     }
 
     if (!account) {
+      // A browser that is paired for ⇅ but refused here has a different problem
+      // from one that has never paired, and needs a different sentence: the code
+      // form would "work" and change nothing.
+      const refused = adoptRefusal
+        ? `
+        <p class="account-hint account-refused">
+          You're paired with the bot as <strong>Telegram id ${escapeHtml(adoptRefusal.telegram_id)}</strong>,
+          but that account isn't on this site's list yet. Ask the DM to add it —
+          that id is what they need.
+        </p>
+      `
+        : "";
       body.innerHTML = `
+        ${refused}
         <p class="account-hint">
           Send <strong>/link</strong> to the bot in a private Telegram chat. It
           replies with an eight-character code, good for five minutes.
@@ -315,6 +376,9 @@
     if (!button) return;
     buildDialog();
     await loadAccount();
+    // Before the button is drawn, so a browser that ⇅ already paired shows as
+    // signed in on first paint rather than flicking from signed-out to in.
+    await adoptSyncPairing();
     refreshButton();
     button.addEventListener("click", () => {
       setStatus("");

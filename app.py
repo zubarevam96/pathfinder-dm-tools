@@ -8,6 +8,9 @@ somewhere to *put* a copy, and a way to know whose copy it is:
   bearer token there and this hop reads nothing.
 - ``/auth/pair`` spends a ``/link`` code *server side* and turns it into an
   HttpOnly session cookie. This is how somebody signs in.
+- ``/auth/adopt`` is the same thing for a browser already paired for sync,
+  which has a token and should not be made to fetch a second code to say the
+  same thing twice.
 - ``/api/account/*`` is what that cookie unlocks: a durable copy of this
   browser's characters and battles.
 - ``/internal/allow`` is where the bot puts somebody on the whitelist.
@@ -543,6 +546,77 @@ def signed_in(view):
     return wrapped
 
 
+def forwarded():
+    """The one header this service adds when it calls the bot on a browser's behalf.
+
+    Without it every browser reaches the bot wearing *this service's* address
+    and they all share one rate-limit bucket — the pairing budget first, so one
+    person mistyping a code spends everybody else's attempts. Exactly one entry,
+    for the reason spelled out on the /sync proxy.
+    """
+    caller = client_address()
+    return {"X-Forwarded-For": caller} if caller else {}
+
+
+def person_of(upstream):
+    """The person in a bot reply, or a (response, status) to send back instead.
+
+    Both sign-in routes get the same shape from the bot — ``/auth/pair`` with a
+    token beside it, ``/auth/me`` without — so both check it the same way.
+    """
+    try:
+        body = upstream.json() or {}
+        person = body["person"]
+        telegram_id = person["telegram_id"]
+    except (ValueError, KeyError, TypeError):
+        return None, (jsonify(error="The bot service answered with something unexpected."), 502)
+    if not isinstance(telegram_id, int) or isinstance(telegram_id, bool):
+        return None, (jsonify(error="The bot service identified nobody."), 502)
+    return (person, body), None
+
+
+def start_session(person, token):
+    """Whitelist-check somebody the bot has identified, and sign them in.
+
+    Shared by both routes because the decision is the same one: how a browser
+    proved whose it is has no bearing on whether that person may be here.
+    """
+    telegram_id = person["telegram_id"]
+    existing = accounts.user_by_telegram_id(telegram_id)
+    if telegram_id in ALLOWED_TELEGRAM_IDS and existing is not None and not existing["allowed"]:
+        # The variable overrides the row, so the row has to be brought along or
+        # the override only half works: signing in would succeed and hand back a
+        # cookie, and then every request after it would fail, because sessions
+        # are looked up with `users.allowed = 1` joined in. A sign-in that
+        # reports success and is not signed in is the worst of both answers.
+        accounts.set_allowed(telegram_id, True)
+        existing = accounts.user_by_telegram_id(telegram_id)
+
+    if not may_sign_in(telegram_id, existing):
+        # Not "wrong credential" — the bot has just confirmed exactly who this
+        # is. Whoever hits this is a known Telegram person who is simply not on
+        # the list, so the answer says so, and says their id.
+        #
+        # Telling them their own id is safe (they proved it is theirs a line
+        # ago) and is the one fact they cannot easily look up but need: it is
+        # what goes in ALLOWED_TELEGRAM_IDS, and on a fresh deployment there is
+        # nobody inside to ask on their behalf.
+        app.logger.info("Refused sign-in for telegram id %s: not whitelisted", telegram_id)
+        return jsonify(
+            error="That Telegram account isn't on this site's list. Ask the DM to add you.",
+            telegram_id=telegram_id,
+        ), 403
+
+    user = accounts.touch_user(
+        telegram_id,
+        person.get("display_name") if isinstance(person.get("display_name"), str) else None,
+        person.get("username") if isinstance(person.get("username"), str) else None,
+    )
+    session["sid"] = accounts.create_session(user["id"], token if isinstance(token, str) else None)
+    app.logger.info("Signed in telegram id %s", telegram_id)
+    return jsonify(user=_user_json(user))
+
+
 @app.post("/auth/pair")
 def auth_pair():
     """Spend a /link code and start a session.
@@ -552,6 +626,9 @@ def auth_pair():
     through ``/sync/auth/pair`` as the campaign-sync dialog does. What comes
     back is a bearer token good for everything that person owns; it goes in the
     sessions table, and the browser gets a cookie it cannot read.
+
+    This is the way in for a browser that has *not* already been paired for
+    sync. One that has needs no code at all — see /auth/adopt.
 
     Pairing twice is fine and is not treated as an error. Codes are single-use
     at the bot, so a second sign-in means a second code, and a second session
@@ -566,20 +643,11 @@ def auth_pair():
     if not isinstance(code, str) or not code.strip():
         return jsonify(error="Enter the code the bot gave you."), 400
 
-    headers = {"Content-Type": "application/json"}
-    # The bot rations pairing attempts per address, and without this every
-    # browser reaches it wearing this service's address and shares one budget —
-    # so one person mistyping a code spends everybody else's attempts. Same
-    # reasoning, and same single-entry rule, as the /sync proxy.
-    caller = client_address()
-    if caller:
-        headers["X-Forwarded-For"] = caller
-
     try:
         upstream = requests.post(
             f"{BOT_API_URL}/auth/pair",
             json={"code": code.strip(), "label": "pathfinder-dm-tools"},
-            headers=headers,
+            headers={"Content-Type": "application/json", **forwarded()},
             timeout=PROXY_TIMEOUT_SECONDS,
         )
     except requests.RequestException as exc:
@@ -596,43 +664,67 @@ def auth_pair():
             message = None
         return jsonify(error=message or "That code didn't work."), upstream.status_code
 
+    found, refusal = person_of(upstream)
+    if refusal is not None:
+        return refusal
+    person, body = found
+    return start_session(person, body.get("token"))
+
+
+@app.post("/auth/adopt")
+def auth_adopt():
+    """Sign in the browser that is already paired for campaign sync.
+
+    ⇅ and 👤 asked the same question — *which Telegram person is this* — and
+    made people answer it twice, with two ``/link`` codes, because the answers
+    were kept in different places. This is the second one deferring to the
+    first: the page hands over the token ⇅ already holds, and this service
+    checks it with the bot and starts a session from it.
+
+    **The page is not believed.** The token is presented to ``GET /auth/me``,
+    and it is the bot's answer — not the page's claim — that names the person.
+    A made-up token gets 401 there, and the whitelist is consulted afterwards
+    exactly as it is for a redeemed code.
+
+    Nor is anything newly exposed by accepting it. That token is already in
+    ``localStorage``, put there by ``railway-sync.js``, and already travels
+    through this service on every ``/sync/*`` call. What comes back is still an
+    HttpOnly cookie: the account half continues to hold no credential the page
+    can read, and this does not become the way tokens get *into* a browser.
+    """
+    if not accounts_configured():
+        return jsonify(error="This site has no sign-in configured."), 503
+
+    authorization = request.headers.get("Authorization") or ""
+    if not authorization.startswith("Bearer ") or not authorization[7:].strip():
+        # Not an error worth a 400: the ordinary caller is a page checking
+        # whether it can skip the code form, and "no" is an ordinary answer.
+        return jsonify(error="This browser isn't paired with the bot yet."), 401
+
     try:
-        body = upstream.json() or {}
-        person = body["person"]
-        telegram_id = person["telegram_id"]
-        token = body["token"]
-    except (ValueError, KeyError, TypeError):
-        return jsonify(error="The bot service answered with something unexpected."), 502
-    if not isinstance(telegram_id, int) or isinstance(telegram_id, bool):
-        return jsonify(error="The bot service identified nobody."), 502
+        upstream = requests.get(
+            f"{BOT_API_URL}/auth/me",
+            headers={"Authorization": authorization, **forwarded()},
+            timeout=PROXY_TIMEOUT_SECONDS,
+        )
+    except requests.RequestException as exc:
+        return jsonify(error=f"Couldn't reach the bot service: {exc}"), 502
 
-    existing = accounts.user_by_telegram_id(telegram_id)
-    if telegram_id in ALLOWED_TELEGRAM_IDS and existing is not None and not existing["allowed"]:
-        # The variable overrides the row, so the row has to be brought along or
-        # the override only half works: pairing would succeed and hand back a
-        # cookie, and then every request after it would fail, because sessions
-        # are looked up with `users.allowed = 1` joined in. A sign-in that
-        # reports success and is not signed in is the worst of both answers.
-        accounts.set_allowed(telegram_id, True)
-        existing = accounts.user_by_telegram_id(telegram_id)
-    if not may_sign_in(telegram_id, existing):
-        # The code was real and has now been spent, so this is not "wrong code".
-        # Saying so plainly beats a generic refusal: whoever hits this is a
-        # known Telegram person who simply is not on the list, and the thing
-        # they need to do is ask, not guess.
-        app.logger.info("Refused sign-in for telegram id %s: not whitelisted", telegram_id)
-        return jsonify(
-            error="That Telegram account isn't on this site's list. Ask the DM to add you."
-        ), 403
+    if upstream.status_code >= 400:
+        try:
+            message = (upstream.json() or {}).get("error")
+        except ValueError:
+            message = None
+        return jsonify(error=message or "That pairing is no longer valid."), upstream.status_code
 
-    user = accounts.touch_user(
-        telegram_id,
-        person.get("display_name") if isinstance(person.get("display_name"), str) else None,
-        person.get("username") if isinstance(person.get("username"), str) else None,
-    )
-    session["sid"] = accounts.create_session(user["id"], token if isinstance(token, str) else None)
-    app.logger.info("Signed in telegram id %s", telegram_id)
-    return jsonify(user=_user_json(user))
+    found, refusal = person_of(upstream)
+    if refusal is not None:
+        return refusal
+    person, _ = found
+    # The token the page presented is the one stored, so signing out here and
+    # unpairing ⇅ stay independent: this session holds its own copy, and
+    # dropping it does not reach into localStorage.
+    return start_session(person, authorization[7:].strip())
 
 
 @app.post("/auth/logout")

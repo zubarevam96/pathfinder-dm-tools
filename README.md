@@ -111,6 +111,16 @@ here is a Telegram id — the same integer the bot keys all of its own tables on
 which is what lets a character imported in a chat and one opened here be the
 same character.
 
+**A browser already paired for ⇅ needs no code at all.** ⇅ and 👤 were asking
+the same question and making people answer it twice. Now the page offers the
+token ⇅ already holds to `POST /auth/adopt`, which checks it against the bot's
+`GET /auth/me` — the bot's answer, not the page's claim, is what names the
+person — and signs them in. It happens on page load, so pairing once is enough.
+
+If that comes back refused, the message names the Telegram id it refused. That
+is the id which goes in `ALLOWED_TELEGRAM_IDS`, and on a fresh deployment it is
+the only way to find out what to put there.
+
 **Whether you may use it is this site's own question**, and the answer is
 `users.allowed`. Two ways onto that list:
 

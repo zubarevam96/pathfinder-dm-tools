@@ -34,10 +34,16 @@
   }
 
   async function api(path, options = {}) {
+    const { headers, ...rest } = options;
     const response = await fetch(path, {
       credentials: "same-origin",
-      headers: options.body ? { "Content-Type": "application/json" } : {},
-      ...options,
+      // Merged rather than replaced: spreading `options` wholesale drops the
+      // computed Content-Type as soon as a caller passes a header of its own.
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(headers || {}),
+      },
+      ...rest,
     });
     let payload = null;
     try {
@@ -46,7 +52,10 @@
       payload = null;
     }
     if (!response.ok) {
-      throw new Error(payload?.error || `The server answered ${response.status}.`);
+      const error = new Error(payload?.error || `The server answered ${response.status}.`);
+      error.status = response.status;
+      error.telegram_id = payload?.telegram_id ?? null;
+      throw error;
     }
     return payload;
   }
@@ -106,10 +115,48 @@
       return;
     }
     if (!me.user) {
+      const adopted = await adoptSyncPairing();
+      if (adopted) return;
       show(signedOut);
       return;
     }
     renderAccount(me.user);
+  }
+
+  // The same deference account.js does, for the same reason: ⇅ and 👤 ask which
+  // Telegram person this is, and a browser that has already answered should not
+  // be asked again. Read by key, never importing railway-sync.js.
+  const SYNC_TOKEN_KEY = "pathfinder-dm-tools:api-token";
+
+  async function adoptSyncPairing() {
+    let token = null;
+    try {
+      token = localStorage.getItem(SYNC_TOKEN_KEY);
+    } catch {
+      token = null;
+    }
+    if (!token) return false;
+    try {
+      const result = await api("/auth/adopt", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!result?.user) return false;
+      renderAccount(result.user);
+      return true;
+    } catch (error) {
+      // A 403 names the account that was refused, which is the id the DM needs
+      // in order to add them. A 401 only means ⇅'s token went stale, and the
+      // code form on the signed-out card is already the answer to that.
+      if (error?.telegram_id) {
+        setStatus(
+          `You're paired with the bot as Telegram id ${error.telegram_id}, but that ` +
+            "account isn't on this site's list yet. Ask the DM to add that id.",
+          "error"
+        );
+      }
+      return false;
+    }
   }
 
   pairForm.addEventListener("submit", async (event) => {

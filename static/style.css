@@ -514,6 +514,17 @@ button.subtle {
 }
 
 /* An <a> that has to sit in a row of <button>s and look like one of them. */
+/* A browser that is paired with the bot but not on this site's list. Warning
+   colours rather than error: nothing went wrong, somebody just has to be added. */
+.account-refused {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
 .account-stored {
   margin: 0;
   padding-left: 1.1rem;
