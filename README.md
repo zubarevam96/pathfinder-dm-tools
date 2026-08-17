@@ -97,71 +97,84 @@ campaign that doesn't exist. Ten messages a minute per browser.
 The bot needs to be running with `WEB_ENABLED=true`, as for sync; an API built
 without a Telegram connection answers 503 here and serves everything else.
 
-## Accounts (Keycloak)
+## Accounts
 
-The 👤 button is a second, separate way in — an account on this site, for
-someone who has never spoken to the bot. Authentication is [Keycloak][kc],
-running as its own Railway service; everything else lives in a small SQLite
-file beside the monster data.
+The 👤 button signs a browser in, so this browser's characters and battles have
+somewhere to live that isn't this browser. Everything it stores is a small
+SQLite file beside the monster data.
 
-**There is no sign-up page.** Accounts are created in the Keycloak admin
-console, under the `pathfinder` realm. Turning public registration on is one
-setting — `registrationAllowed` in Realm settings → Login — if you ever want it.
+**Who you are comes from the bot.** Send `/link` in a private Telegram chat, and
+paste the eight-character code it replies with into the 👤 dialog. The *server*
+spends that code against the bot's `POST /auth/pair`, keeps the token it gets
+back, and hands the browser nothing but an HttpOnly session cookie. So identity
+here is a Telegram id — the same integer the bot keys all of its own tables on,
+which is what lets a character imported in a chat and one opened here be the
+same character.
 
-What an account holds: an email (Keycloak's, mirrored here for display) and a
-**Telegram id, which is empty and does nothing yet**. That column is where this
-account system and the bot's Telegram-keyed database are meant to meet; until
-something can prove the person signed in here is the person in that chat,
-filling it in would be asserting a link nobody checked. Both ways in stay.
+**Whether you may use it is this site's own question**, and the answer is
+`users.allowed`. Two ways onto that list:
 
-**Personal info** (`/account/`) changes the email and starts a password change.
-The password form is Keycloak's own, on Keycloak's origin — this site has no
-password field anywhere in it, and never receives one.
+- `ALLOWED_TELEGRAM_IDS`, below. This is how the *first* person gets in, because
+  on an empty database there is nobody inside to vouch for anybody.
+- `/register` to the bot, in a private chat, by the DM of a named campaign. The
+  bot calls `POST /internal/allow` here with the shared secret.
+
+Taking somebody off the list ends the sessions they already have on their very
+next request, and keeps everything they had stored.
+
+**There is no password anywhere in this project.** Not stored, not hashed, not
+temporary, and not in a chat log — there is none to leak or reset. A pairing
+code is single-use, expires in five minutes, and is rationed ten attempts per
+ten minutes. The same is true of tokens as far as the page is concerned: it
+never receives one.
+
+**Personal info** (`/account/`) shows which Telegram account you are signed in
+as. There is nothing to edit — the name and handle are Telegram's, and follow
+you here when you change them there.
 
 **Send to account** and **Get from account** store and restore whole documents,
 unlike ⇅'s per-character merge. Nothing uploads on its own; a restore asks
 first, then reloads.
 
-The browser never holds a token. The server runs the OpenID Connect flow and
-sets an HttpOnly session cookie the page cannot read, so there is nothing on
-the page for a script to steal.
-
-Variables this service needs for any of it to work — with all three absent, the
-👤 button doesn't appear and everything else behaves exactly as before:
-
 | Variable | What it is |
 |---|---|
-| `KEYCLOAK_ISSUER` | `https://<keycloak-host>/realms/pathfinder` |
-| `KEYCLOAK_CLIENT_ID` | `pathfinder-web` unless you renamed it |
-| `KEYCLOAK_CLIENT_SECRET` | From the client's **Credentials** tab, after first boot |
+| `ALLOWED_TELEGRAM_IDS` | Telegram ids that may sign in, comma- or space-separated. **Set this to your own id before deploying, or nobody can get in.** It overrides the database, so it is also the way back in after revoking yourself by mistake |
 | `SECRET_KEY` | Signs the session cookie. Any long random string; changing it signs everyone out |
 | `ACCOUNTS_DB_PATH` | `/data/accounts.sqlite3` — **on the volume**, or accounts vanish on redeploy |
+| `BOT_SHARED_SECRET` | Shared with the bot as its `ACCOUNTS_API_SECRET`. Unset means `/internal/allow` answers 503 — an internal endpoint with no secret is an open one |
 
-[kc]: https://www.keycloak.org/
+Sign-in needs the bot, since the bot is the only thing that knows who anybody
+is. `BOT_API_URL` set to an empty string says this deployment has no bot: the
+👤 button disappears, `/sync/*` answers 503, and everything else works exactly
+as it always did. Unset is different — it falls back to the local dev port.
 
 ## Deployment (Railway)
 
-Railway is the only place this deploys now. One project, four services:
+Railway is the only place this deploys now. One project, two services:
 
 ```
                     browser
                        │
-         ┌─────────────┴──────────────┐
-         │ redirect only, at sign-in  │
-         ▼                            ▼
-  keycloak.up.railway.app     pathfinder…up.railway.app
-         │                            │  app.py: site, /sync/* proxy,
-         ▼                            │  /auth/*, /api/account/*
-     Postgres                         │
-   (Keycloak's own)     private network│      volume: /data
-                                       ▼      monster-data + accounts.sqlite3
-                        dm-bot.railway.internal:8080
-                              no public domain needed
+                       ▼
+           pathfinder…up.railway.app
+                       │  app.py: site, /sync/* proxy,
+                       │  /auth/pair, /api/account/*
+       private network │      volume: /data
+                       ▼      monster-data + accounts.sqlite3
+        dm-bot.railway.internal:8080
+              no public domain needed
 ```
 
-The site's server is what makes that one origin for the browser: `/sync/*` is
-proxied to the bot, and Keycloak is reached by *this server*, never by script.
-The only time the browser leaves is the sign-in redirect itself.
+**The browser only ever talks to one origin.** `/sync/*` and sign-in are both
+proxied to the bot by this server over Railway's private network, so there is no
+CORS anywhere, the bot needs no public domain, and the browser is never sent
+somewhere else and back.
+
+It used to be four services. A Keycloak realm and a Postgres of its own answered
+the question "which account on this site is this", which the bot's pairing code
+already answered — and answered without a password. Removing them took ~81% off
+the monthly bill; the JVM alone sat at a flat 537 MB serving nobody, because its
+heap floor is a percentage of the container rather than of the work.
 
 **The site:**
 
@@ -171,61 +184,12 @@ The only time the browser leaves is the sign-in redirect itself.
    - `BOT_API_URL` = `http://<bot-service-name>.railway.internal:8080`
    - `MONSTER_DATA_DIR` = `/data/monster-data` (see below)
    - `ACCOUNTS_DB_PATH` = `/data/accounts.sqlite3`
-   - the three `KEYCLOAK_*` variables and `SECRET_KEY` from the Accounts section
+   - `ALLOWED_TELEGRAM_IDS`, `SECRET_KEY` and `BOT_SHARED_SECRET` from the
+     Accounts section
 3. Settings → Networking → **Generate Domain**, port **8080**.
 4. On the *bot* service you can now remove the public domain, and
    `WEB_CORS_ORIGINS` stops mattering — the proxy is server-to-server, so no
    `Origin` header is involved.
-
-**Keycloak:**
-
-1. Add a **Postgres** service (Railway's own, from the New menu). Railway names
-   it something like `Postgres-f0lP`; **rename it to `Postgres` first**, before
-   writing any variable that refers to it. See the warning below.
-2. New → GitHub Repo → this one *again*, and set **Root Directory** to
-   `keycloak/`. One repository, two services, two Dockerfiles. Without the
-   root directory it silently builds the *site's* Dockerfile instead and comes
-   up as a second copy of the site — gunicorn in the logs where Keycloak should
-   be is the tell.
-3. Variables: see the comment block at the top of `keycloak/railway.toml` —
-   it lists every one, including the `${{Postgres.*}}` references.
-4. Generate a domain for it, port **8080**, and set `KC_HOSTNAME` to that
-   domain **as a full URL** (`https://…up.railway.app`). Keycloak builds its
-   own redirect URLs from it, so a wrong value fails at the *end* of a login
-   rather than the start, once the password has already been accepted.
-
-> **A reference to a service that doesn't exist resolves to an empty string,
-> not an error.** Write `${{Postgres.PGHOST}}` while the service is still
-> called `Postgres-f0lP` and you get `jdbc:postgresql://:/` — no warning
-> anywhere, and Keycloak fails at boot with a database error naming no host.
->
-> Renaming the service afterwards does **not** repair it. Re-enter every
-> affected variable.
->
-> There is no way to spot this by reading the variables back: `railway
-> variables --json` prints *resolved* values, so a live reference and a dead
-> literal look identical. If in doubt, set it again.
-5. First boot imports `keycloak/realm-pathfinder.json`. Then, in the console:
-   read the `pathfinder-web` client's secret from **Credentials** into the
-   site's `KEYCLOAK_CLIENT_SECRET`, and create yourself a user under **Users**.
-
-Don't add a Railway healthcheck to this service. Keycloak's `/health/ready`
-is on the management port (9000), not the port Railway routes to, so a check
-against it fails for its whole retry window and marks a working deploy failed
-— with no error in the logs, because nothing was wrong.
-
-Editing `realm-pathfinder.json` is riskier than it looks: the importer rejects
-any field it doesn't recognise, a rejected import aborts the import, and a
-failed import **stops the server booting at all**. Post-logout redirect URIs
-are the trap worth naming — they are the client *attribute*
-`post.logout.redirect.uris`, not a `postLogoutRedirectUris` array, which reads
-perfectly plausibly and takes the whole service down. The error names every
-field it does know, so the log is the reference when this happens.
-
-The realm file's redirect URIs name
-`pathfinder-dm-tools-production.up.railway.app`. If your domain differs, fix
-them in the console — a redirect URI Keycloak doesn't recognise is refused at
-the very end of an otherwise successful login.
 
 **Monster statistics no longer need the volume.** The battle helper fetches
 each creature from Archives of Nethys the first time you select it, through

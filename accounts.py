@@ -149,12 +149,6 @@ class Accounts:
 
     # -- users ---------------------------------------------------------------
 
-    def user(self, user_id: int) -> sqlite3.Row | None:
-        with self._connect() as connection:
-            return connection.execute(
-                "SELECT * FROM users WHERE id = ?", (user_id,)
-            ).fetchone()
-
     def user_by_telegram_id(self, telegram_id: int) -> sqlite3.Row | None:
         """The row for a Telegram person, or None if they have never been here.
 
